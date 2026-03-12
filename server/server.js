@@ -191,6 +191,10 @@ function handleApi(req, res, pathname) {
     return sendJson(res, 200, { date, ...summary });
   }
 
+  if (req.method === 'GET' && pathname === '/api/health') {
+    return sendJson(res, 200, { ok: true, time: Date.now() });
+  }
+
   if (req.method === 'GET' && pathname === '/api/employees') {
     const db = readDb();
     return sendJson(res, 200, { employees: db.employees });

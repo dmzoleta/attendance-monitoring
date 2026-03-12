@@ -52,13 +52,19 @@ let currentUser = null;
 let attendanceCache = [];
 let photoData = '';
 const appConfig = typeof window !== 'undefined' && window.APP_CONFIG ? window.APP_CONFIG : {};
-let apiBase = localStorage.getItem('apiBase') || appConfig.apiBase || '';
 const isCapacitor = typeof window !== 'undefined' && !!window.Capacitor;
+const defaultApiBase = appConfig.apiBase || '';
+const storedApiBase = localStorage.getItem('apiBase') || '';
+const storedOverride = localStorage.getItem('apiBaseOverride') === 'true';
 
-if (!apiBase && isCapacitor) {
-  apiBase = appConfig.apiBase || 'http://10.0.2.2:5173';
+let apiBase = '';
+if (isCapacitor) {
+  apiBase = storedOverride ? storedApiBase : (defaultApiBase || storedApiBase || 'http://10.0.2.2:5173');
+} else {
+  apiBase = defaultApiBase || window.location.origin;
 }
-serverUrlInput.value = apiBase || '';
+
+serverUrlInput.value = storedOverride ? storedApiBase : apiBase;
 
 function formatDate(date) {
   return date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
@@ -103,12 +109,34 @@ function setStatusCell(cell, status) {
 }
 
 async function api(path, options = {}) {
-  const res = await fetch(`${apiBase}${path}`, {
-    headers: { 'Content-Type': 'application/json' },
-    ...options
-  });
-  if (!res.ok) throw new Error('Request failed');
-  return res.json();
+  const target = `${apiBase}${path}`;
+  try {
+    const res = await fetch(target, {
+      headers: { 'Content-Type': 'application/json' },
+      ...options
+    });
+    const text = await res.text();
+    let data = {};
+    try {
+      data = text ? JSON.parse(text) : {};
+    } catch (err) {
+      data = { message: text };
+    }
+    if (!res.ok) {
+      const error = new Error(data.message || 'Request failed');
+      error.status = res.status;
+      throw error;
+    }
+    return data;
+  } catch (err) {
+    if (defaultApiBase && apiBase !== defaultApiBase) {
+      apiBase = defaultApiBase;
+      localStorage.setItem('apiBase', apiBase);
+      localStorage.setItem('apiBaseOverride', 'false');
+      return api(path, options);
+    }
+    throw err;
+  }
 }
 
 async function loadAttendance() {
@@ -245,8 +273,16 @@ function closeServerModal() {
 }
 
 function saveServerSettings() {
-  apiBase = serverUrlInput.value.trim();
-  localStorage.setItem('apiBase', apiBase);
+  const value = serverUrlInput.value.trim();
+  if (value) {
+    apiBase = value;
+    localStorage.setItem('apiBase', apiBase);
+    localStorage.setItem('apiBaseOverride', 'true');
+  } else {
+    apiBase = defaultApiBase || (isCapacitor ? 'http://10.0.2.2:5173' : window.location.origin);
+    localStorage.setItem('apiBase', apiBase);
+    localStorage.setItem('apiBaseOverride', 'false');
+  }
   closeServerModal();
   alert('Server URL saved.');
 }
@@ -272,7 +308,11 @@ async function handleRegister(event) {
     alert(`Registered! Your ID is ${result.employee.id}. You can now log in.`);
     closeRegisterModal();
   } catch (err) {
-    alert(err.message || 'Registration failed.');
+    if (err.name === 'TypeError') {
+      alert('Server not reachable. Try again after the server wakes up.');
+    } else {
+      alert(err.message || 'Registration failed.');
+    }
   }
 }
 
@@ -297,7 +337,11 @@ async function handleForgot(event) {
     alert('Password updated. You can log in now.');
     closeForgotModal();
   } catch (err) {
-    alert(err.message || 'Reset failed.');
+    if (err.name === 'TypeError') {
+      alert('Server not reachable. Try again after the server wakes up.');
+    } else {
+      alert(err.message || 'Reset failed.');
+    }
   }
 }
 
