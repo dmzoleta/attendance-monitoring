@@ -3,7 +3,8 @@ const fs = require('fs');
 const path = require('path');
 const url = require('url');
 
-const ROOT = path.join(__dirname, '..');
+const DEFAULT_ROOT = path.join(__dirname, '..');
+const ROOT = fs.existsSync(path.join(DEFAULT_ROOT, 'admin')) ? DEFAULT_ROOT : process.cwd();
 const DATA_PATH = path.join(ROOT, 'data', 'db.json');
 const BACKUP_PATH = path.join(ROOT, 'data', 'db.json.bak');
 
