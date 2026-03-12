@@ -253,18 +253,22 @@ function handleApi(req, res, pathname) {
     return collectBody(req).then((body) => {
       const db = readDb();
       const name = String(body.name || '').trim();
-      const position = String(body.position || '').trim();
       const office = String(body.office || '').trim();
+      const username = String(body.username || body.email || '').trim();
+      const position = String(body.position || 'Staff').trim();
       const email = String(body.email || '').trim().toLowerCase();
       const password = String(body.password || '').trim();
 
-      if (!name || !position || !office || !email || !password) {
+      if (!name || !office || !username || !password) {
         return sendJson(res, 400, { ok: false, message: 'All fields are required.' });
       }
 
-      const existing = db.employees.find((e) => e.email.toLowerCase() === email);
+      const existing = db.employees.find((e) =>
+        (e.username && e.username.toLowerCase() === username.toLowerCase()) ||
+        (email && e.email.toLowerCase() === email)
+      );
       if (existing) {
-        return sendJson(res, 409, { ok: false, message: 'Email is already registered.' });
+        return sendJson(res, 409, { ok: false, message: 'Username or email is already registered.' });
       }
 
       const nextId = `SDO-${String(db.employees.length + 1).padStart(3, '0')}`;
@@ -274,6 +278,7 @@ function handleApi(req, res, pathname) {
         position,
         office,
         email,
+        username,
         password,
         status: 'Active',
         avatar: 'assets/avatar-generic.svg'
@@ -305,6 +310,7 @@ function handleApi(req, res, pathname) {
 
       const lookup = username.toLowerCase();
       const emp = db.employees.find((e) =>
+        (e.username && e.username.toLowerCase() === lookup) ||
         e.email.toLowerCase() === lookup ||
         e.id.toLowerCase() === lookup ||
         e.name.toLowerCase() === lookup
@@ -332,7 +338,10 @@ function handleApi(req, res, pathname) {
 
       const lookup = username.toLowerCase();
       const emp = db.employees.find((e) =>
-        e.email.toLowerCase() === lookup || e.id.toLowerCase() === lookup
+        (e.username && e.username.toLowerCase() === lookup) ||
+        e.email.toLowerCase() === lookup ||
+        e.id.toLowerCase() === lookup ||
+        e.name.toLowerCase() === lookup
       );
       if (!emp || emp.password !== password) {
         return sendJson(res, 401, { ok: false, message: 'Invalid credentials' });

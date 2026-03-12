@@ -264,7 +264,7 @@ loginForm.addEventListener('submit', async (event) => {
     updateLocation();
     tickClock();
   } catch (err) {
-    alert(err.message || 'Invalid credentials. Use email, ID, or full name.');
+    alert(err.message || 'Invalid credentials. Use username, ID, or full name.');
   }
 });
 
@@ -311,9 +311,9 @@ async function handleRegister(event) {
     });
     const loginUser = loginForm.querySelector('input[name="username"]');
     const loginPass = loginForm.querySelector('input[name="password"]');
-    if (loginUser) loginUser.value = payload.email;
+    if (loginUser) loginUser.value = payload.username || payload.email || result.employee.id;
     if (loginPass) loginPass.value = payload.password;
-    alert(`Registered! Your ID is ${result.employee.id}. Use your email or ID to log in.`);
+    alert(`Registered! Your ID is ${result.employee.id}. Use your username or ID to log in.`);
     closeRegisterModal();
   } catch (err) {
     if (err.name === 'TypeError') {
