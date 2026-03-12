@@ -1,0 +1,24 @@
+{
+  "admins": [
+    {
+      "id": "ADM-001",
+      "name": "SDO Admin",
+      "username": "admin",
+      "password": "admin123",
+      "office": "ICT Unit"
+    }
+  ],
+  "employees": [
+    {
+      "id": "SDO-001",
+      "name": "john romie matre",
+      "position": "ict support",
+      "office": "ict",
+      "email": "johnromiematre@gmail.com",
+      "password": "admin123",
+      "status": "Active",
+      "avatar": "assets/avatar-generic.png"
+    }
+  ],
+  "attendance": []
+}

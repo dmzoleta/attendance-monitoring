@@ -1,0 +1,224 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SDO Marinduque - Admin</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app">
+    <section id="admin-login" class="login-screen">
+      <div class="login-card">
+        <img class="seal" src="assets/logo.svg" alt="SDO Logo" />
+        <h1>SDO MARINDIQUE</h1>
+        <p class="subtitle">Attendance Monitoring System</p>
+        <form id="login-form">
+          <label class="input-field">
+            <span>Username</span>
+            <input type="text" name="username" placeholder="Enter username" required />
+          </label>
+          <label class="input-field">
+            <span>Password</span>
+            <div class="password-row">
+              <input type="password" name="password" placeholder="Enter password" required />
+              <button type="button" class="icon-btn" data-toggle="password">👁</button>
+            </div>
+          </label>
+          <button class="primary-btn" type="submit">LOGIN</button>
+          <button class="link-btn" type="button">Forgot Password?</button>
+        </form>
+        <p class="footer">© SDO Marinduque ICT Unit</p>
+      </div>
+    </section>
+
+    <section id="admin-app" class="admin-screen hidden">
+      <header class="topbar">
+        <div class="brand">
+          <img src="assets/logo.svg" alt="SDO Logo" />
+          <div>
+            <strong>SDO MARINDIQUE</strong>
+            <span>Attendance Monitoring System</span>
+          </div>
+        </div>
+        <div class="top-actions">
+          <button class="icon-btn" title="Notifications">🔔</button>
+          <button class="icon-btn" title="Messages">✉️</button>
+          <button class="icon-btn" title="Menu">☰</button>
+        </div>
+      </header>
+
+      <nav class="tabs">
+        <button class="tab-btn active" data-view="dashboard-view">Dashboard</button>
+        <button class="tab-btn" data-view="employees-view">Employees</button>
+        <button class="tab-btn" data-view="attendance-view">Attendance</button>
+        <button class="tab-btn" data-view="reports-view">Reports</button>
+      </nav>
+
+      <main class="content">
+        <section id="dashboard-view" class="view">
+          <div class="stat-grid">
+            <div class="stat-card blue">
+              <span>Total Employees</span>
+              <strong id="stat-total">0</strong>
+            </div>
+            <div class="stat-card green">
+              <span>Present Today</span>
+              <strong id="stat-present">0</strong>
+            </div>
+            <div class="stat-card red">
+              <span>Late</span>
+              <strong id="stat-late">0</strong>
+            </div>
+            <div class="stat-card orange">
+              <span>Absent</span>
+              <strong id="stat-absent">0</strong>
+            </div>
+          </div>
+
+          <div class="time-row">
+            <span>Current Time: <strong id="current-time">--:--</strong></span>
+            <span>Date: <strong id="current-date">---</strong></span>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <h3>Attendance Today</h3>
+              <button class="ghost-btn" id="refresh-attendance">Refresh</button>
+            </div>
+            <table class="data-table" id="attendance-table">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Employee Name</th>
+                  <th>Office</th>
+                  <th>Time In</th>
+                  <th>Time Out</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="employees-view" class="view hidden">
+          <div class="card">
+            <div class="card-header">
+              <h3>Employees List</h3>
+              <button class="primary-btn" id="open-add-employee">+ Add Employee</button>
+            </div>
+            <div class="search-row">
+              <input id="employee-search" type="text" placeholder="Search Employee" />
+              <button class="ghost-btn" id="refresh-employees">Refresh</button>
+            </div>
+            <table class="data-table" id="employees-table">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Name</th>
+                  <th>Position</th>
+                  <th>Office</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="attendance-view" class="view hidden">
+          <div class="card">
+            <div class="card-header">
+              <h3>Attendance Records</h3>
+              <div class="filters">
+                <input type="date" id="attendance-from" />
+                <input type="date" id="attendance-to" />
+                <button class="ghost-btn" id="filter-attendance">Apply</button>
+              </div>
+            </div>
+            <table class="data-table" id="attendance-history">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Employee</th>
+                  <th>Office</th>
+                  <th>Time In</th>
+                  <th>Time Out</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="reports-view" class="view hidden">
+          <div class="card">
+            <div class="card-header">
+              <h3>Generate Reports</h3>
+            </div>
+            <div class="form-grid">
+              <label>
+                Select Month
+                <input type="month" id="report-month" />
+              </label>
+              <label>
+                Select Office
+                <select id="report-office">
+                  <option value="">All Offices</option>
+                  <option value="ICT Unit">ICT Unit</option>
+                  <option value="Elementary">Elementary</option>
+                  <option value="Planning Unit">Planning Unit</option>
+                </select>
+              </label>
+            </div>
+            <div class="report-actions">
+              <button class="primary-btn" id="generate-report">Generate Report</button>
+              <button class="green-btn" id="download-report">Download PDF</button>
+            </div>
+            <div id="report-preview" class="report-preview"></div>
+          </div>
+        </section>
+      </main>
+
+      <div id="add-employee-modal" class="modal hidden">
+        <div class="modal-card">
+          <div class="card-header">
+            <h3>Add Employee</h3>
+            <button class="icon-btn" id="close-add-employee">✖</button>
+          </div>
+          <form id="add-employee-form" class="form-grid two">
+            <label>
+              Full Name
+              <input type="text" name="name" required />
+            </label>
+            <label>
+              Position
+              <input type="text" name="position" required />
+            </label>
+            <label>
+              Office
+              <input type="text" name="office" required />
+            </label>
+            <label>
+              Email
+              <input type="email" name="email" required />
+            </label>
+            <label>
+              Password
+              <input type="text" name="password" required />
+            </label>
+            <div class="modal-actions">
+              <button class="primary-btn" type="submit">Save</button>
+              <button class="ghost-btn" type="button" id="cancel-add-employee">Cancel</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,82 @@
+﻿{
+  "admins": [
+    {
+      "id": "ADM-001",
+      "name": "SDO Admin",
+      "username": "admin",
+      "password": "admin123",
+      "office": "ICT Unit"
+    }
+  ],
+  "employees": [
+    {
+      "id": "SDO-001",
+      "name": "Juan Dela Cruz",
+      "position": "IT Officer",
+      "office": "ICT Unit",
+      "email": "juan@sdo.gov",
+      "password": "juan123",
+      "status": "Active",
+      "avatar": "assets/avatar-juan.svg"
+    },
+    {
+      "id": "SDO-002",
+      "name": "Joji Ama",
+      "position": "Registrar",
+      "office": "ICT Unit",
+      "email": "joji@sdo.gov",
+      "password": "joji123",
+      "status": "Active",
+      "avatar": "assets/avatar-joji.svg"
+    },
+    {
+      "id": "SDO-003",
+      "name": "Nhilliza Bahares",
+      "position": "Teacher",
+      "office": "Elementary",
+      "email": "nhilliza@sdo.gov",
+      "password": "nhilliza123",
+      "status": "Active",
+      "avatar": "assets/avatar-nhilliza.svg"
+    }
+  ],
+  "attendance": [
+    {
+      "id": "ATT-2026-03-12-SDO-001",
+      "employeeId": "SDO-001",
+      "date": "2026-03-12",
+      "timeIn": "07:58",
+      "timeOut": "17:02",
+      "status": "Present",
+      "latitude": "13.4768",
+      "longitude": "121.9032",
+      "location": "Boac",
+      "photo": ""
+    },
+    {
+      "id": "ATT-2026-03-12-SDO-002",
+      "employeeId": "SDO-002",
+      "date": "2026-03-12",
+      "timeIn": "08:10",
+      "timeOut": "",
+      "status": "Late",
+      "latitude": "13.4768",
+      "longitude": "121.9032",
+      "location": "Boac",
+      "photo": ""
+    },
+    {
+      "id": "ATT-2026-03-11-SDO-003",
+      "employeeId": "SDO-003",
+      "date": "2026-03-11",
+      "timeIn": "07:55",
+      "timeOut": "17:00",
+      "status": "Present",
+      "latitude": "13.4768",
+      "longitude": "121.9032",
+      "location": "Boac",
+      "photo": ""
+    }
+  ]
+}
+

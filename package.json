@@ -1,0 +1,22 @@
+{
+  "name": "application",
+  "version": "1.0.0",
+  "description": "This is a simple offline-friendly prototype that matches the admin and employee UI formats from your images. It includes:",
+  "main": "index.js",
+  "scripts": {
+    "start": "node server/server.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@capacitor/android": "^8.2.0",
+    "@capacitor/cli": "^8.2.0",
+    "@capacitor/core": "^8.2.0",
+    "@capacitor/ios": "^8.2.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
