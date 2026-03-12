@@ -31,6 +31,41 @@
       <p class="footer">© SDO Marinduque ICT Unit</p>
     </section>
 
+    <div id="register-modal" class="modal hidden">
+      <div class="modal-card">
+        <div class="card-header">
+          <h3>Register Employee</h3>
+          <button class="icon-btn" id="close-register">✖</button>
+        </div>
+        <form id="register-form">
+          <label class="input-field">
+            <span>Full Name</span>
+            <input type="text" name="name" required />
+          </label>
+          <label class="input-field">
+            <span>Position</span>
+            <input type="text" name="position" required />
+          </label>
+          <label class="input-field">
+            <span>Office</span>
+            <input type="text" name="office" required />
+          </label>
+          <label class="input-field">
+            <span>Email</span>
+            <input type="email" name="email" required />
+          </label>
+          <label class="input-field">
+            <span>Password</span>
+            <input type="password" name="password" required />
+          </label>
+          <div class="action-row">
+            <button class="primary-btn" type="submit">Register</button>
+            <button class="ghost-btn" type="button" id="cancel-register">Cancel</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
     <section id="employee-app" class="app-screen hidden">
       <header class="topbar">
         <div class="brand">
@@ -160,41 +195,6 @@
             <button class="ghost-btn" id="cancel-server-settings">Cancel</button>
           </div>
           <p class="footer">Emulator: 10.0.2.2 · Device: use your PC IP</p>
-        </div>
-      </div>
-
-      <div id="register-modal" class="modal hidden">
-        <div class="modal-card">
-          <div class="card-header">
-            <h3>Register Employee</h3>
-            <button class="icon-btn" id="close-register">✖</button>
-          </div>
-          <form id="register-form">
-            <label class="input-field">
-              <span>Full Name</span>
-              <input type="text" name="name" required />
-            </label>
-            <label class="input-field">
-              <span>Position</span>
-              <input type="text" name="position" required />
-            </label>
-            <label class="input-field">
-              <span>Office</span>
-              <input type="text" name="office" required />
-            </label>
-            <label class="input-field">
-              <span>Email</span>
-              <input type="email" name="email" required />
-            </label>
-            <label class="input-field">
-              <span>Password</span>
-              <input type="password" name="password" required />
-            </label>
-            <div class="action-row">
-              <button class="primary-btn" type="submit">Register</button>
-              <button class="ghost-btn" type="button" id="cancel-register">Cancel</button>
-            </div>
-          </form>
         </div>
       </div>
     </section>
