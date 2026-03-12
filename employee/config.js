@@ -1,3 +1,3 @@
 window.APP_CONFIG = {
-  apiBase: ''
+  apiBase: 'https://sdo-attendance.onrender.com'
 };
