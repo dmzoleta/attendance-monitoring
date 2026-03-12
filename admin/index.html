@@ -26,7 +26,8 @@
             </div>
           </label>
           <button class="primary-btn" type="submit">LOGIN</button>
-          <button class="link-btn" type="button">Forgot Password?</button>
+          <button class="link-btn" type="button" id="open-admin-forgot">Forgot Password?</button>
+          <button class="link-btn" type="button" id="open-admin-register">Create Admin Account</button>
         </form>
         <p class="footer">© SDO Marinduque ICT Unit</p>
       </div>
@@ -217,6 +218,60 @@
         </div>
       </div>
     </section>
+
+    <div id="admin-register-modal" class="modal hidden">
+      <div class="modal-card">
+        <div class="card-header">
+          <h3>Create Admin Account</h3>
+          <button class="icon-btn" id="close-admin-register">✖</button>
+        </div>
+        <form id="admin-register-form" class="form-grid two">
+          <label>
+            Full Name
+            <input type="text" name="name" required />
+          </label>
+          <label>
+            Office
+            <input type="text" name="office" required />
+          </label>
+          <label>
+            Username
+            <input type="text" name="username" required />
+          </label>
+          <label>
+            Password
+            <input type="text" name="password" required />
+          </label>
+          <div class="modal-actions">
+            <button class="primary-btn" type="submit">Register</button>
+            <button class="ghost-btn" type="button" id="cancel-admin-register">Cancel</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div id="admin-forgot-modal" class="modal hidden">
+      <div class="modal-card">
+        <div class="card-header">
+          <h3>Reset Admin Password</h3>
+          <button class="icon-btn" id="close-admin-forgot">✖</button>
+        </div>
+        <form id="admin-forgot-form" class="form-grid two">
+          <label>
+            Username
+            <input type="text" name="username" required />
+          </label>
+          <label>
+            New Password
+            <input type="text" name="newPassword" required />
+          </label>
+          <div class="modal-actions">
+            <button class="primary-btn" type="submit">Update</button>
+            <button class="ghost-btn" type="button" id="cancel-admin-forgot">Cancel</button>
+          </div>
+        </form>
+      </div>
+    </div>
   </div>
 
   <script src="app.js"></script>

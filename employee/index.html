@@ -25,7 +25,7 @@
           </div>
         </label>
         <button class="primary-btn" type="submit">LOGIN</button>
-        <button class="link-btn" type="button">Forgot Password?</button>
+        <button class="link-btn" type="button" id="open-forgot">Forgot Password?</button>
         <button class="link-btn" type="button" id="open-register">Create Account</button>
       </form>
       <p class="footer">© SDO Marinduque ICT Unit</p>
@@ -61,6 +61,29 @@
           <div class="action-row">
             <button class="primary-btn" type="submit">Register</button>
             <button class="ghost-btn" type="button" id="cancel-register">Cancel</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div id="forgot-modal" class="modal hidden">
+      <div class="modal-card">
+        <div class="card-header">
+          <h3>Reset Password</h3>
+          <button class="icon-btn" id="close-forgot">✖</button>
+        </div>
+        <form id="forgot-form">
+          <label class="input-field">
+            <span>Employee ID or Email</span>
+            <input type="text" name="username" required />
+          </label>
+          <label class="input-field">
+            <span>New Password</span>
+            <input type="password" name="newPassword" required />
+          </label>
+          <div class="action-row">
+            <button class="primary-btn" type="submit">Update Password</button>
+            <button class="ghost-btn" type="button" id="cancel-forgot">Cancel</button>
           </div>
         </form>
       </div>

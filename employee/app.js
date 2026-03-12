@@ -42,6 +42,11 @@ const openRegisterBtn = document.getElementById('open-register');
 const closeRegisterBtn = document.getElementById('close-register');
 const cancelRegisterBtn = document.getElementById('cancel-register');
 const registerForm = document.getElementById('register-form');
+const forgotModal = document.getElementById('forgot-modal');
+const openForgotBtn = document.getElementById('open-forgot');
+const closeForgotBtn = document.getElementById('close-forgot');
+const cancelForgotBtn = document.getElementById('cancel-forgot');
+const forgotForm = document.getElementById('forgot-form');
 
 let currentUser = null;
 let attendanceCache = [];
@@ -271,6 +276,31 @@ async function handleRegister(event) {
   }
 }
 
+function openForgotModal() {
+  forgotModal.classList.remove('hidden');
+}
+
+function closeForgotModal() {
+  forgotModal.classList.add('hidden');
+  forgotForm.reset();
+}
+
+async function handleForgot(event) {
+  event.preventDefault();
+  const formData = new FormData(forgotForm);
+  const payload = Object.fromEntries(formData.entries());
+  try {
+    await api('/api/password-reset', {
+      method: 'POST',
+      body: JSON.stringify({ role: 'employee', username: payload.username, newPassword: payload.newPassword })
+    });
+    alert('Password updated. You can log in now.');
+    closeForgotModal();
+  } catch (err) {
+    alert(err.message || 'Reset failed.');
+  }
+}
+
 navButtons.forEach((btn) => {
   btn.addEventListener('click', () => setView(btn.dataset.view));
 });
@@ -309,6 +339,11 @@ openRegisterBtn.addEventListener('click', openRegisterModal);
 closeRegisterBtn.addEventListener('click', closeRegisterModal);
 cancelRegisterBtn.addEventListener('click', closeRegisterModal);
 registerForm.addEventListener('submit', handleRegister);
+
+openForgotBtn.addEventListener('click', openForgotModal);
+closeForgotBtn.addEventListener('click', closeForgotModal);
+cancelForgotBtn.addEventListener('click', closeForgotModal);
+forgotForm.addEventListener('submit', handleForgot);
 
 setInterval(tickClock, 1000);
 

@@ -41,29 +41,47 @@ function parseJsonSafe(raw) {
   }
 }
 
+let memoryDb = null;
+
 function readDb() {
-  const raw = fs.readFileSync(DATA_PATH, 'utf8');
-  const parsed = parseJsonSafe(raw);
-  if (parsed.ok) return parsed.value;
+  if (memoryDb) return memoryDb;
+
+  if (fs.existsSync(DATA_PATH)) {
+    const raw = fs.readFileSync(DATA_PATH, 'utf8');
+    const parsed = parseJsonSafe(raw);
+    if (parsed.ok) {
+      memoryDb = parsed.value;
+      return memoryDb;
+    }
+  }
 
   if (fs.existsSync(BACKUP_PATH)) {
     const backupRaw = fs.readFileSync(BACKUP_PATH, 'utf8');
     const backupParsed = parseJsonSafe(backupRaw);
-    if (backupParsed.ok) return backupParsed.value;
+    if (backupParsed.ok) {
+      memoryDb = backupParsed.value;
+      return memoryDb;
+    }
   }
 
-  return DEFAULT_DB;
+  memoryDb = JSON.parse(JSON.stringify(DEFAULT_DB));
+  return memoryDb;
 }
 
 function writeDb(db) {
-  if (fs.existsSync(DATA_PATH)) {
-    try {
-      fs.copyFileSync(DATA_PATH, BACKUP_PATH);
-    } catch (err) {
-      // ignore backup errors
+  memoryDb = db;
+  try {
+    if (fs.existsSync(DATA_PATH)) {
+      try {
+        fs.copyFileSync(DATA_PATH, BACKUP_PATH);
+      } catch (err) {
+        // ignore backup errors
+      }
     }
+    fs.writeFileSync(DATA_PATH, JSON.stringify(db, null, 2), 'utf8');
+  } catch (err) {
+    // If filesystem is read-only (Render), keep in-memory only.
   }
-  fs.writeFileSync(DATA_PATH, JSON.stringify(db, null, 2), 'utf8');
 }
 
 function sendJson(res, status, payload) {
@@ -197,6 +215,36 @@ function handleApi(req, res, pathname) {
     });
   }
 
+  if (req.method === 'POST' && pathname === '/api/admin/register') {
+    return collectBody(req).then((body) => {
+      const db = readDb();
+      const name = String(body.name || '').trim();
+      const username = String(body.username || '').trim();
+      const password = String(body.password || '').trim();
+      const office = String(body.office || '').trim();
+
+      if (!name || !username || !password || !office) {
+        return sendJson(res, 400, { ok: false, message: 'All fields are required.' });
+      }
+
+      const existing = db.admins.find((a) => a.username.toLowerCase() === username.toLowerCase());
+      if (existing) {
+        return sendJson(res, 409, { ok: false, message: 'Username is already taken.' });
+      }
+
+      const newAdmin = {
+        id: `ADM-${String(db.admins.length + 1).padStart(3, '0')}`,
+        name,
+        username,
+        password,
+        office
+      };
+      db.admins.push(newAdmin);
+      writeDb(db);
+      return sendJson(res, 201, { ok: true, admin: newAdmin });
+    });
+  }
+
   if (req.method === 'POST' && pathname === '/api/register') {
     return collectBody(req).then((body) => {
       const db = readDb();
@@ -229,6 +277,36 @@ function handleApi(req, res, pathname) {
       db.employees.push(newEmp);
       writeDb(db);
       return sendJson(res, 201, { ok: true, employee: newEmp });
+    });
+  }
+
+  if (req.method === 'POST' && pathname === '/api/password-reset') {
+    return collectBody(req).then((body) => {
+      const db = readDb();
+      const role = String(body.role || '').trim();
+      const username = String(body.username || '').trim();
+      const newPassword = String(body.newPassword || '').trim();
+
+      if (!role || !username || !newPassword) {
+        return sendJson(res, 400, { ok: false, message: 'All fields are required.' });
+      }
+
+      if (role === 'admin') {
+        const admin = db.admins.find((a) => a.username.toLowerCase() === username.toLowerCase());
+        if (!admin) return sendJson(res, 404, { ok: false, message: 'Admin not found.' });
+        admin.password = newPassword;
+        writeDb(db);
+        return sendJson(res, 200, { ok: true });
+      }
+
+      const lookup = username.toLowerCase();
+      const emp = db.employees.find((e) =>
+        e.email.toLowerCase() === lookup || e.id.toLowerCase() === lookup
+      );
+      if (!emp) return sendJson(res, 404, { ok: false, message: 'Employee not found.' });
+      emp.password = newPassword;
+      writeDb(db);
+      return sendJson(res, 200, { ok: true });
     });
   }
 

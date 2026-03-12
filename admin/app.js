@@ -20,6 +20,10 @@ const addEmployeeForm = document.getElementById('add-employee-form');
 const employeeSearch = document.getElementById('employee-search');
 
 const reportPreview = document.getElementById('report-preview');
+const adminRegisterModal = document.getElementById('admin-register-modal');
+const adminRegisterForm = document.getElementById('admin-register-form');
+const adminForgotModal = document.getElementById('admin-forgot-modal');
+const adminForgotForm = document.getElementById('admin-forgot-form');
 
 let employeesCache = [];
 let attendanceCache = [];
@@ -239,6 +243,56 @@ function downloadReport() {
   printWindow.print();
 }
 
+function openAdminRegister() {
+  adminRegisterModal.classList.remove('hidden');
+}
+
+function closeAdminRegister() {
+  adminRegisterModal.classList.add('hidden');
+  adminRegisterForm.reset();
+}
+
+async function handleAdminRegister(event) {
+  event.preventDefault();
+  const formData = new FormData(adminRegisterForm);
+  const payload = Object.fromEntries(formData.entries());
+  try {
+    await api('/api/admin/register', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+    alert('Admin registered. You can now log in.');
+    closeAdminRegister();
+  } catch (err) {
+    alert(err.message || 'Registration failed.');
+  }
+}
+
+function openAdminForgot() {
+  adminForgotModal.classList.remove('hidden');
+}
+
+function closeAdminForgot() {
+  adminForgotModal.classList.add('hidden');
+  adminForgotForm.reset();
+}
+
+async function handleAdminForgot(event) {
+  event.preventDefault();
+  const formData = new FormData(adminForgotForm);
+  const payload = Object.fromEntries(formData.entries());
+  try {
+    await api('/api/password-reset', {
+      method: 'POST',
+      body: JSON.stringify({ role: 'admin', username: payload.username, newPassword: payload.newPassword })
+    });
+    alert('Password updated.');
+    closeAdminForgot();
+  } catch (err) {
+    alert(err.message || 'Reset failed.');
+  }
+}
+
 function startAutoRefresh() {
   if (refreshTimer) clearInterval(refreshTimer);
   refreshTimer = setInterval(() => {
@@ -331,5 +385,15 @@ document.getElementById('filter-attendance').addEventListener('click', () => {
 
 document.getElementById('generate-report').addEventListener('click', generateReport);
 document.getElementById('download-report').addEventListener('click', downloadReport);
+
+document.getElementById('open-admin-register').addEventListener('click', openAdminRegister);
+document.getElementById('close-admin-register').addEventListener('click', closeAdminRegister);
+document.getElementById('cancel-admin-register').addEventListener('click', closeAdminRegister);
+adminRegisterForm.addEventListener('submit', handleAdminRegister);
+
+document.getElementById('open-admin-forgot').addEventListener('click', openAdminForgot);
+document.getElementById('close-admin-forgot').addEventListener('click', closeAdminForgot);
+document.getElementById('cancel-admin-forgot').addEventListener('click', closeAdminForgot);
+adminForgotForm.addEventListener('submit', handleAdminForgot);
 
 tickClock();
