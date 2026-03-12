@@ -111,3 +111,11 @@ For the APK, set the Server URL to your Render URL:
 
 ### Important
 Render’s free plan sleeps on inactivity. First load can be slow (cold start).
+
+## Employee Registration
+
+Employees can create their own account in the employee app:
+- Open employee app → **Create Account**
+- Register with name, position, office, email, and password
+- The system assigns an ID (e.g. `SDO-004`)
+- Use that ID or email + password to log in

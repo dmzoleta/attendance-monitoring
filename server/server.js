@@ -197,6 +197,41 @@ function handleApi(req, res, pathname) {
     });
   }
 
+  if (req.method === 'POST' && pathname === '/api/register') {
+    return collectBody(req).then((body) => {
+      const db = readDb();
+      const name = String(body.name || '').trim();
+      const position = String(body.position || '').trim();
+      const office = String(body.office || '').trim();
+      const email = String(body.email || '').trim().toLowerCase();
+      const password = String(body.password || '').trim();
+
+      if (!name || !position || !office || !email || !password) {
+        return sendJson(res, 400, { ok: false, message: 'All fields are required.' });
+      }
+
+      const existing = db.employees.find((e) => e.email.toLowerCase() === email);
+      if (existing) {
+        return sendJson(res, 409, { ok: false, message: 'Email is already registered.' });
+      }
+
+      const nextId = `SDO-${String(db.employees.length + 1).padStart(3, '0')}`;
+      const newEmp = {
+        id: nextId,
+        name,
+        position,
+        office,
+        email,
+        password,
+        status: 'Active',
+        avatar: 'assets/avatar-generic.svg'
+      };
+      db.employees.push(newEmp);
+      writeDb(db);
+      return sendJson(res, 201, { ok: true, employee: newEmp });
+    });
+  }
+
   if (req.method === 'POST' && pathname === '/api/login') {
     return collectBody(req).then((body) => {
       const db = readDb();

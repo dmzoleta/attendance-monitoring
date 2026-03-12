@@ -37,6 +37,11 @@ const openServerBtn = document.getElementById('open-server-settings');
 const closeServerBtn = document.getElementById('close-server-settings');
 const cancelServerBtn = document.getElementById('cancel-server-settings');
 const saveServerBtn = document.getElementById('save-server-settings');
+const registerModal = document.getElementById('register-modal');
+const openRegisterBtn = document.getElementById('open-register');
+const closeRegisterBtn = document.getElementById('close-register');
+const cancelRegisterBtn = document.getElementById('cancel-register');
+const registerForm = document.getElementById('register-form');
 
 let currentUser = null;
 let attendanceCache = [];
@@ -241,6 +246,31 @@ function saveServerSettings() {
   alert('Server URL saved.');
 }
 
+function openRegisterModal() {
+  registerModal.classList.remove('hidden');
+}
+
+function closeRegisterModal() {
+  registerModal.classList.add('hidden');
+  registerForm.reset();
+}
+
+async function handleRegister(event) {
+  event.preventDefault();
+  const formData = new FormData(registerForm);
+  const payload = Object.fromEntries(formData.entries());
+  try {
+    const result = await api('/api/register', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+    alert(`Registered! Your ID is ${result.employee.id}. You can now log in.`);
+    closeRegisterModal();
+  } catch (err) {
+    alert(err.message || 'Registration failed.');
+  }
+}
+
 navButtons.forEach((btn) => {
   btn.addEventListener('click', () => setView(btn.dataset.view));
 });
@@ -274,6 +304,11 @@ openServerBtn.addEventListener('click', openServerModal);
 closeServerBtn.addEventListener('click', closeServerModal);
 cancelServerBtn.addEventListener('click', closeServerModal);
 saveServerBtn.addEventListener('click', saveServerSettings);
+
+openRegisterBtn.addEventListener('click', openRegisterModal);
+closeRegisterBtn.addEventListener('click', closeRegisterModal);
+cancelRegisterBtn.addEventListener('click', closeRegisterModal);
+registerForm.addEventListener('submit', handleRegister);
 
 setInterval(tickClock, 1000);
 
