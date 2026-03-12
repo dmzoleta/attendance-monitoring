@@ -108,7 +108,7 @@ function setStatusCell(cell, status) {
   if (statusLower === 'absent') cell.classList.add('status-absent');
 }
 
-async function api(path, options = {}) {
+async function api(path, options = {}, attempt = 0) {
   const target = `${apiBase}${path}`;
   try {
     const res = await fetch(target, {
@@ -133,7 +133,11 @@ async function api(path, options = {}) {
       apiBase = defaultApiBase;
       localStorage.setItem('apiBase', apiBase);
       localStorage.setItem('apiBaseOverride', 'false');
-      return api(path, options);
+      return api(path, options, attempt + 1);
+    }
+    if (err.name === 'TypeError' && attempt < 1) {
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+      return api(path, options, attempt + 1);
     }
     throw err;
   }
@@ -260,7 +264,7 @@ loginForm.addEventListener('submit', async (event) => {
     updateLocation();
     tickClock();
   } catch (err) {
-    alert('Invalid credentials. Try SDO-001 / juan123.');
+    alert(err.message || 'Invalid credentials. Use email, ID, or full name.');
   }
 });
 
@@ -305,7 +309,11 @@ async function handleRegister(event) {
       method: 'POST',
       body: JSON.stringify(payload)
     });
-    alert(`Registered! Your ID is ${result.employee.id}. You can now log in.`);
+    const loginUser = loginForm.querySelector('input[name="username"]');
+    const loginPass = loginForm.querySelector('input[name="password"]');
+    if (loginUser) loginUser.value = payload.email;
+    if (loginPass) loginPass.value = payload.password;
+    alert(`Registered! Your ID is ${result.employee.id}. Use your email or ID to log in.`);
     closeRegisterModal();
   } catch (err) {
     if (err.name === 'TypeError') {

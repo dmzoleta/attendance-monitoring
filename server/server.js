@@ -305,7 +305,9 @@ function handleApi(req, res, pathname) {
 
       const lookup = username.toLowerCase();
       const emp = db.employees.find((e) =>
-        e.email.toLowerCase() === lookup || e.id.toLowerCase() === lookup
+        e.email.toLowerCase() === lookup ||
+        e.id.toLowerCase() === lookup ||
+        e.name.toLowerCase() === lookup
       );
       if (!emp) return sendJson(res, 404, { ok: false, message: 'Employee not found.' });
       emp.password = newPassword;
