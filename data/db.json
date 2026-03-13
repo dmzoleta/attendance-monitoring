@@ -15,9 +15,14 @@
       "position": "ict support",
       "office": "ict",
       "email": "johnromiematre@gmail.com",
+      "username": "johnromiematre@gmail.com",
+      "employeeType": "COS",
       "password": "admin123",
       "status": "Active",
-      "avatar": "assets/avatar-generic.png"
+      "avatar": "assets/avatar-generic.png",
+      "verified": true,
+      "otp": "",
+      "otpExpiresAt": 0
     }
   ],
   "attendance": [],

@@ -2,12 +2,7 @@
 const fs = require('fs');
 const path = require('path');
 const url = require('url');
-const {
-  generateRegistrationOptions,
-  verifyRegistrationResponse,
-  generateAuthenticationOptions,
-  verifyAuthenticationResponse
-} = require('@simplewebauthn/server');
+const nodemailer = require('nodemailer');
 
 const DEFAULT_ROOT = path.join(__dirname, '..');
 const ROOT = fs.existsSync(path.join(DEFAULT_ROOT, 'admin')) ? DEFAULT_ROOT : process.cwd();
@@ -50,10 +45,6 @@ function parseJsonSafe(raw) {
 }
 
 let memoryDb = null;
-const pendingChallenges = {
-  register: new Map(),
-  auth: new Map()
-};
 
 function normalizeDb(db) {
   const safe = db && typeof db === 'object' ? db : {};
@@ -62,11 +53,6 @@ function normalizeDb(db) {
   if (!Array.isArray(safe.attendance)) safe.attendance = [];
   if (!Array.isArray(safe.notifications)) safe.notifications = [];
   if (!Array.isArray(safe.messages)) safe.messages = [];
-  safe.employees = safe.employees.map((emp) => {
-    if (!emp || typeof emp !== 'object') return emp;
-    if (!Array.isArray(emp.webauthn)) emp.webauthn = [];
-    return emp;
-  });
   return safe;
 }
 
@@ -191,19 +177,6 @@ function computeDailyStatus(record) {
   return late ? 'Late' : 'Present';
 }
 
-function base64urlToBuffer(value) {
-  if (!value) return Buffer.alloc(0);
-  const base64 = value.replace(/-/g, '+').replace(/_/g, '/');
-  const pad = base64.length % 4 ? '='.repeat(4 - (base64.length % 4)) : '';
-  return Buffer.from(base64 + pad, 'base64');
-}
-
-function bufferToBase64url(buffer) {
-  return Buffer.from(buffer).toString('base64')
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=+$/g, '');
-}
 
 function findEmployeeByLogin(db, value) {
   const lookup = String(value || '').trim().toLowerCase();
@@ -216,24 +189,50 @@ function findEmployeeByLogin(db, value) {
   );
 }
 
-function getRpInfo(req) {
-  const host = String(req.headers.host || '').split(':')[0] || 'localhost';
-  const proto = String(req.headers['x-forwarded-proto'] || 'http');
-  const originHeader = String(req.headers.origin || '');
-  let origin = originHeader || `${proto}://${host}`;
-  if (process.env.RP_ORIGIN) origin = process.env.RP_ORIGIN;
-  let rpID = host;
-  try {
-    rpID = new URL(origin).hostname;
-  } catch (err) {
-    rpID = host;
-  }
-  if (process.env.RP_ID) rpID = process.env.RP_ID;
-  return { rpID, origin };
-}
-
 function pickLatestValue(...values) {
   return values.find((val) => val && String(val).trim().length > 0) || '';
+}
+
+function normalizeEmail(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function isDepedEmail(email) {
+  return /@deped\.gov\.ph$/i.test(email);
+}
+
+function generateOtp() {
+  return String(Math.floor(100000 + Math.random() * 900000));
+}
+
+function getMailer() {
+  const host = process.env.SMTP_HOST || '';
+  const user = process.env.SMTP_USER || '';
+  const pass = process.env.SMTP_PASS || '';
+  const port = Number(process.env.SMTP_PORT || 587);
+  if (!host || !user || !pass) return null;
+  return nodemailer.createTransport({
+    host,
+    port,
+    secure: port === 465,
+    auth: { user, pass }
+  });
+}
+
+async function sendOtpEmail(to, code) {
+  const transporter = getMailer();
+  if (!transporter) {
+    return { ok: false, reason: 'Email service not configured' };
+  }
+  const from = process.env.SMTP_FROM || process.env.SMTP_USER;
+  await transporter.sendMail({
+    from,
+    to,
+    subject: 'SDO Attendance OTP Verification',
+    text: `Your OTP code is ${code}. It expires in 10 minutes.`,
+    html: `<p>Your OTP code is <strong>${code}</strong>. It expires in 10 minutes.</p>`
+  });
+  return { ok: true };
 }
 
 function attendanceForDate(db, date) {
@@ -330,162 +329,6 @@ function handleApi(req, res, pathname) {
     return sendJson(res, 200, { employees: db.employees });
   }
 
-  if (req.method === 'POST' && pathname === '/api/webauthn/status') {
-    return collectBody(req).then((body) => {
-      const db = readDb();
-      const employee = findEmployeeByLogin(db, body.username);
-      if (!employee) return sendJson(res, 404, { ok: false, message: 'Employee not found.' });
-      const registered = Array.isArray(employee.webauthn) && employee.webauthn.length > 0;
-      return sendJson(res, 200, { ok: true, registered });
-    });
-  }
-
-  if (req.method === 'POST' && pathname === '/api/webauthn/register/options') {
-    return collectBody(req).then((body) => {
-      const db = readDb();
-      const employee = findEmployeeByLogin(db, body.username);
-      if (!employee) return sendJson(res, 404, { ok: false, message: 'Employee not found.' });
-      const { rpID } = getRpInfo(req);
-      const options = generateRegistrationOptions({
-        rpName: 'SDO Marinduque Attendance',
-        rpID,
-        userID: Buffer.from(employee.id, 'utf8'),
-        userName: employee.username || employee.id,
-        userDisplayName: employee.name || employee.id,
-        attestationType: 'none',
-        authenticatorSelection: {
-          residentKey: 'preferred',
-          userVerification: 'preferred'
-        },
-        excludeCredentials: (employee.webauthn || []).map((cred) => ({
-          id: base64urlToBuffer(cred.credentialID),
-          type: 'public-key',
-          transports: cred.transports || ['internal']
-        }))
-      });
-      pendingChallenges.register.set(employee.id, options.challenge);
-      return sendJson(res, 200, { ok: true, options });
-    });
-  }
-
-  if (req.method === 'POST' && pathname === '/api/webauthn/register/verify') {
-    return collectBody(req).then(async (body) => {
-      const db = readDb();
-      const employee = findEmployeeByLogin(db, body.username);
-      if (!employee) return sendJson(res, 404, { ok: false, message: 'Employee not found.' });
-      const expectedChallenge = pendingChallenges.register.get(employee.id);
-      if (!expectedChallenge) return sendJson(res, 400, { ok: false, message: 'No pending challenge.' });
-      const { rpID, origin } = getRpInfo(req);
-      let verification;
-      try {
-        verification = await verifyRegistrationResponse({
-          response: body.credential,
-          expectedChallenge,
-          expectedOrigin: origin,
-          expectedRPID: rpID
-        });
-      } catch (err) {
-        return sendJson(res, 400, { ok: false, message: 'Registration failed.' });
-      }
-      const { verified, registrationInfo } = verification;
-      if (!verified || !registrationInfo) {
-        return sendJson(res, 400, { ok: false, message: 'Registration not verified.' });
-      }
-      const credentialID = bufferToBase64url(registrationInfo.credentialID);
-      const publicKey = bufferToBase64url(registrationInfo.credentialPublicKey);
-      const exists = (employee.webauthn || []).some((cred) => cred.credentialID === credentialID);
-      if (!exists) {
-        employee.webauthn = employee.webauthn || [];
-        employee.webauthn.push({
-          credentialID,
-          publicKey,
-          counter: registrationInfo.counter,
-          transports: body.credential?.transports || ['internal']
-        });
-        writeDb(db);
-      }
-      pendingChallenges.register.delete(employee.id);
-      return sendJson(res, 200, { ok: true });
-    });
-  }
-
-  if (req.method === 'POST' && pathname === '/api/webauthn/auth/options') {
-    return collectBody(req).then((body) => {
-      const db = readDb();
-      const { rpID } = getRpInfo(req);
-      let allowCredentials = [];
-      let employee = null;
-      if (body.username) {
-        employee = findEmployeeByLogin(db, body.username);
-        if (!employee) return sendJson(res, 404, { ok: false, message: 'Employee not found.' });
-        allowCredentials = (employee.webauthn || []).map((cred) => ({
-          id: isoBase64URL.toBuffer(cred.credentialID),
-          type: 'public-key',
-          transports: cred.transports || ['internal']
-        }));
-      }
-      const options = generateAuthenticationOptions({
-        rpID,
-        userVerification: 'preferred',
-        allowCredentials
-      });
-      const key = employee ? employee.id : '_userless';
-      pendingChallenges.auth.set(key, options.challenge);
-      return sendJson(res, 200, { ok: true, options });
-    });
-  }
-
-  if (req.method === 'POST' && pathname === '/api/webauthn/auth/verify') {
-    return collectBody(req).then(async (body) => {
-      const db = readDb();
-      const { rpID, origin } = getRpInfo(req);
-      let employee = null;
-      if (body.username) {
-        employee = findEmployeeByLogin(db, body.username);
-      } else if (body.credential && body.credential.id) {
-        const credentialId = body.credential.id;
-        employee = db.employees.find((emp) =>
-          (emp.webauthn || []).some((cred) => cred.credentialID === credentialId)
-        );
-      }
-      if (!employee) return sendJson(res, 404, { ok: false, message: 'Employee not found.' });
-
-      const authKey = body.username ? employee.id : '_userless';
-      const expectedChallenge = pendingChallenges.auth.get(authKey);
-      if (!expectedChallenge) return sendJson(res, 400, { ok: false, message: 'No pending challenge.' });
-
-      const authenticatorRecord = (employee.webauthn || []).find((cred) => cred.credentialID === body.credential.id);
-      if (!authenticatorRecord) {
-        return sendJson(res, 400, { ok: false, message: 'Biometric not registered.' });
-      }
-
-      let verification;
-      try {
-        verification = await verifyAuthenticationResponse({
-          response: body.credential,
-          expectedChallenge,
-          expectedOrigin: origin,
-          expectedRPID: rpID,
-          authenticator: {
-            credentialID: base64urlToBuffer(authenticatorRecord.credentialID),
-            credentialPublicKey: base64urlToBuffer(authenticatorRecord.publicKey),
-            counter: authenticatorRecord.counter
-          }
-        });
-      } catch (err) {
-        return sendJson(res, 400, { ok: false, message: 'Authentication failed.' });
-      }
-      const { verified, authenticationInfo } = verification;
-      if (!verified || !authenticationInfo) {
-        return sendJson(res, 400, { ok: false, message: 'Authentication not verified.' });
-      }
-      authenticatorRecord.counter = authenticationInfo.newCounter;
-      writeDb(db);
-      pendingChallenges.auth.delete(authKey);
-      return sendJson(res, 200, { ok: true, user: employee });
-    });
-  }
-
   if (req.method === 'GET' && pathname === '/api/notifications') {
     const db = readDb();
     return sendJson(res, 200, { notifications: db.notifications || [] });
@@ -549,16 +392,21 @@ function handleApi(req, res, pathname) {
   if (req.method === 'POST' && pathname === '/api/employees') {
     return collectBody(req).then((body) => {
       const db = readDb();
+      const email = normalizeEmail(body.email || '');
       const newEmp = {
         id: body.id || `SDO-${String(db.employees.length + 1).padStart(3, '0')}`,
         name: body.name || 'New Employee',
         position: body.position || 'Staff',
         office: body.office || 'Office',
-        email: body.email || '',
+        email,
+        username: email || body.username || '',
+        employeeType: body.employeeType || 'Regular',
         password: body.password || 'password123',
         status: 'Active',
         avatar: body.avatar || 'assets/avatar-generic.png',
-        webauthn: []
+        verified: true,
+        otp: '',
+        otpExpiresAt: 0
       };
       db.employees.push(newEmp);
       writeDb(db);
@@ -597,43 +445,108 @@ function handleApi(req, res, pathname) {
   }
 
   if (req.method === 'POST' && pathname === '/api/register') {
-    return collectBody(req).then((body) => {
+    return collectBody(req).then(async (body) => {
       const db = readDb();
       const name = String(body.name || '').trim();
       const office = String(body.office || '').trim();
-      const username = String(body.username || body.email || '').trim();
+      const employeeType = String(body.employeeType || '').trim();
       const position = String(body.position || 'Staff').trim();
-      const email = String(body.email || '').trim().toLowerCase();
+      const email = normalizeEmail(body.email || '');
       const password = String(body.password || '').trim();
 
-      if (!name || !office || !username || !password) {
+      if (!name || !office || !employeeType || !email || !password) {
         return sendJson(res, 400, { ok: false, message: 'All fields are required.' });
       }
 
+      if (employeeType === 'Regular' && !isDepedEmail(email)) {
+        return sendJson(res, 400, { ok: false, message: 'Regular employees must use a DepEd email.' });
+      }
+
       const existing = db.employees.find((e) =>
-        (e.username && e.username.toLowerCase() === username.toLowerCase()) ||
-        (email && e.email.toLowerCase() === email)
+        (e.email && e.email.toLowerCase() === email) ||
+        (e.username && e.username.toLowerCase() === email)
       );
       if (existing) {
-        return sendJson(res, 409, { ok: false, message: 'Username or email is already registered.' });
+        return sendJson(res, 409, { ok: false, message: 'Email is already registered.' });
       }
 
       const nextId = `SDO-${String(db.employees.length + 1).padStart(3, '0')}`;
+      const otp = generateOtp();
       const newEmp = {
         id: nextId,
         name,
         position,
         office,
         email,
-        username,
+        username: email,
+        employeeType,
         password,
         status: 'Active',
         avatar: 'assets/avatar-generic.svg',
-        webauthn: []
+        verified: false,
+        otp,
+        otpExpiresAt: Date.now() + 10 * 60 * 1000
       };
       db.employees.push(newEmp);
       writeDb(db);
-      return sendJson(res, 201, { ok: true, employee: newEmp });
+
+      let devOtp = '';
+      try {
+        const mailResult = await sendOtpEmail(email, otp);
+        if (!mailResult.ok) {
+          devOtp = otp;
+        }
+      } catch (err) {
+        return sendJson(res, 500, { ok: false, message: 'Unable to send OTP email.' });
+      }
+
+      return sendJson(res, 201, { ok: true, employee: newEmp, devOtp });
+    });
+  }
+
+  if (req.method === 'POST' && pathname === '/api/register/verify') {
+    return collectBody(req).then((body) => {
+      const db = readDb();
+      const email = normalizeEmail(body.email || '');
+      const otp = String(body.otp || '').trim();
+      if (!email || !otp) {
+        return sendJson(res, 400, { ok: false, message: 'Email and OTP are required.' });
+      }
+      const employee = db.employees.find((e) => e.email && e.email.toLowerCase() === email);
+      if (!employee) return sendJson(res, 404, { ok: false, message: 'Employee not found.' });
+      if (!employee.otp || employee.otp !== otp) {
+        return sendJson(res, 400, { ok: false, message: 'Invalid OTP.' });
+      }
+      if (employee.otpExpiresAt && Date.now() > employee.otpExpiresAt) {
+        return sendJson(res, 400, { ok: false, message: 'OTP expired. Please resend.' });
+      }
+      employee.verified = true;
+      employee.otp = '';
+      employee.otpExpiresAt = 0;
+      writeDb(db);
+      return sendJson(res, 200, { ok: true });
+    });
+  }
+
+  if (req.method === 'POST' && pathname === '/api/register/resend') {
+    return collectBody(req).then(async (body) => {
+      const db = readDb();
+      const email = normalizeEmail(body.email || '');
+      if (!email) return sendJson(res, 400, { ok: false, message: 'Email is required.' });
+      const employee = db.employees.find((e) => e.email && e.email.toLowerCase() === email);
+      if (!employee) return sendJson(res, 404, { ok: false, message: 'Employee not found.' });
+      const otp = generateOtp();
+      employee.otp = otp;
+      employee.otpExpiresAt = Date.now() + 10 * 60 * 1000;
+      writeDb(db);
+      let devOtp = '';
+      try {
+        const mailResult = await sendOtpEmail(email, otp);
+        if (!mailResult.ok) devOtp = otp;
+      } catch (err) {
+        return sendJson(res, 500, { ok: false, message: 'Unable to send OTP email.' });
+      }
+      return sendJson(res, 200, { ok: true, devOtp });
     });
   }
 
@@ -659,9 +572,9 @@ function handleApi(req, res, pathname) {
       const lookup = username.toLowerCase();
       const emp = db.employees.find((e) =>
         (e.username && e.username.toLowerCase() === lookup) ||
-        e.email.toLowerCase() === lookup ||
-        e.id.toLowerCase() === lookup ||
-        e.name.toLowerCase() === lookup
+        (e.email && e.email.toLowerCase() === lookup) ||
+        (e.id && e.id.toLowerCase() === lookup) ||
+        (e.name && e.name.toLowerCase() === lookup)
       );
       if (!emp) return sendJson(res, 404, { ok: false, message: 'Employee not found.' });
       emp.password = newPassword;
@@ -687,12 +600,15 @@ function handleApi(req, res, pathname) {
       const lookup = username.toLowerCase();
       const emp = db.employees.find((e) =>
         (e.username && e.username.toLowerCase() === lookup) ||
-        e.email.toLowerCase() === lookup ||
-        e.id.toLowerCase() === lookup ||
-        e.name.toLowerCase() === lookup
+        (e.email && e.email.toLowerCase() === lookup) ||
+        (e.id && e.id.toLowerCase() === lookup) ||
+        (e.name && e.name.toLowerCase() === lookup)
       );
       if (!emp || emp.password !== password) {
         return sendJson(res, 401, { ok: false, message: 'Invalid credentials' });
+      }
+      if (emp.verified === false) {
+        return sendJson(res, 403, { ok: false, message: 'Email not verified. Please enter the OTP sent to your email.' });
       }
       return sendJson(res, 200, { ok: true, user: emp, role: 'employee' });
     });

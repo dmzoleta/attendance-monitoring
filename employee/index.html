@@ -14,8 +14,8 @@
       <p>Attendance Monitoring System</p>
       <form id="employee-login-form">
         <label class="input-field">
-          <span>Username / ID</span>
-          <input type="text" name="username" placeholder="SDO-001 or email" required />
+          <span>Email / ID</span>
+          <input type="text" name="username" placeholder="name@email.com or SDO-001" required />
         </label>
         <label class="input-field">
           <span>Password</span>
@@ -27,8 +27,6 @@
         <button class="primary-btn" type="submit">LOGIN</button>
         <button class="link-btn" type="button" id="open-forgot">Forgot Password?</button>
         <button class="link-btn" type="button" id="open-register">Create Account</button>
-        <button class="ghost-btn biometric-btn" type="button" id="biometric-login">Login with Biometrics</button>
-        <button class="ghost-btn biometric-btn" type="button" id="biometric-register">Set up Biometrics</button>
       </form>
       <p class="footer">© SDO Marinduque ICT Unit</p>
     </section>
@@ -64,8 +62,18 @@
             </select>
           </label>
           <label class="input-field">
-            <span>Username</span>
-            <input type="text" name="username" required />
+            <span>Employment Type</span>
+            <select name="employeeType" required>
+              <option value="" disabled selected>Select Type</option>
+              <option value="COS">COS</option>
+              <option value="JO">JO</option>
+              <option value="Regular">Regular Employee</option>
+            </select>
+          </label>
+          <label class="input-field">
+            <span>Email (Username)</span>
+            <input type="email" name="email" placeholder="name@email.com" required />
+            <small class="helper-text">Use DepEd email for Regular employees.</small>
           </label>
           <label class="input-field">
             <span>Password</span>
@@ -87,7 +95,7 @@
         </div>
         <form id="forgot-form">
           <label class="input-field">
-            <span>Username or Employee ID</span>
+            <span>Email or Employee ID</span>
             <input type="text" name="username" required />
           </label>
           <label class="input-field">
@@ -97,6 +105,25 @@
           <div class="action-row">
             <button class="primary-btn" type="submit">Update Password</button>
             <button class="ghost-btn" type="button" id="cancel-forgot">Cancel</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div id="otp-modal" class="modal hidden">
+      <div class="modal-card">
+        <div class="card-header">
+          <h3>Verify Email</h3>
+          <button class="icon-btn" id="close-otp">✖</button>
+        </div>
+        <form id="otp-form">
+          <label class="input-field">
+            <span>OTP Code</span>
+            <input type="text" name="otp" inputmode="numeric" placeholder="6-digit code" required />
+          </label>
+          <div class="action-row">
+            <button class="primary-btn" type="submit">Verify</button>
+            <button class="ghost-btn" type="button" id="resend-otp">Resend OTP</button>
           </div>
         </form>
       </div>

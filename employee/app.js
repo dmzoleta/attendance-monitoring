@@ -47,8 +47,10 @@ const openForgotBtn = document.getElementById('open-forgot');
 const closeForgotBtn = document.getElementById('close-forgot');
 const cancelForgotBtn = document.getElementById('cancel-forgot');
 const forgotForm = document.getElementById('forgot-form');
-const biometricLoginBtn = document.getElementById('biometric-login');
-const biometricRegisterBtn = document.getElementById('biometric-register');
+const otpModal = document.getElementById('otp-modal');
+const otpForm = document.getElementById('otp-form');
+const closeOtpBtn = document.getElementById('close-otp');
+const resendOtpBtn = document.getElementById('resend-otp');
 const concernModal = document.getElementById('concern-modal');
 const openConcernBtn = document.getElementById('open-concern');
 const closeConcernBtn = document.getElementById('close-concern');
@@ -58,6 +60,7 @@ const concernForm = document.getElementById('concern-form');
 let currentUser = null;
 let attendanceCache = [];
 let photoData = '';
+let pendingOtpEmail = '';
 const appConfig = typeof window !== 'undefined' && window.APP_CONFIG ? window.APP_CONFIG : {};
 const isCapacitor = typeof window !== 'undefined' && !!window.Capacitor;
 const defaultApiBase = appConfig.apiBase || '';
@@ -145,48 +148,6 @@ function pickPhoto(item) {
 
 function pickLocation(item) {
   return item.locationInAM || item.locationInPM || item.locationOutAM || item.locationOutPM || item.location || '';
-}
-
-function bufferToBase64url(buffer) {
-  const bytes = new Uint8Array(buffer);
-  let binary = '';
-  bytes.forEach((b) => { binary += String.fromCharCode(b); });
-  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
-}
-
-function base64urlToBuffer(base64url) {
-  const base64 = base64url.replace(/-/g, '+').replace(/_/g, '/');
-  const pad = base64.length % 4 ? '='.repeat(4 - (base64.length % 4)) : '';
-  const binary = atob(base64 + pad);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i += 1) {
-    bytes[i] = binary.charCodeAt(i);
-  }
-  return bytes.buffer;
-}
-
-function credentialToJSON(cred) {
-  return {
-    id: cred.id,
-    rawId: bufferToBase64url(cred.rawId),
-    type: cred.type,
-    response: {
-      clientDataJSON: bufferToBase64url(cred.response.clientDataJSON),
-      attestationObject: cred.response.attestationObject ? bufferToBase64url(cred.response.attestationObject) : undefined,
-      authenticatorData: cred.response.authenticatorData ? bufferToBase64url(cred.response.authenticatorData) : undefined,
-      signature: cred.response.signature ? bufferToBase64url(cred.response.signature) : undefined,
-      userHandle: cred.response.userHandle ? bufferToBase64url(cred.response.userHandle) : undefined
-    },
-    transports: cred.response.getTransports ? cred.response.getTransports() : undefined
-  };
-}
-
-function ensureWebAuthn() {
-  if (!window.PublicKeyCredential || !navigator.credentials) {
-    alert('Biometric login is not supported on this device/browser.');
-    return false;
-  }
-  return true;
 }
 
 async function api(path, options = {}, attempt = 0) {
@@ -369,7 +330,15 @@ loginForm.addEventListener('submit', async (event) => {
     });
     await startEmployeeSession(result.user);
   } catch (err) {
-    alert(err.message || 'Invalid credentials. Use username, ID, or full name.');
+    const message = err.message || 'Invalid credentials. Use email or ID.';
+    if (message.toLowerCase().includes('email not verified')) {
+      const username = String(payload.username || '').trim();
+      if (username) {
+        pendingOtpEmail = username;
+        openOtpModal();
+      }
+    }
+    alert(message);
   }
 });
 
@@ -416,10 +385,16 @@ async function handleRegister(event) {
     });
     const loginUser = loginForm.querySelector('input[name="username"]');
     const loginPass = loginForm.querySelector('input[name="password"]');
-    if (loginUser) loginUser.value = payload.username || payload.email || result.employee.id;
+    if (loginUser) loginUser.value = payload.email || result.employee.email || result.employee.id;
     if (loginPass) loginPass.value = payload.password;
-    alert(`Registered! Your ID is ${result.employee.id}. Use your username or ID to log in.`);
+    pendingOtpEmail = payload.email || result.employee.email;
     closeRegisterModal();
+    openOtpModal();
+    if (result.devOtp) {
+      alert(`OTP (dev): ${result.devOtp}`);
+    } else {
+      alert('OTP sent to your email. Please enter the code to verify.');
+    }
   } catch (err) {
     if (err.name === 'TypeError') {
       alert('Server not reachable. Try again after the server wakes up.');
@@ -458,120 +433,54 @@ async function handleForgot(event) {
   }
 }
 
-async function handleBiometricRegister() {
-  if (!ensureWebAuthn()) return;
-  const username = String(loginForm.querySelector('input[name="username"]').value || '').trim();
-  if (!username) {
-    alert('Enter your username or ID to register biometrics.');
+function openOtpModal() {
+  if (!otpModal) return;
+  otpModal.classList.remove('hidden');
+}
+
+function closeOtpModal() {
+  if (!otpModal) return;
+  otpModal.classList.add('hidden');
+  if (otpForm) otpForm.reset();
+}
+
+async function handleOtpVerify(event) {
+  event.preventDefault();
+  if (!pendingOtpEmail) {
+    alert('Missing email for verification. Please register again.');
+    return;
+  }
+  const formData = new FormData(otpForm);
+  const payload = Object.fromEntries(formData.entries());
+  try {
+    await api('/api/register/verify', {
+      method: 'POST',
+      body: JSON.stringify({ email: pendingOtpEmail, otp: payload.otp })
+    });
+    alert('Email verified. You can now log in.');
+    closeOtpModal();
+  } catch (err) {
+    alert(err.message || 'OTP verification failed.');
+  }
+}
+
+async function handleOtpResend() {
+  if (!pendingOtpEmail) {
+    alert('Missing email for verification. Please register again.');
     return;
   }
   try {
-    const optionsResp = await api('/api/webauthn/register/options', {
+    const result = await api('/api/register/resend', {
       method: 'POST',
-      body: JSON.stringify({ username })
+      body: JSON.stringify({ email: pendingOtpEmail })
     });
-    const options = optionsResp.options;
-    if (!options || !options.challenge || !options.user || !options.user.id) {
-      throw new Error('Biometric setup is not available. Please try again later.');
+    if (result.devOtp) {
+      alert(`OTP resent (dev): ${result.devOtp}`);
+    } else {
+      alert('OTP resent. Please check your email.');
     }
-    options.challenge = base64urlToBuffer(options.challenge);
-    options.user.id = base64urlToBuffer(options.user.id);
-    if (options.excludeCredentials) {
-      options.excludeCredentials = options.excludeCredentials.map((cred) => ({
-        ...cred,
-        id: base64urlToBuffer(cred.id)
-      }));
-    }
-    const cred = await navigator.credentials.create({ publicKey: options });
-    if (!cred) throw new Error('Biometric registration cancelled.');
-    await api('/api/webauthn/register/verify', {
-      method: 'POST',
-      body: JSON.stringify({ username, credential: credentialToJSON(cred) })
-    });
-    alert('Biometrics setup complete. You can now log in with biometrics.');
   } catch (err) {
-    alert(err.message || 'Biometric registration failed.');
-  }
-}
-
-async function performBiometricLogin(username) {
-  const optionsResp = await api('/api/webauthn/auth/options', {
-    method: 'POST',
-    body: JSON.stringify(username ? { username } : {})
-  });
-  const options = optionsResp.options || optionsResp.publicKey || optionsResp;
-  if (!options || !options.challenge) {
-    throw new Error(optionsResp.message || 'Biometric login is not available. Please try again later.');
-  }
-  options.challenge = base64urlToBuffer(options.challenge);
-  if (options.allowCredentials) {
-    options.allowCredentials = options.allowCredentials.map((cred) => ({
-      ...cred,
-      id: base64urlToBuffer(cred.id)
-    }));
-  }
-  const assertion = await navigator.credentials.get({ publicKey: options });
-  if (!assertion) throw new Error('Biometric login cancelled.');
-  const verify = await api('/api/webauthn/auth/verify', {
-    method: 'POST',
-    body: JSON.stringify({ username: username || undefined, credential: credentialToJSON(assertion) })
-  });
-  return verify.user;
-}
-
-async function performBiometricRegister(username) {
-  const optionsResp = await api('/api/webauthn/register/options', {
-    method: 'POST',
-    body: JSON.stringify({ username })
-  });
-  const options = optionsResp.options || optionsResp.publicKey || optionsResp;
-  if (!options || !options.challenge || !options.user || !options.user.id) {
-    throw new Error(optionsResp.message || 'Biometric setup is not available. Please try again later.');
-  }
-  options.challenge = base64urlToBuffer(options.challenge);
-  options.user.id = base64urlToBuffer(options.user.id);
-  if (options.excludeCredentials) {
-    options.excludeCredentials = options.excludeCredentials.map((cred) => ({
-      ...cred,
-      id: base64urlToBuffer(cred.id)
-    }));
-  }
-  const cred = await navigator.credentials.create({ publicKey: options });
-  if (!cred) throw new Error('Biometric registration cancelled.');
-  await api('/api/webauthn/register/verify', {
-    method: 'POST',
-    body: JSON.stringify({ username, credential: credentialToJSON(cred) })
-  });
-}
-
-async function handleBiometricLogin() {
-  if (!ensureWebAuthn()) return;
-  const username = String(loginForm.querySelector('input[name="username"]').value || '').trim();
-  try {
-    if (username) {
-      const status = await api('/api/webauthn/status', {
-        method: 'POST',
-        body: JSON.stringify({ username })
-      });
-      if (!status.registered) {
-        alert('First time use: Please register your fingerprint.');
-        await performBiometricRegister(username);
-        alert('Fingerprint registered. Please verify again to log in.');
-      }
-      const user = await performBiometricLogin(username);
-      await startEmployeeSession(user);
-      return;
-    }
-
-    // No username typed: try userless login (discoverable credentials).
-    const user = await performBiometricLogin('');
-    await startEmployeeSession(user);
-  } catch (err) {
-    if (err && (err.name === 'NotAllowedError' || err.name === 'NotFoundError')) {
-      alert('Biometric login cancelled or not set up yet. Enter your username/ID to register first.');
-      return;
-    }
-    alert(err.message || 'Biometric login failed.');
+    alert(err.message || 'Unable to resend OTP.');
   }
 }
 
@@ -658,8 +567,9 @@ closeForgotBtn.addEventListener('click', closeForgotModal);
 cancelForgotBtn.addEventListener('click', closeForgotModal);
 forgotForm.addEventListener('submit', handleForgot);
 
-if (biometricLoginBtn) biometricLoginBtn.addEventListener('click', handleBiometricLogin);
-if (biometricRegisterBtn) biometricRegisterBtn.addEventListener('click', handleBiometricRegister);
+if (closeOtpBtn) closeOtpBtn.addEventListener('click', closeOtpModal);
+if (resendOtpBtn) resendOtpBtn.addEventListener('click', handleOtpResend);
+if (otpForm) otpForm.addEventListener('submit', handleOtpVerify);
 
 if (openConcernBtn) openConcernBtn.addEventListener('click', openConcernModal);
 if (closeConcernBtn) closeConcernBtn.addEventListener('click', closeConcernModal);

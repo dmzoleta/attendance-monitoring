@@ -15,7 +15,7 @@
     "@capacitor/cli": "^8.2.0",
     "@capacitor/core": "^8.2.0",
     "@capacitor/ios": "^8.2.0",
-    "@simplewebauthn/server": "^9.0.0"
+    "nodemailer": "^6.9.14"
   },
   "engines": {
     "node": ">=18"
