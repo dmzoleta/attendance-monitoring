@@ -355,6 +355,20 @@ body {
 .data-table td.status-late { color: #d64545; font-weight: 700; }
 .data-table td.status-absent { color: #f06b3f; font-weight: 700; }
 
+.table-photo {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  object-fit: cover;
+  border: 1px solid #d6def2;
+  background: #f0f4ff;
+}
+
+.table-location {
+  font-size: 11px;
+  color: #3a4b70;
+}
+
 .bottom-nav {
   position: fixed;
   bottom: 0;
