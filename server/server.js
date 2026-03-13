@@ -2,6 +2,13 @@
 const fs = require('fs');
 const path = require('path');
 const url = require('url');
+const {
+  generateRegistrationOptions,
+  verifyRegistrationResponse,
+  generateAuthenticationOptions,
+  verifyAuthenticationResponse
+} = require('@simplewebauthn/server');
+const { isoBase64URL } = require('@simplewebauthn/server/helpers');
 
 const DEFAULT_ROOT = path.join(__dirname, '..');
 const ROOT = fs.existsSync(path.join(DEFAULT_ROOT, 'admin')) ? DEFAULT_ROOT : process.cwd();
@@ -44,6 +51,10 @@ function parseJsonSafe(raw) {
 }
 
 let memoryDb = null;
+const pendingChallenges = {
+  register: new Map(),
+  auth: new Map()
+};
 
 function normalizeDb(db) {
   const safe = db && typeof db === 'object' ? db : {};
@@ -52,6 +63,11 @@ function normalizeDb(db) {
   if (!Array.isArray(safe.attendance)) safe.attendance = [];
   if (!Array.isArray(safe.notifications)) safe.notifications = [];
   if (!Array.isArray(safe.messages)) safe.messages = [];
+  safe.employees = safe.employees.map((emp) => {
+    if (!emp || typeof emp !== 'object') return emp;
+    if (!Array.isArray(emp.webauthn)) emp.webauthn = [];
+    return emp;
+  });
   return safe;
 }
 
@@ -176,6 +192,25 @@ function computeDailyStatus(record) {
   return late ? 'Late' : 'Present';
 }
 
+function findEmployeeByLogin(db, value) {
+  const lookup = String(value || '').trim().toLowerCase();
+  if (!lookup) return null;
+  return db.employees.find((e) =>
+    (e.username && e.username.toLowerCase() === lookup) ||
+    (e.email && e.email.toLowerCase() === lookup) ||
+    (e.id && e.id.toLowerCase() === lookup) ||
+    (e.name && e.name.toLowerCase() === lookup)
+  );
+}
+
+function getRpInfo(req) {
+  const host = String(req.headers.host || '').split(':')[0] || 'localhost';
+  const proto = String(req.headers['x-forwarded-proto'] || 'http');
+  const rpID = process.env.RP_ID || host;
+  const origin = process.env.RP_ORIGIN || `${proto}://${rpID}`;
+  return { rpID, origin };
+}
+
 function pickLatestValue(...values) {
   return values.find((val) => val && String(val).trim().length > 0) || '';
 }
@@ -274,6 +309,152 @@ function handleApi(req, res, pathname) {
     return sendJson(res, 200, { employees: db.employees });
   }
 
+  if (req.method === 'POST' && pathname === '/api/webauthn/register/options') {
+    return collectBody(req).then((body) => {
+      const db = readDb();
+      const employee = findEmployeeByLogin(db, body.username);
+      if (!employee) return sendJson(res, 404, { ok: false, message: 'Employee not found.' });
+      const { rpID } = getRpInfo(req);
+      const options = generateRegistrationOptions({
+        rpName: 'SDO Marinduque Attendance',
+        rpID,
+        userID: employee.id,
+        userName: employee.username || employee.id,
+        userDisplayName: employee.name || employee.id,
+        attestationType: 'none',
+        authenticatorSelection: {
+          residentKey: 'preferred',
+          userVerification: 'required'
+        },
+        excludeCredentials: (employee.webauthn || []).map((cred) => ({
+          id: isoBase64URL.toBuffer(cred.credentialID),
+          type: 'public-key',
+          transports: cred.transports || ['internal']
+        }))
+      });
+      pendingChallenges.register.set(employee.id, options.challenge);
+      return sendJson(res, 200, { ok: true, options });
+    });
+  }
+
+  if (req.method === 'POST' && pathname === '/api/webauthn/register/verify') {
+    return collectBody(req).then(async (body) => {
+      const db = readDb();
+      const employee = findEmployeeByLogin(db, body.username);
+      if (!employee) return sendJson(res, 404, { ok: false, message: 'Employee not found.' });
+      const expectedChallenge = pendingChallenges.register.get(employee.id);
+      if (!expectedChallenge) return sendJson(res, 400, { ok: false, message: 'No pending challenge.' });
+      const { rpID, origin } = getRpInfo(req);
+      let verification;
+      try {
+        verification = await verifyRegistrationResponse({
+          response: body.credential,
+          expectedChallenge,
+          expectedOrigin: origin,
+          expectedRPID: rpID
+        });
+      } catch (err) {
+        return sendJson(res, 400, { ok: false, message: 'Registration failed.' });
+      }
+      const { verified, registrationInfo } = verification;
+      if (!verified || !registrationInfo) {
+        return sendJson(res, 400, { ok: false, message: 'Registration not verified.' });
+      }
+      const credentialID = isoBase64URL.fromBuffer(registrationInfo.credentialID);
+      const publicKey = isoBase64URL.fromBuffer(registrationInfo.credentialPublicKey);
+      const exists = (employee.webauthn || []).some((cred) => cred.credentialID === credentialID);
+      if (!exists) {
+        employee.webauthn = employee.webauthn || [];
+        employee.webauthn.push({
+          credentialID,
+          publicKey,
+          counter: registrationInfo.counter,
+          transports: body.credential?.transports || ['internal']
+        });
+        writeDb(db);
+      }
+      pendingChallenges.register.delete(employee.id);
+      return sendJson(res, 200, { ok: true });
+    });
+  }
+
+  if (req.method === 'POST' && pathname === '/api/webauthn/auth/options') {
+    return collectBody(req).then((body) => {
+      const db = readDb();
+      const { rpID } = getRpInfo(req);
+      let allowCredentials = [];
+      let employee = null;
+      if (body.username) {
+        employee = findEmployeeByLogin(db, body.username);
+        if (!employee) return sendJson(res, 404, { ok: false, message: 'Employee not found.' });
+        allowCredentials = (employee.webauthn || []).map((cred) => ({
+          id: isoBase64URL.toBuffer(cred.credentialID),
+          type: 'public-key',
+          transports: cred.transports || ['internal']
+        }));
+      }
+      const options = generateAuthenticationOptions({
+        rpID,
+        userVerification: 'required',
+        allowCredentials
+      });
+      const key = employee ? employee.id : '_userless';
+      pendingChallenges.auth.set(key, options.challenge);
+      return sendJson(res, 200, { ok: true, options });
+    });
+  }
+
+  if (req.method === 'POST' && pathname === '/api/webauthn/auth/verify') {
+    return collectBody(req).then(async (body) => {
+      const db = readDb();
+      const { rpID, origin } = getRpInfo(req);
+      let employee = null;
+      if (body.username) {
+        employee = findEmployeeByLogin(db, body.username);
+      } else if (body.credential && body.credential.id) {
+        const credentialId = body.credential.id;
+        employee = db.employees.find((emp) =>
+          (emp.webauthn || []).some((cred) => cred.credentialID === credentialId)
+        );
+      }
+      if (!employee) return sendJson(res, 404, { ok: false, message: 'Employee not found.' });
+
+      const authKey = body.username ? employee.id : '_userless';
+      const expectedChallenge = pendingChallenges.auth.get(authKey);
+      if (!expectedChallenge) return sendJson(res, 400, { ok: false, message: 'No pending challenge.' });
+
+      const authenticatorRecord = (employee.webauthn || []).find((cred) => cred.credentialID === body.credential.id);
+      if (!authenticatorRecord) {
+        return sendJson(res, 400, { ok: false, message: 'Biometric not registered.' });
+      }
+
+      let verification;
+      try {
+        verification = await verifyAuthenticationResponse({
+          response: body.credential,
+          expectedChallenge,
+          expectedOrigin: origin,
+          expectedRPID: rpID,
+          authenticator: {
+            credentialID: isoBase64URL.toBuffer(authenticatorRecord.credentialID),
+            credentialPublicKey: isoBase64URL.toBuffer(authenticatorRecord.publicKey),
+            counter: authenticatorRecord.counter
+          }
+        });
+      } catch (err) {
+        return sendJson(res, 400, { ok: false, message: 'Authentication failed.' });
+      }
+      const { verified, authenticationInfo } = verification;
+      if (!verified || !authenticationInfo) {
+        return sendJson(res, 400, { ok: false, message: 'Authentication not verified.' });
+      }
+      authenticatorRecord.counter = authenticationInfo.newCounter;
+      writeDb(db);
+      pendingChallenges.auth.delete(authKey);
+      return sendJson(res, 200, { ok: true, user: employee });
+    });
+  }
+
   if (req.method === 'GET' && pathname === '/api/notifications') {
     const db = readDb();
     return sendJson(res, 200, { notifications: db.notifications || [] });
@@ -345,7 +526,8 @@ function handleApi(req, res, pathname) {
         email: body.email || '',
         password: body.password || 'password123',
         status: 'Active',
-        avatar: body.avatar || 'assets/avatar-generic.png'
+        avatar: body.avatar || 'assets/avatar-generic.png',
+        webauthn: []
       };
       db.employees.push(newEmp);
       writeDb(db);
@@ -415,7 +597,8 @@ function handleApi(req, res, pathname) {
         username,
         password,
         status: 'Active',
-        avatar: 'assets/avatar-generic.svg'
+        avatar: 'assets/avatar-generic.svg',
+        webauthn: []
       };
       db.employees.push(newEmp);
       writeDb(db);

@@ -47,6 +47,8 @@ const openForgotBtn = document.getElementById('open-forgot');
 const closeForgotBtn = document.getElementById('close-forgot');
 const cancelForgotBtn = document.getElementById('cancel-forgot');
 const forgotForm = document.getElementById('forgot-form');
+const biometricLoginBtn = document.getElementById('biometric-login');
+const biometricRegisterBtn = document.getElementById('biometric-register');
 const concernModal = document.getElementById('concern-modal');
 const openConcernBtn = document.getElementById('open-concern');
 const closeConcernBtn = document.getElementById('close-concern');
@@ -143,6 +145,48 @@ function pickPhoto(item) {
 
 function pickLocation(item) {
   return item.locationInAM || item.locationInPM || item.locationOutAM || item.locationOutPM || item.location || '';
+}
+
+function bufferToBase64url(buffer) {
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  bytes.forEach((b) => { binary += String.fromCharCode(b); });
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+}
+
+function base64urlToBuffer(base64url) {
+  const base64 = base64url.replace(/-/g, '+').replace(/_/g, '/');
+  const pad = base64.length % 4 ? '='.repeat(4 - (base64.length % 4)) : '';
+  const binary = atob(base64 + pad);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes.buffer;
+}
+
+function credentialToJSON(cred) {
+  return {
+    id: cred.id,
+    rawId: bufferToBase64url(cred.rawId),
+    type: cred.type,
+    response: {
+      clientDataJSON: bufferToBase64url(cred.response.clientDataJSON),
+      attestationObject: cred.response.attestationObject ? bufferToBase64url(cred.response.attestationObject) : undefined,
+      authenticatorData: cred.response.authenticatorData ? bufferToBase64url(cred.response.authenticatorData) : undefined,
+      signature: cred.response.signature ? bufferToBase64url(cred.response.signature) : undefined,
+      userHandle: cred.response.userHandle ? bufferToBase64url(cred.response.userHandle) : undefined
+    },
+    transports: cred.response.getTransports ? cred.response.getTransports() : undefined
+  };
+}
+
+function ensureWebAuthn() {
+  if (!window.PublicKeyCredential || !navigator.credentials) {
+    alert('Biometric login is not supported on this device/browser.');
+    return false;
+  }
+  return true;
 }
 
 async function api(path, options = {}, attempt = 0) {
@@ -293,6 +337,25 @@ async function markTimeOut() {
   alert(`Time out recorded (${slotLabel}).`);
 }
 
+async function startEmployeeSession(user) {
+  currentUser = user;
+  loginScreen.classList.add('hidden');
+  appScreen.classList.remove('hidden');
+
+  empName.textContent = currentUser.name.split(' ')[0];
+  empMeta.textContent = `${currentUser.id} · ${currentUser.office}`;
+  empAvatar.src = currentUser.avatar;
+  empAvatar2.src = currentUser.avatar;
+  empName2.textContent = currentUser.name;
+  empRole.textContent = `${currentUser.position} · ${currentUser.office}`;
+
+  await loadAttendance();
+  computeStats();
+  filterRecordsByMonth();
+  updateLocation();
+  tickClock();
+}
+
 loginForm.addEventListener('submit', async (event) => {
   event.preventDefault();
   const formData = new FormData(loginForm);
@@ -304,22 +367,7 @@ loginForm.addEventListener('submit', async (event) => {
       method: 'POST',
       body: JSON.stringify({ role: 'employee', username, password })
     });
-    currentUser = result.user;
-    loginScreen.classList.add('hidden');
-    appScreen.classList.remove('hidden');
-
-    empName.textContent = currentUser.name.split(' ')[0];
-    empMeta.textContent = `${currentUser.id} · ${currentUser.office}`;
-    empAvatar.src = currentUser.avatar;
-    empAvatar2.src = currentUser.avatar;
-    empName2.textContent = currentUser.name;
-    empRole.textContent = `${currentUser.position} · ${currentUser.office}`;
-
-    await loadAttendance();
-    computeStats();
-    filterRecordsByMonth();
-    updateLocation();
-    tickClock();
+    await startEmployeeSession(result.user);
   } catch (err) {
     alert(err.message || 'Invalid credentials. Use username, ID, or full name.');
   }
@@ -410,6 +458,72 @@ async function handleForgot(event) {
   }
 }
 
+async function handleBiometricRegister() {
+  if (!ensureWebAuthn()) return;
+  const username = String(loginForm.querySelector('input[name="username"]').value || '').trim();
+  const password = String(loginForm.querySelector('input[name="password"]').value || '').trim();
+  if (!username || !password) {
+    alert('Enter your username and password once to register biometrics.');
+    return;
+  }
+  try {
+    await api('/api/login', {
+      method: 'POST',
+      body: JSON.stringify({ role: 'employee', username, password })
+    });
+    const optionsResp = await api('/api/webauthn/register/options', {
+      method: 'POST',
+      body: JSON.stringify({ username })
+    });
+    const options = optionsResp.options;
+    options.challenge = base64urlToBuffer(options.challenge);
+    options.user.id = base64urlToBuffer(options.user.id);
+    if (options.excludeCredentials) {
+      options.excludeCredentials = options.excludeCredentials.map((cred) => ({
+        ...cred,
+        id: base64urlToBuffer(cred.id)
+      }));
+    }
+    const cred = await navigator.credentials.create({ publicKey: options });
+    if (!cred) throw new Error('Biometric registration cancelled.');
+    await api('/api/webauthn/register/verify', {
+      method: 'POST',
+      body: JSON.stringify({ username, credential: credentialToJSON(cred) })
+    });
+    alert('Biometrics setup complete. You can now log in with biometrics.');
+  } catch (err) {
+    alert(err.message || 'Biometric registration failed.');
+  }
+}
+
+async function handleBiometricLogin() {
+  if (!ensureWebAuthn()) return;
+  const username = String(loginForm.querySelector('input[name="username"]').value || '').trim();
+  try {
+    const optionsResp = await api('/api/webauthn/auth/options', {
+      method: 'POST',
+      body: JSON.stringify(username ? { username } : {})
+    });
+    const options = optionsResp.options;
+    options.challenge = base64urlToBuffer(options.challenge);
+    if (options.allowCredentials) {
+      options.allowCredentials = options.allowCredentials.map((cred) => ({
+        ...cred,
+        id: base64urlToBuffer(cred.id)
+      }));
+    }
+    const assertion = await navigator.credentials.get({ publicKey: options });
+    if (!assertion) throw new Error('Biometric login cancelled.');
+    const verify = await api('/api/webauthn/auth/verify', {
+      method: 'POST',
+      body: JSON.stringify({ username: username || undefined, credential: credentialToJSON(assertion) })
+    });
+    await startEmployeeSession(verify.user);
+  } catch (err) {
+    alert(err.message || 'Biometric login failed.');
+  }
+}
+
 function openConcernModal() {
   concernModal.classList.remove('hidden');
 }
@@ -492,6 +606,9 @@ openForgotBtn.addEventListener('click', openForgotModal);
 closeForgotBtn.addEventListener('click', closeForgotModal);
 cancelForgotBtn.addEventListener('click', closeForgotModal);
 forgotForm.addEventListener('submit', handleForgot);
+
+if (biometricLoginBtn) biometricLoginBtn.addEventListener('click', handleBiometricLogin);
+if (biometricRegisterBtn) biometricRegisterBtn.addEventListener('click', handleBiometricRegister);
 
 if (openConcernBtn) openConcernBtn.addEventListener('click', openConcernModal);
 if (closeConcernBtn) closeConcernBtn.addEventListener('click', closeConcernModal);

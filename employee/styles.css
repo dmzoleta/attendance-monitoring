@@ -123,6 +123,17 @@ body {
   margin: 12px auto 0;
 }
 
+.biometric-btn {
+  display: block;
+  width: 100%;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #eef2ff;
+  color: #2b4b84;
+  font-weight: 700;
+}
+
 .footer {
   margin-top: 24px;
   font-size: 12px;
