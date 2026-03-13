@@ -2,7 +2,6 @@
 const fs = require('fs');
 const path = require('path');
 const url = require('url');
-const nodemailer = require('nodemailer');
 
 const DEFAULT_ROOT = path.join(__dirname, '..');
 const ROOT = fs.existsSync(path.join(DEFAULT_ROOT, 'admin')) ? DEFAULT_ROOT : process.cwd();
@@ -205,33 +204,38 @@ function generateOtp() {
   return String(Math.floor(100000 + Math.random() * 900000));
 }
 
-function getMailer() {
-  const host = process.env.SMTP_HOST || '';
-  const user = process.env.SMTP_USER || '';
-  const pass = process.env.SMTP_PASS || '';
-  const port = Number(process.env.SMTP_PORT || 587);
-  if (!host || !user || !pass) return null;
-  return nodemailer.createTransport({
-    host,
-    port,
-    secure: port === 465,
-    auth: { user, pass }
-  });
+function getBrevoConfig() {
+  const apiKey = process.env.BREVO_API_KEY || '';
+  const fromEmail = process.env.BREVO_FROM || '';
+  const fromName = process.env.BREVO_FROM_NAME || 'SDO Marinduque Attendance';
+  if (!apiKey || !fromEmail) return null;
+  return { apiKey, fromEmail, fromName };
 }
 
 async function sendOtpEmail(to, code) {
-  const transporter = getMailer();
-  if (!transporter) {
-    return { ok: false, reason: 'Email service not configured' };
+  const config = getBrevoConfig();
+  if (!config) {
+    return { ok: false, reason: 'Brevo not configured' };
   }
-  const from = process.env.SMTP_FROM || process.env.SMTP_USER;
-  await transporter.sendMail({
-    from,
-    to,
+  const payload = {
+    sender: { name: config.fromName, email: config.fromEmail },
+    to: [{ email: to }],
     subject: 'SDO Attendance OTP Verification',
-    text: `Your OTP code is ${code}. It expires in 10 minutes.`,
-    html: `<p>Your OTP code is <strong>${code}</strong>. It expires in 10 minutes.</p>`
+    textContent: `Your OTP code is ${code}. It expires in 10 minutes.`,
+    htmlContent: `<p>Your OTP code is <strong>${code}</strong>. It expires in 10 minutes.</p>`
+  };
+  const res = await fetch('https://api.brevo.com/v3/smtp/email', {
+    method: 'POST',
+    headers: {
+      'api-key': config.apiKey,
+      'Content-Type': 'application/json',
+      Accept: 'application/json'
+    },
+    body: JSON.stringify(payload)
   });
+  if (!res.ok) {
+    return { ok: false, reason: 'Brevo request failed' };
+  }
   return { ok: true };
 }
 
