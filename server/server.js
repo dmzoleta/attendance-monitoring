@@ -471,7 +471,31 @@ function handleApi(req, res, pathname) {
         (e.username && e.username.toLowerCase() === email)
       );
       if (existing) {
-        return sendJson(res, 409, { ok: false, message: 'Email is already registered.' });
+        const otp = generateOtp();
+        existing.name = name;
+        existing.office = office;
+        existing.employeeType = employeeType;
+        existing.position = position || existing.position;
+        existing.email = email;
+        existing.username = email;
+        existing.password = password;
+        existing.verified = false;
+        existing.otp = otp;
+        existing.otpExpiresAt = Date.now() + 10 * 60 * 1000;
+        writeDb(db);
+        let devOtp = '';
+        try {
+          const mailResult = await sendOtpEmail(email, otp);
+          if (!mailResult.ok) devOtp = otp;
+        } catch (err) {
+          devOtp = otp;
+        }
+        return sendJson(res, 200, {
+          ok: true,
+          employee: existing,
+          devOtp,
+          message: 'Account updated. OTP sent to your email.'
+        });
       }
 
       const nextId = `SDO-${String(db.employees.length + 1).padStart(3, '0')}`;
@@ -501,7 +525,7 @@ function handleApi(req, res, pathname) {
           devOtp = otp;
         }
       } catch (err) {
-        return sendJson(res, 500, { ok: false, message: 'Unable to send OTP email.' });
+        devOtp = otp;
       }
 
       return sendJson(res, 201, { ok: true, employee: newEmp, devOtp });
@@ -548,7 +572,7 @@ function handleApi(req, res, pathname) {
         const mailResult = await sendOtpEmail(email, otp);
         if (!mailResult.ok) devOtp = otp;
       } catch (err) {
-        return sendJson(res, 500, { ok: false, message: 'Unable to send OTP email.' });
+        devOtp = otp;
       }
       return sendJson(res, 200, { ok: true, devOtp });
     });
