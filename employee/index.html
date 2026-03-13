@@ -226,8 +226,8 @@
           <div class="card">
             <div class="photo-box">
               <img id="photo-preview" src="assets/avatar-generic.svg" alt="Photo" />
-              <label class="ghost-btn" for="photo-input">Upload Photo</label>
-              <input id="photo-input" type="file" accept="image/*" />
+              <label class="ghost-btn" for="photo-input">Take Photo</label>
+              <input id="photo-input" type="file" accept="image/*" capture="user" />
             </div>
             <div class="location-box">
               <div>
@@ -253,21 +253,23 @@
               <h3>My Attendance Records</h3>
               <input type="month" id="records-month" />
             </div>
-            <table class="data-table" id="records-table">
-              <thead>
-                <tr>
-                  <th>Date</th>
-                  <th>Time In (AM)</th>
-                  <th>Time Out (AM)</th>
-                  <th>Time In (PM)</th>
-                  <th>Time Out (PM)</th>
-                  <th>Status</th>
-                  <th>Photo</th>
-                  <th>Location</th>
-                </tr>
-              </thead>
-              <tbody></tbody>
-            </table>
+            <div class="table-wrap">
+              <table class="data-table" id="records-table">
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Time In (AM)</th>
+                    <th>Time Out (AM)</th>
+                    <th>Time In (PM)</th>
+                    <th>Time Out (PM)</th>
+                    <th>Status</th>
+                    <th>Photo</th>
+                    <th>Location</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
           </div>
         </section>
       </main>
@@ -291,6 +293,9 @@
           <div class="action-row">
             <button class="primary-btn" id="save-server-settings">Save</button>
             <button class="ghost-btn" id="cancel-server-settings">Cancel</button>
+          </div>
+          <div class="action-row">
+            <button class="danger-btn" id="logout-btn">Log Out</button>
           </div>
           <p class="footer">Emulator: 10.0.2.2 · Device: use your PC IP</p>
         </div>

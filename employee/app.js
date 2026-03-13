@@ -37,6 +37,7 @@ const openServerBtn = document.getElementById('open-server-settings');
 const closeServerBtn = document.getElementById('close-server-settings');
 const cancelServerBtn = document.getElementById('cancel-server-settings');
 const saveServerBtn = document.getElementById('save-server-settings');
+const logoutBtn = document.getElementById('logout-btn');
 const registerModal = document.getElementById('register-modal');
 const openRegisterBtn = document.getElementById('open-register');
 const closeRegisterBtn = document.getElementById('close-register');
@@ -262,7 +263,15 @@ function updateLocation() {
   );
 }
 
+function requirePhoto() {
+  if (photoData) return true;
+  alert('Please take a photo first.');
+  if (photoInput) photoInput.click();
+  return false;
+}
+
 async function markTimeIn() {
+  if (!requirePhoto()) return;
   const payload = {
     employeeId: currentUser.id,
     timeIn: timeNow(),
@@ -278,9 +287,12 @@ async function markTimeIn() {
   filterRecordsByMonth();
   const slotLabel = result.slot === 'PM' ? 'Afternoon' : 'Morning';
   alert(`Time in recorded (${slotLabel}).`);
+  photoData = '';
+  if (photoPreview) photoPreview.src = 'assets/avatar-generic.svg';
 }
 
 async function markTimeOut() {
+  if (!requirePhoto()) return;
   const payload = {
     employeeId: currentUser.id,
     timeOut: timeNow(),
@@ -296,6 +308,8 @@ async function markTimeOut() {
   filterRecordsByMonth();
   const slotLabel = result.slot === 'PM' ? 'Afternoon' : 'Morning';
   alert(`Time out recorded (${slotLabel}).`);
+  photoData = '';
+  if (photoPreview) photoPreview.src = 'assets/avatar-generic.svg';
 }
 
 async function startEmployeeSession(user) {
@@ -315,6 +329,18 @@ async function startEmployeeSession(user) {
   filterRecordsByMonth();
   updateLocation();
   tickClock();
+}
+
+function logoutEmployee() {
+  currentUser = null;
+  attendanceCache = [];
+  photoData = '';
+  if (photoPreview) photoPreview.src = 'assets/avatar-generic.svg';
+  loginForm.reset();
+  setView('emp-dashboard');
+  appScreen.classList.add('hidden');
+  loginScreen.classList.remove('hidden');
+  closeServerModal();
 }
 
 loginForm.addEventListener('submit', async (event) => {
@@ -562,6 +588,7 @@ openServerBtn.addEventListener('click', openServerModal);
 closeServerBtn.addEventListener('click', closeServerModal);
 cancelServerBtn.addEventListener('click', closeServerModal);
 saveServerBtn.addEventListener('click', saveServerSettings);
+if (logoutBtn) logoutBtn.addEventListener('click', logoutEmployee);
 
 openRegisterBtn.addEventListener('click', openRegisterModal);
 closeRegisterBtn.addEventListener('click', closeRegisterModal);

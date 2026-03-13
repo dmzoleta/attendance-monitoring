@@ -338,6 +338,18 @@ body {
   padding: 12px;
 }
 
+.danger-btn {
+  width: 100%;
+  border: none;
+  padding: 12px 18px;
+  border-radius: 10px;
+  font-weight: 700;
+  color: white;
+  background: linear-gradient(120deg, #c23a3a, #ff6b6b);
+  box-shadow: 0 10px 18px rgba(216, 69, 69, 0.24);
+  cursor: pointer;
+}
+
 .card-header {
   display: flex;
   justify-content: space-between;
@@ -349,6 +361,7 @@ body {
   border-collapse: collapse;
   margin-top: 12px;
   font-size: 13px;
+  min-width: 720px;
 }
 
 .data-table th,
@@ -356,6 +369,12 @@ body {
   padding: 8px 6px;
   border-bottom: 1px solid #e8ecf7;
   text-align: left;
+}
+
+.table-wrap {
+  overflow-x: auto;
+  border-radius: 12px;
+  -webkit-overflow-scrolling: touch;
 }
 
 .data-table td.status-present { color: #2f8f48; font-weight: 700; }
