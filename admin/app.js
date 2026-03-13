@@ -56,6 +56,14 @@ function formatTime(date) {
   return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
 }
 
+function isoToday() {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, '0');
+  const d = String(now.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
 function formatDateTimeStamp(value) {
   if (!value) return '';
   const date = new Date(value);
@@ -85,11 +93,20 @@ function setView(viewId) {
 }
 
 function setStatusCell(cell, status) {
+  if (!cell) return;
   const statusLower = status.toLowerCase();
   cell.classList.remove('status-present', 'status-late', 'status-absent');
   if (statusLower === 'present') cell.classList.add('status-present');
   if (statusLower === 'late') cell.classList.add('status-late');
   if (statusLower === 'absent') cell.classList.add('status-absent');
+}
+
+function pickPhoto(item) {
+  return item.photoInAM || item.photoInPM || item.photoOutAM || item.photoOutPM || item.photo || '';
+}
+
+function pickLocation(item) {
+  return item.locationInAM || item.locationInPM || item.locationOutAM || item.locationOutPM || item.location || '';
 }
 
 async function api(path, options = {}) {
@@ -113,7 +130,7 @@ async function api(path, options = {}) {
 }
 
 async function loadSummary() {
-  const data = await api('/api/summary');
+  const data = await api(`/api/summary?date=${isoToday()}`);
   statTotal.textContent = data.totalEmployees;
   statPresent.textContent = data.present;
   statLate.textContent = data.late;
@@ -121,20 +138,26 @@ async function loadSummary() {
 }
 
 async function loadAttendanceToday() {
-  const data = await api('/api/attendance/today');
+  const data = await api(`/api/attendance/today?date=${isoToday()}`);
   attendanceCache = data.attendance;
   attendanceTable.innerHTML = '';
   data.attendance.forEach((item) => {
+    const photo = pickPhoto(item);
+    const location = pickLocation(item);
     const row = document.createElement('tr');
     row.innerHTML = `
       <td>${item.employeeId}</td>
       <td>${item.employeeName}</td>
       <td>${item.office}</td>
-      <td>${item.timeIn || '--'}</td>
-      <td>${item.timeOut || '--'}</td>
-      <td>${item.status}</td>
+      <td>${item.timeInAM || item.timeIn || '--'}</td>
+      <td>${item.timeOutAM || '--'}</td>
+      <td>${item.timeInPM || '--'}</td>
+      <td>${item.timeOutPM || item.timeOut || '--'}</td>
+      <td class="status-cell">${item.status || '--'}</td>
+      <td>${photo ? `<img class="table-photo" src="${photo}" alt="Photo" />` : '--'}</td>
+      <td class="table-location">${location || '--'}</td>
     `;
-    setStatusCell(row.lastElementChild, item.status);
+    setStatusCell(row.querySelector('.status-cell'), item.status || '');
     attendanceTable.appendChild(row);
   });
 }
@@ -165,16 +188,22 @@ async function loadAttendanceHistory(from, to) {
   const data = await api(`/api/attendance?${query}`);
   attendanceHistory.innerHTML = '';
   data.attendance.forEach((item) => {
+    const photo = pickPhoto(item);
+    const location = pickLocation(item);
     const row = document.createElement('tr');
     row.innerHTML = `
       <td>${item.date}</td>
       <td>${item.employeeName}</td>
       <td>${item.office}</td>
-      <td>${item.timeIn || '--'}</td>
-      <td>${item.timeOut || '--'}</td>
-      <td>${item.status}</td>
+      <td>${item.timeInAM || item.timeIn || '--'}</td>
+      <td>${item.timeOutAM || '--'}</td>
+      <td>${item.timeInPM || '--'}</td>
+      <td>${item.timeOutPM || item.timeOut || '--'}</td>
+      <td class="status-cell">${item.status || '--'}</td>
+      <td>${photo ? `<img class="table-photo" src="${photo}" alt="Photo" />` : '--'}</td>
+      <td class="table-location">${location || '--'}</td>
     `;
-    setStatusCell(row.lastElementChild, item.status);
+    setStatusCell(row.querySelector('.status-cell'), item.status || '');
     attendanceHistory.appendChild(row);
   });
 }
