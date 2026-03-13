@@ -73,6 +73,14 @@ body {
   background: #f9fbff;
 }
 
+.input-field select {
+  width: 100%;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid #d8e1f5;
+  background: #f9fbff;
+}
+
 .input-field textarea {
   width: 100%;
   padding: 12px;
