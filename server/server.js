@@ -212,6 +212,10 @@ function getBrevoConfig() {
   return { apiKey, fromEmail, fromName };
 }
 
+function getGoogleMapsKey() {
+  return process.env.GOOGLE_MAPS_KEY || process.env.GMAPS_KEY || '';
+}
+
 async function sendOtpEmail(to, code) {
   const config = getBrevoConfig();
   if (!config) {
@@ -314,7 +318,7 @@ function pushMessage(db, data) {
   return msg;
 }
 
-function handleApi(req, res, pathname) {
+async function handleApi(req, res, pathname) {
   setCors(res);
   if (req.method === 'OPTIONS') {
     res.writeHead(204);
@@ -340,6 +344,85 @@ function handleApi(req, res, pathname) {
   if (req.method === 'GET' && pathname === '/api/notifications') {
     const db = readDb();
     return sendJson(res, 200, { notifications: db.notifications || [] });
+  }
+
+  if (req.method === 'GET' && pathname === '/api/reverse-geocode') {
+    const query = url.parse(req.url, true).query;
+    const lat = parseFloat(query.lat);
+    const lng = parseFloat(query.lng);
+    if (Number.isNaN(lat) || Number.isNaN(lng)) {
+      return sendJson(res, 400, { ok: false, message: 'Latitude and longitude are required.' });
+    }
+    const apiKey = getGoogleMapsKey();
+    try {
+      if (apiKey) {
+        const gUrl = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${apiKey}`;
+        const gRes = await fetch(gUrl);
+        if (gRes.ok) {
+          const gData = await gRes.json();
+          if (gData.results && gData.results[0]) {
+            return sendJson(res, 200, { ok: true, address: gData.results[0].formatted_address });
+          }
+        }
+      }
+      const osmUrl = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}`;
+      const osmRes = await fetch(osmUrl, { headers: { 'Accept-Language': 'en' } });
+      if (osmRes.ok) {
+        const osmData = await osmRes.json();
+        if (osmData.display_name) {
+          return sendJson(res, 200, { ok: true, address: osmData.display_name });
+        }
+      }
+      return sendJson(res, 200, { ok: true, address: `Lat ${lat.toFixed(4)}, Lng ${lng.toFixed(4)}` });
+    } catch (err) {
+      return sendJson(res, 500, { ok: false, message: 'Unable to fetch address.' });
+    }
+  }
+
+  if (req.method === 'GET' && pathname === '/api/map') {
+    const query = url.parse(req.url, true).query;
+    const lat = parseFloat(query.lat);
+    const lng = parseFloat(query.lng);
+    if (Number.isNaN(lat) || Number.isNaN(lng)) {
+      res.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' });
+      return res.end('Latitude and longitude are required.');
+    }
+    const apiKey = getGoogleMapsKey();
+    try {
+      if (!apiKey) {
+        const osmParams = new URLSearchParams({
+          center: `${lat},${lng}`,
+          zoom: '17',
+          size: '600x320',
+          markers: `${lat},${lng},red-pushpin`
+        });
+        res.writeHead(302, { Location: `https://staticmap.openstreetmap.de/staticmap.php?${osmParams.toString()}` });
+        return res.end();
+      }
+      const gParams = new URLSearchParams({
+        center: `${lat},${lng}`,
+        zoom: '17',
+        size: '600x320',
+        scale: '2',
+        maptype: 'roadmap',
+        markers: `color:red|label:A|${lat},${lng}`,
+        key: apiKey
+      });
+      const gRes = await fetch(`https://maps.googleapis.com/maps/api/staticmap?${gParams.toString()}`);
+      if (!gRes.ok) {
+        res.writeHead(502, { 'Content-Type': 'text/plain; charset=utf-8' });
+        return res.end('Unable to fetch map image.');
+      }
+      const buffer = Buffer.from(await gRes.arrayBuffer());
+      res.writeHead(200, {
+        'Content-Type': gRes.headers.get('content-type') || 'image/png',
+        'Cache-Control': 'no-store'
+      });
+      return res.end(buffer);
+    } catch (err) {
+      res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' });
+      return res.end('Map error.');
+    }
   }
 
   if (req.method === 'POST' && pathname === '/api/notifications/read') {

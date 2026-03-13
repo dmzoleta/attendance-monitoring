@@ -67,8 +67,6 @@ let pendingOtpEmail = '';
 const appConfig = typeof window !== 'undefined' && window.APP_CONFIG ? window.APP_CONFIG : {};
 const isCapacitor = typeof window !== 'undefined' && !!window.Capacitor;
 const defaultApiBase = appConfig.apiBase || '';
-const mapsKey = appConfig.googleMapsKey || appConfig.mapsKey || '';
-const geocodeKey = appConfig.googleGeocodeKey || mapsKey;
 const storedApiBase = localStorage.getItem('apiBase') || '';
 const storedOverride = localStorage.getItem('apiBaseOverride') === 'true';
 
@@ -155,52 +153,21 @@ function pickLocation(item) {
   return item.locationInAM || item.locationInPM || item.locationOutAM || item.locationOutPM || item.location || '';
 }
 
-function buildGoogleStaticMapUrl(lat, lng) {
-  const params = new URLSearchParams({
-    center: `${lat},${lng}`,
-    zoom: '17',
-    size: '600x320',
-    scale: '2',
-    maptype: 'roadmap',
-    markers: `color:red|label:A|${lat},${lng}`,
-    key: mapsKey
-  });
-  return `https://maps.googleapis.com/maps/api/staticmap?${params.toString()}`;
-}
-
-function buildOsmStaticMapUrl(lat, lng) {
-  const params = new URLSearchParams({
-    center: `${lat},${lng}`,
-    zoom: '17',
-    size: '600x320',
-    markers: `${lat},${lng},red-pushpin`
-  });
-  return `https://staticmap.openstreetmap.de/staticmap.php?${params.toString()}`;
-}
-
 async function reverseGeocode(lat, lng) {
-  if (geocodeKey) {
-    const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${geocodeKey}`;
-    const res = await fetch(url);
-    if (res.ok) {
-      const data = await res.json();
-      if (data.results && data.results[0]) {
-        return data.results[0].formatted_address;
-      }
-    }
-  }
-  const osmUrl = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}`;
-  const osmRes = await fetch(osmUrl, { headers: { 'Accept-Language': 'en' } });
-  if (osmRes.ok) {
-    const osmData = await osmRes.json();
-    if (osmData.display_name) return osmData.display_name;
+  const res = await fetch(`${apiBase}/api/reverse-geocode?lat=${lat}&lng=${lng}`);
+  if (res.ok) {
+    const data = await res.json();
+    if (data && data.address) return data.address;
   }
   return `Lat ${lat.toFixed(4)}, Lng ${lng.toFixed(4)}`;
 }
 
 function updateMapPreview(lat, lng) {
   if (!mapPreview) return;
-  mapPreview.src = mapsKey ? buildGoogleStaticMapUrl(lat, lng) : buildOsmStaticMapUrl(lat, lng);
+  mapPreview.onerror = () => {
+    mapPreview.src = `https://staticmap.openstreetmap.de/staticmap.php?center=${lat},${lng}&zoom=17&size=600x320&markers=${lat},${lng},red-pushpin`;
+  };
+  mapPreview.src = `${apiBase}/api/map?lat=${lat}&lng=${lng}&ts=${Date.now()}`;
 }
 
 async function api(path, options = {}, attempt = 0) {
