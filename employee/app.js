@@ -25,6 +25,7 @@ const empLocation = document.getElementById('emp-location');
 
 const timeInBtn = document.getElementById('time-in');
 const timeOutBtn = document.getElementById('time-out');
+const gpsRefreshBtn = document.getElementById('gps-refresh');
 
 const recordsTable = document.getElementById('records-table').querySelector('tbody');
 const recordsMonth = document.getElementById('records-month');
@@ -252,10 +253,13 @@ function updateLocation() {
   navigator.geolocation.getCurrentPosition(
     (pos) => {
       const { latitude, longitude } = pos.coords;
-      locationLat.textContent = latitude.toFixed(4);
-      locationLng.textContent = longitude.toFixed(4);
-      locationName.textContent = 'Current Location';
-      empLocation.textContent = 'Current Location';
+      const latValue = latitude.toFixed(4);
+      const lngValue = longitude.toFixed(4);
+      const label = `Current Location (${latValue}, ${lngValue})`;
+      locationLat.textContent = latValue;
+      locationLng.textContent = lngValue;
+      locationName.textContent = label;
+      empLocation.textContent = label;
     },
     () => {
       locationName.textContent = 'Boac';
@@ -562,6 +566,7 @@ navButtons.forEach((btn) => {
 recordsMonth.addEventListener('change', filterRecordsByMonth);
 
 document.getElementById('refresh-location').addEventListener('click', updateLocation);
+if (gpsRefreshBtn) gpsRefreshBtn.addEventListener('click', updateLocation);
 
 timeInBtn.addEventListener('click', markTimeIn);
 timeOutBtn.addEventListener('click', markTimeOut);
