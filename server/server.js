@@ -215,7 +215,7 @@ function getBrevoConfig() {
 async function sendOtpEmail(to, code) {
   const config = getBrevoConfig();
   if (!config) {
-    return { ok: false, reason: 'Brevo not configured' };
+    return { ok: false, reason: 'Brevo not configured (missing BREVO_API_KEY or BREVO_FROM)' };
   }
   const payload = {
     sender: { name: config.fromName, email: config.fromEmail },
@@ -233,10 +233,14 @@ async function sendOtpEmail(to, code) {
     },
     body: JSON.stringify(payload)
   });
+  const responseText = await res.text();
   if (!res.ok) {
-    return { ok: false, reason: 'Brevo request failed' };
+    return {
+      ok: false,
+      reason: `Brevo ${res.status}: ${responseText.slice(0, 200)}`
+    };
   }
-  return { ok: true };
+  return { ok: true, info: responseText };
 }
 
 function attendanceForDate(db, date) {
@@ -484,16 +488,23 @@ function handleApi(req, res, pathname) {
         existing.otpExpiresAt = Date.now() + 10 * 60 * 1000;
         writeDb(db);
         let devOtp = '';
+        let emailError = '';
         try {
           const mailResult = await sendOtpEmail(email, otp);
-          if (!mailResult.ok) devOtp = otp;
+          if (!mailResult.ok) {
+            devOtp = otp;
+            emailError = mailResult.reason || 'Brevo request failed';
+          }
         } catch (err) {
           devOtp = otp;
+          emailError = err.message || 'Brevo request failed';
         }
         return sendJson(res, 200, {
           ok: true,
           employee: existing,
           devOtp,
+          emailSent: !emailError,
+          emailError,
           message: 'Account updated. OTP sent to your email.'
         });
       }
@@ -519,16 +530,25 @@ function handleApi(req, res, pathname) {
       writeDb(db);
 
       let devOtp = '';
+      let emailError = '';
       try {
         const mailResult = await sendOtpEmail(email, otp);
         if (!mailResult.ok) {
           devOtp = otp;
+          emailError = mailResult.reason || 'Brevo request failed';
         }
       } catch (err) {
         devOtp = otp;
+        emailError = err.message || 'Brevo request failed';
       }
 
-      return sendJson(res, 201, { ok: true, employee: newEmp, devOtp });
+      return sendJson(res, 201, {
+        ok: true,
+        employee: newEmp,
+        devOtp,
+        emailSent: !emailError,
+        emailError
+      });
     });
   }
 
@@ -568,13 +588,23 @@ function handleApi(req, res, pathname) {
       employee.otpExpiresAt = Date.now() + 10 * 60 * 1000;
       writeDb(db);
       let devOtp = '';
+      let emailError = '';
       try {
         const mailResult = await sendOtpEmail(email, otp);
-        if (!mailResult.ok) devOtp = otp;
+        if (!mailResult.ok) {
+          devOtp = otp;
+          emailError = mailResult.reason || 'Brevo request failed';
+        }
       } catch (err) {
         devOtp = otp;
+        emailError = err.message || 'Brevo request failed';
       }
-      return sendJson(res, 200, { ok: true, devOtp });
+      return sendJson(res, 200, {
+        ok: true,
+        devOtp,
+        emailSent: !emailError,
+        emailError
+      });
     });
   }
 

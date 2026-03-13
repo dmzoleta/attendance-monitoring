@@ -390,6 +390,9 @@ async function handleRegister(event) {
     pendingOtpEmail = payload.email || result.employee.email;
     closeRegisterModal();
     openOtpModal();
+    if (result.emailError) {
+      alert(`Email not sent: ${result.emailError}`);
+    }
     if (result.devOtp) {
       alert(`OTP (dev): ${result.devOtp}`);
     } else {
@@ -474,6 +477,9 @@ async function handleOtpResend() {
       method: 'POST',
       body: JSON.stringify({ email: pendingOtpEmail })
     });
+    if (result.emailError) {
+      alert(`Email not sent: ${result.emailError}`);
+    }
     if (result.devOtp) {
       alert(`OTP resent (dev): ${result.devOtp}`);
     } else {
