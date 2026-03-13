@@ -291,8 +291,6 @@ async function markTimeIn() {
   filterRecordsByMonth();
   const slotLabel = result.slot === 'PM' ? 'Afternoon' : 'Morning';
   alert(`Time in recorded (${slotLabel}).`);
-  photoData = '';
-  if (photoPreview) photoPreview.src = 'assets/avatar-generic.svg';
 }
 
 async function markTimeOut() {
@@ -312,8 +310,6 @@ async function markTimeOut() {
   filterRecordsByMonth();
   const slotLabel = result.slot === 'PM' ? 'Afternoon' : 'Morning';
   alert(`Time out recorded (${slotLabel}).`);
-  photoData = '';
-  if (photoPreview) photoPreview.src = 'assets/avatar-generic.svg';
 }
 
 async function startEmployeeSession(user) {
@@ -323,14 +319,21 @@ async function startEmployeeSession(user) {
 
   empName.textContent = currentUser.name.split(' ')[0];
   empMeta.textContent = `${currentUser.id} · ${currentUser.office}`;
-  empAvatar.src = currentUser.avatar;
-  empAvatar2.src = currentUser.avatar;
+  empAvatar.src = 'assets/logo.jpg';
+  empAvatar2.src = 'assets/logo.jpg';
   empName2.textContent = currentUser.name;
   empRole.textContent = `${currentUser.position} · ${currentUser.office}`;
 
   await loadAttendance();
   computeStats();
   filterRecordsByMonth();
+  const latestWithPhoto = attendanceCache.slice().reverse().find((item) => pickPhoto(item));
+  if (latestWithPhoto) {
+    photoData = pickPhoto(latestWithPhoto);
+    if (photoPreview) photoPreview.src = photoData;
+  } else if (photoPreview) {
+    photoPreview.src = 'assets/photo-placeholder.svg';
+  }
   updateLocation();
   tickClock();
 }
@@ -339,7 +342,7 @@ function logoutEmployee() {
   currentUser = null;
   attendanceCache = [];
   photoData = '';
-  if (photoPreview) photoPreview.src = 'assets/avatar-generic.svg';
+  if (photoPreview) photoPreview.src = 'assets/photo-placeholder.svg';
   loginForm.reset();
   setView('emp-dashboard');
   appScreen.classList.add('hidden');

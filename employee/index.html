@@ -225,7 +225,7 @@
 
           <div class="card">
             <div class="photo-box">
-              <img id="photo-preview" src="assets/avatar-generic.svg" alt="Photo" />
+            <img id="photo-preview" src="assets/photo-placeholder.svg" alt="Photo" />
               <label class="ghost-btn" for="photo-input">Take Photo</label>
               <input id="photo-input" type="file" accept="image/*" capture="user" />
             </div>
@@ -276,9 +276,18 @@
       </main>
 
       <nav class="bottom-nav">
-        <button class="nav-btn active" data-view="emp-dashboard">Dashboard</button>
-        <button class="nav-btn" data-view="emp-mark">Mark Attendance</button>
-        <button class="nav-btn" data-view="emp-records">My Attendance</button>
+        <button class="nav-btn active" data-view="emp-dashboard">
+          <img class="nav-icon" src="assets/nav-dashboard.png" alt="" />
+          <span>Dashboard</span>
+        </button>
+        <button class="nav-btn" data-view="emp-mark">
+          <img class="nav-icon" src="assets/nav-attendance.png" alt="" />
+          <span>Mark Attendance</span>
+        </button>
+        <button class="nav-btn" data-view="emp-records">
+          <img class="nav-icon" src="assets/nav-records.png" alt="" />
+          <span>My Attendance</span>
+        </button>
       </nav>
 
       <div id="server-modal" class="modal hidden">
