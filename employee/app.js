@@ -499,9 +499,9 @@ async function performBiometricLogin(username) {
     method: 'POST',
     body: JSON.stringify(username ? { username } : {})
   });
-  const options = optionsResp.options;
+  const options = optionsResp.options || optionsResp.publicKey || optionsResp;
   if (!options || !options.challenge) {
-    throw new Error('Biometric login is not available. Please try again later.');
+    throw new Error(optionsResp.message || 'Biometric login is not available. Please try again later.');
   }
   options.challenge = base64urlToBuffer(options.challenge);
   if (options.allowCredentials) {
@@ -524,9 +524,9 @@ async function performBiometricRegister(username) {
     method: 'POST',
     body: JSON.stringify({ username })
   });
-  const options = optionsResp.options;
+  const options = optionsResp.options || optionsResp.publicKey || optionsResp;
   if (!options || !options.challenge || !options.user || !options.user.id) {
-    throw new Error('Biometric setup is not available. Please try again later.');
+    throw new Error(optionsResp.message || 'Biometric setup is not available. Please try again later.');
   }
   options.challenge = base64urlToBuffer(options.challenge);
   options.user.id = base64urlToBuffer(options.user.id);

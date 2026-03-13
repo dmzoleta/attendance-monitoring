@@ -219,8 +219,16 @@ function findEmployeeByLogin(db, value) {
 function getRpInfo(req) {
   const host = String(req.headers.host || '').split(':')[0] || 'localhost';
   const proto = String(req.headers['x-forwarded-proto'] || 'http');
-  const rpID = process.env.RP_ID || host;
-  const origin = process.env.RP_ORIGIN || `${proto}://${rpID}`;
+  const originHeader = String(req.headers.origin || '');
+  let origin = originHeader || `${proto}://${host}`;
+  if (process.env.RP_ORIGIN) origin = process.env.RP_ORIGIN;
+  let rpID = host;
+  try {
+    rpID = new URL(origin).hostname;
+  } catch (err) {
+    rpID = host;
+  }
+  if (process.env.RP_ID) rpID = process.env.RP_ID;
   return { rpID, origin };
 }
 
@@ -341,12 +349,12 @@ function handleApi(req, res, pathname) {
       const options = generateRegistrationOptions({
         rpName: 'SDO Marinduque Attendance',
         rpID,
-        userID: employee.id,
+        userID: Buffer.from(employee.id, 'utf8'),
         userName: employee.username || employee.id,
         userDisplayName: employee.name || employee.id,
         attestationType: 'none',
         authenticatorSelection: {
-          residentKey: 'required',
+          residentKey: 'preferred',
           userVerification: 'preferred'
         },
         excludeCredentials: (employee.webauthn || []).map((cred) => ({
