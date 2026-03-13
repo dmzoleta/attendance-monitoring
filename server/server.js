@@ -322,6 +322,16 @@ function handleApi(req, res, pathname) {
     return sendJson(res, 200, { employees: db.employees });
   }
 
+  if (req.method === 'POST' && pathname === '/api/webauthn/status') {
+    return collectBody(req).then((body) => {
+      const db = readDb();
+      const employee = findEmployeeByLogin(db, body.username);
+      if (!employee) return sendJson(res, 404, { ok: false, message: 'Employee not found.' });
+      const registered = Array.isArray(employee.webauthn) && employee.webauthn.length > 0;
+      return sendJson(res, 200, { ok: true, registered });
+    });
+  }
+
   if (req.method === 'POST' && pathname === '/api/webauthn/register/options') {
     return collectBody(req).then((body) => {
       const db = readDb();
@@ -336,7 +346,7 @@ function handleApi(req, res, pathname) {
         userDisplayName: employee.name || employee.id,
         attestationType: 'none',
         authenticatorSelection: {
-          residentKey: 'preferred',
+          residentKey: 'required',
           userVerification: 'preferred'
         },
         excludeCredentials: (employee.webauthn || []).map((cred) => ({

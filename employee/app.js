@@ -494,35 +494,81 @@ async function handleBiometricRegister() {
   }
 }
 
+async function performBiometricLogin(username) {
+  const optionsResp = await api('/api/webauthn/auth/options', {
+    method: 'POST',
+    body: JSON.stringify(username ? { username } : {})
+  });
+  const options = optionsResp.options;
+  if (!options || !options.challenge) {
+    throw new Error('Biometric login is not available. Please try again later.');
+  }
+  options.challenge = base64urlToBuffer(options.challenge);
+  if (options.allowCredentials) {
+    options.allowCredentials = options.allowCredentials.map((cred) => ({
+      ...cred,
+      id: base64urlToBuffer(cred.id)
+    }));
+  }
+  const assertion = await navigator.credentials.get({ publicKey: options });
+  if (!assertion) throw new Error('Biometric login cancelled.');
+  const verify = await api('/api/webauthn/auth/verify', {
+    method: 'POST',
+    body: JSON.stringify({ username: username || undefined, credential: credentialToJSON(assertion) })
+  });
+  return verify.user;
+}
+
+async function performBiometricRegister(username) {
+  const optionsResp = await api('/api/webauthn/register/options', {
+    method: 'POST',
+    body: JSON.stringify({ username })
+  });
+  const options = optionsResp.options;
+  if (!options || !options.challenge || !options.user || !options.user.id) {
+    throw new Error('Biometric setup is not available. Please try again later.');
+  }
+  options.challenge = base64urlToBuffer(options.challenge);
+  options.user.id = base64urlToBuffer(options.user.id);
+  if (options.excludeCredentials) {
+    options.excludeCredentials = options.excludeCredentials.map((cred) => ({
+      ...cred,
+      id: base64urlToBuffer(cred.id)
+    }));
+  }
+  const cred = await navigator.credentials.create({ publicKey: options });
+  if (!cred) throw new Error('Biometric registration cancelled.');
+  await api('/api/webauthn/register/verify', {
+    method: 'POST',
+    body: JSON.stringify({ username, credential: credentialToJSON(cred) })
+  });
+}
+
 async function handleBiometricLogin() {
   if (!ensureWebAuthn()) return;
   const username = String(loginForm.querySelector('input[name="username"]').value || '').trim();
   try {
-    const optionsResp = await api('/api/webauthn/auth/options', {
-      method: 'POST',
-      body: JSON.stringify(username ? { username } : {})
-    });
-    const options = optionsResp.options;
-    if (!options || !options.challenge) {
-      throw new Error('Biometric login is not available. Please try again later.');
+    if (username) {
+      const status = await api('/api/webauthn/status', {
+        method: 'POST',
+        body: JSON.stringify({ username })
+      });
+      if (!status.registered) {
+        alert('First time use: Please register your fingerprint.');
+        await performBiometricRegister(username);
+        alert('Fingerprint registered. Please verify again to log in.');
+      }
+      const user = await performBiometricLogin(username);
+      await startEmployeeSession(user);
+      return;
     }
-    options.challenge = base64urlToBuffer(options.challenge);
-    if (options.allowCredentials) {
-      options.allowCredentials = options.allowCredentials.map((cred) => ({
-        ...cred,
-        id: base64urlToBuffer(cred.id)
-      }));
-    }
-    const assertion = await navigator.credentials.get({ publicKey: options });
-    if (!assertion) throw new Error('Biometric login cancelled.');
-    const verify = await api('/api/webauthn/auth/verify', {
-      method: 'POST',
-      body: JSON.stringify({ username: username || undefined, credential: credentialToJSON(assertion) })
-    });
-    await startEmployeeSession(verify.user);
+
+    // No username typed: try userless login (discoverable credentials).
+    const user = await performBiometricLogin('');
+    await startEmployeeSession(user);
   } catch (err) {
-    if (err && err.name === 'NotAllowedError') {
-      alert('Biometric login cancelled.');
+    if (err && (err.name === 'NotAllowedError' || err.name === 'NotFoundError')) {
+      alert('Biometric login cancelled or not set up yet. Enter your username/ID to register first.');
       return;
     }
     alert(err.message || 'Biometric login failed.');
