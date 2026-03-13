@@ -22,7 +22,9 @@ const mapPreview = document.getElementById('map-preview');
 const locationName = document.getElementById('location-name');
 const locationLat = document.getElementById('location-lat');
 const locationLng = document.getElementById('location-lng');
+const locationAccuracy = document.getElementById('location-accuracy');
 const empLocation = document.getElementById('emp-location');
+const gpsStatus = document.getElementById('gps-status');
 
 const timeInBtn = document.getElementById('time-in');
 const timeOutBtn = document.getElementById('time-out');
@@ -170,6 +172,41 @@ function updateMapPreview(lat, lng) {
   mapPreview.src = `${apiBase}/api/map?lat=${lat}&lng=${lng}&ts=${Date.now()}`;
 }
 
+function setGpsStatus(message) {
+  if (gpsStatus) gpsStatus.textContent = message;
+}
+
+function requestAccurateLocation() {
+  return new Promise((resolve, reject) => {
+    let best = null;
+    let resolved = false;
+    const watchId = navigator.geolocation.watchPosition(
+      (pos) => {
+        if (!best || pos.coords.accuracy < best.coords.accuracy) {
+          best = pos;
+        }
+        if (pos.coords.accuracy <= 50) {
+          navigator.geolocation.clearWatch(watchId);
+          resolved = true;
+          resolve(best);
+        }
+      },
+      (err) => {
+        navigator.geolocation.clearWatch(watchId);
+        if (!resolved) reject(err);
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+    );
+
+    setTimeout(() => {
+      if (resolved) return;
+      navigator.geolocation.clearWatch(watchId);
+      if (best) return resolve(best);
+      reject(new Error('Unable to get accurate GPS location.'));
+    }, 20000);
+  });
+}
+
 async function api(path, options = {}, attempt = 0) {
   const target = `${apiBase}${path}`;
   try {
@@ -266,31 +303,38 @@ function filterRecordsByMonth() {
 function updateLocation() {
   if (!navigator.geolocation) {
     locationName.textContent = 'Boac';
+    setGpsStatus('Geolocation not supported on this device.');
     return;
   }
-  navigator.geolocation.getCurrentPosition(
-    async (pos) => {
-      const { latitude, longitude } = pos.coords;
+  setGpsStatus('Requesting location permission…');
+  requestAccurateLocation()
+    .then(async (pos) => {
+      const { latitude, longitude, accuracy } = pos.coords;
       const latValue = latitude.toFixed(4);
       const lngValue = longitude.toFixed(4);
       locationLat.textContent = latValue;
       locationLng.textContent = lngValue;
+      if (locationAccuracy) locationAccuracy.textContent = `${Math.round(accuracy)} m`;
       updateMapPreview(latitude, longitude);
+      setGpsStatus('Fetching address…');
       try {
         const address = await reverseGeocode(latitude, longitude);
         locationName.textContent = address;
         empLocation.textContent = address;
+        setGpsStatus(`GPS accuracy: ±${Math.round(accuracy)}m`);
       } catch (err) {
         const fallback = `Lat ${latValue}, Lng ${lngValue}`;
         locationName.textContent = fallback;
         empLocation.textContent = fallback;
+        setGpsStatus('Using coordinates (address unavailable).');
       }
-    },
-    () => {
-      locationName.textContent = 'Boac';
-    },
-    { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
-  );
+    })
+    .catch((err) => {
+      setGpsStatus('Location denied or unavailable. Tap Update to allow.');
+      if (err && err.code === 1) {
+        alert('Please allow location access (Allow While Using) for accurate GPS.');
+      }
+    });
 }
 
 function requirePhoto() {

@@ -306,6 +306,12 @@ body {
   line-height: 1.4;
 }
 
+.gps-status {
+  margin-top: 8px;
+  font-size: 11px;
+  color: #6a7aa6;
+}
+
 .photo-box {
   display: grid;
   place-items: center;
