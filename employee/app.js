@@ -17,6 +17,7 @@ const statAbsent = document.getElementById('stat-absent');
 
 const empTime = document.getElementById('emp-time');
 const empDate = document.getElementById('emp-date');
+const mapPreview = document.getElementById('map-preview');
 
 const locationName = document.getElementById('location-name');
 const locationLat = document.getElementById('location-lat');
@@ -66,6 +67,8 @@ let pendingOtpEmail = '';
 const appConfig = typeof window !== 'undefined' && window.APP_CONFIG ? window.APP_CONFIG : {};
 const isCapacitor = typeof window !== 'undefined' && !!window.Capacitor;
 const defaultApiBase = appConfig.apiBase || '';
+const mapsKey = appConfig.googleMapsKey || appConfig.mapsKey || '';
+const geocodeKey = appConfig.googleGeocodeKey || mapsKey;
 const storedApiBase = localStorage.getItem('apiBase') || '';
 const storedOverride = localStorage.getItem('apiBaseOverride') === 'true';
 
@@ -150,6 +153,54 @@ function pickPhoto(item) {
 
 function pickLocation(item) {
   return item.locationInAM || item.locationInPM || item.locationOutAM || item.locationOutPM || item.location || '';
+}
+
+function buildGoogleStaticMapUrl(lat, lng) {
+  const params = new URLSearchParams({
+    center: `${lat},${lng}`,
+    zoom: '17',
+    size: '600x320',
+    scale: '2',
+    maptype: 'roadmap',
+    markers: `color:red|label:A|${lat},${lng}`,
+    key: mapsKey
+  });
+  return `https://maps.googleapis.com/maps/api/staticmap?${params.toString()}`;
+}
+
+function buildOsmStaticMapUrl(lat, lng) {
+  const params = new URLSearchParams({
+    center: `${lat},${lng}`,
+    zoom: '17',
+    size: '600x320',
+    markers: `${lat},${lng},red-pushpin`
+  });
+  return `https://staticmap.openstreetmap.de/staticmap.php?${params.toString()}`;
+}
+
+async function reverseGeocode(lat, lng) {
+  if (geocodeKey) {
+    const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${geocodeKey}`;
+    const res = await fetch(url);
+    if (res.ok) {
+      const data = await res.json();
+      if (data.results && data.results[0]) {
+        return data.results[0].formatted_address;
+      }
+    }
+  }
+  const osmUrl = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}`;
+  const osmRes = await fetch(osmUrl, { headers: { 'Accept-Language': 'en' } });
+  if (osmRes.ok) {
+    const osmData = await osmRes.json();
+    if (osmData.display_name) return osmData.display_name;
+  }
+  return `Lat ${lat.toFixed(4)}, Lng ${lng.toFixed(4)}`;
+}
+
+function updateMapPreview(lat, lng) {
+  if (!mapPreview) return;
+  mapPreview.src = mapsKey ? buildGoogleStaticMapUrl(lat, lng) : buildOsmStaticMapUrl(lat, lng);
 }
 
 async function api(path, options = {}, attempt = 0) {
@@ -251,19 +302,27 @@ function updateLocation() {
     return;
   }
   navigator.geolocation.getCurrentPosition(
-    (pos) => {
+    async (pos) => {
       const { latitude, longitude } = pos.coords;
       const latValue = latitude.toFixed(4);
       const lngValue = longitude.toFixed(4);
-      const label = `Current Location (${latValue}, ${lngValue})`;
       locationLat.textContent = latValue;
       locationLng.textContent = lngValue;
-      locationName.textContent = label;
-      empLocation.textContent = label;
+      updateMapPreview(latitude, longitude);
+      try {
+        const address = await reverseGeocode(latitude, longitude);
+        locationName.textContent = address;
+        empLocation.textContent = address;
+      } catch (err) {
+        const fallback = `Lat ${latValue}, Lng ${lngValue}`;
+        locationName.textContent = fallback;
+        empLocation.textContent = fallback;
+      }
     },
     () => {
       locationName.textContent = 'Boac';
-    }
+    },
+    { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
   );
 }
 
