@@ -85,6 +85,29 @@
       </div>
     </div>
 
+    <div id="concern-modal" class="modal hidden">
+      <div class="modal-card">
+        <div class="card-header">
+          <h3>Send Concern</h3>
+          <button class="icon-btn" id="close-concern">✖</button>
+        </div>
+        <form id="concern-form">
+          <label class="input-field">
+            <span>Subject</span>
+            <input type="text" name="subject" placeholder="Attendance concern" required />
+          </label>
+          <label class="input-field">
+            <span>Message</span>
+            <textarea name="message" rows="4" placeholder="Describe your concern" required></textarea>
+          </label>
+          <div class="action-row">
+            <button class="primary-btn" type="submit">Send</button>
+            <button class="ghost-btn" type="button" id="cancel-concern">Cancel</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
     <section id="employee-app" class="app-screen hidden">
       <header class="topbar">
         <div class="brand">
@@ -136,6 +159,14 @@
                 <button class="ghost-btn" id="refresh-location">Update</button>
               </div>
             </div>
+          </div>
+
+          <div class="card help-card">
+            <div class="card-header">
+              <h3>Need Help?</h3>
+              <button class="ghost-btn" id="open-concern">Send Concern</button>
+            </div>
+            <p class="muted">Send a message to the admin about attendance or account concerns.</p>
           </div>
         </section>
 

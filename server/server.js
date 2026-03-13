@@ -19,7 +19,9 @@ const DEFAULT_DB = {
     }
   ],
   employees: [],
-  attendance: []
+  attendance: [],
+  notifications: [],
+  messages: []
 };
 
 const MIME = {
@@ -43,6 +45,16 @@ function parseJsonSafe(raw) {
 
 let memoryDb = null;
 
+function normalizeDb(db) {
+  const safe = db && typeof db === 'object' ? db : {};
+  if (!Array.isArray(safe.admins)) safe.admins = [];
+  if (!Array.isArray(safe.employees)) safe.employees = [];
+  if (!Array.isArray(safe.attendance)) safe.attendance = [];
+  if (!Array.isArray(safe.notifications)) safe.notifications = [];
+  if (!Array.isArray(safe.messages)) safe.messages = [];
+  return safe;
+}
+
 function readDb() {
   if (memoryDb) return memoryDb;
 
@@ -50,7 +62,7 @@ function readDb() {
     const raw = fs.readFileSync(DATA_PATH, 'utf8');
     const parsed = parseJsonSafe(raw);
     if (parsed.ok) {
-      memoryDb = parsed.value;
+      memoryDb = normalizeDb(parsed.value);
       return memoryDb;
     }
   }
@@ -59,17 +71,17 @@ function readDb() {
     const backupRaw = fs.readFileSync(BACKUP_PATH, 'utf8');
     const backupParsed = parseJsonSafe(backupRaw);
     if (backupParsed.ok) {
-      memoryDb = backupParsed.value;
+      memoryDb = normalizeDb(backupParsed.value);
       return memoryDb;
     }
   }
 
-  memoryDb = JSON.parse(JSON.stringify(DEFAULT_DB));
+  memoryDb = normalizeDb(JSON.parse(JSON.stringify(DEFAULT_DB)));
   return memoryDb;
 }
 
 function writeDb(db) {
-  memoryDb = db;
+  memoryDb = normalizeDb(db);
   try {
     if (fs.existsSync(DATA_PATH)) {
       try {
@@ -178,6 +190,41 @@ function summaryForDate(db, date) {
   return { totalEmployees, present, late, absent };
 }
 
+function makeId(prefix) {
+  return `${prefix}-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+}
+
+function pushNotification(db, data) {
+  const note = {
+    id: makeId('NTF'),
+    type: data.type || 'info',
+    title: data.title || 'Notification',
+    message: data.message || '',
+    employeeId: data.employeeId || '',
+    createdAt: new Date().toISOString(),
+    read: false
+  };
+  db.notifications.unshift(note);
+  if (db.notifications.length > 200) db.notifications = db.notifications.slice(0, 200);
+  return note;
+}
+
+function pushMessage(db, data) {
+  const msg = {
+    id: makeId('MSG'),
+    employeeId: data.employeeId || '',
+    employeeName: data.employeeName || 'Unknown',
+    office: data.office || '',
+    subject: data.subject || 'Concern',
+    message: data.message || '',
+    createdAt: new Date().toISOString(),
+    read: false
+  };
+  db.messages.unshift(msg);
+  if (db.messages.length > 200) db.messages = db.messages.slice(0, 200);
+  return msg;
+}
+
 function handleApi(req, res, pathname) {
   setCors(res);
   if (req.method === 'OPTIONS') {
@@ -198,6 +245,66 @@ function handleApi(req, res, pathname) {
   if (req.method === 'GET' && pathname === '/api/employees') {
     const db = readDb();
     return sendJson(res, 200, { employees: db.employees });
+  }
+
+  if (req.method === 'GET' && pathname === '/api/notifications') {
+    const db = readDb();
+    return sendJson(res, 200, { notifications: db.notifications || [] });
+  }
+
+  if (req.method === 'POST' && pathname === '/api/notifications/read') {
+    return collectBody(req).then((body) => {
+      const db = readDb();
+      if (body && body.all) {
+        db.notifications.forEach((n) => { n.read = true; });
+      } else if (Array.isArray(body.ids)) {
+        const set = new Set(body.ids);
+        db.notifications.forEach((n) => { if (set.has(n.id)) n.read = true; });
+      }
+      writeDb(db);
+      return sendJson(res, 200, { ok: true });
+    });
+  }
+
+  if (req.method === 'GET' && pathname === '/api/messages') {
+    const db = readDb();
+    return sendJson(res, 200, { messages: db.messages || [] });
+  }
+
+  if (req.method === 'POST' && pathname === '/api/messages') {
+    return collectBody(req).then((body) => {
+      const db = readDb();
+      const employeeId = String(body.employeeId || '').trim();
+      const message = String(body.message || '').trim();
+      const subject = String(body.subject || 'Concern').trim();
+      if (!employeeId || !message) {
+        return sendJson(res, 400, { ok: false, message: 'Employee and message are required.' });
+      }
+      const emp = db.employees.find((e) => e.id === employeeId);
+      const newMsg = pushMessage(db, {
+        employeeId,
+        employeeName: emp ? emp.name : String(body.employeeName || 'Unknown'),
+        office: emp ? emp.office : String(body.office || ''),
+        subject,
+        message
+      });
+      writeDb(db);
+      return sendJson(res, 201, { ok: true, message: newMsg });
+    });
+  }
+
+  if (req.method === 'POST' && pathname === '/api/messages/read') {
+    return collectBody(req).then((body) => {
+      const db = readDb();
+      if (body && body.all) {
+        db.messages.forEach((m) => { m.read = true; });
+      } else if (Array.isArray(body.ids)) {
+        const set = new Set(body.ids);
+        db.messages.forEach((m) => { if (set.has(m.id)) m.read = true; });
+      }
+      writeDb(db);
+      return sendJson(res, 200, { ok: true });
+    });
   }
 
   if (req.method === 'POST' && pathname === '/api/employees') {
@@ -399,6 +506,15 @@ function handleApi(req, res, pathname) {
         photo: body.photo || ''
       };
       db.attendance.push(record);
+      const emp = db.employees.find((e) => e.id === employeeId);
+      const empName = emp ? emp.name : employeeId;
+      const office = emp ? emp.office : 'Office';
+      pushNotification(db, {
+        type: 'attendance',
+        employeeId,
+        title: 'New Time In',
+        message: `${empName} (${office}) timed in at ${timeIn}.`
+      });
       writeDb(db);
       return sendJson(res, 201, { attendance: record });
     });
@@ -414,7 +530,19 @@ function handleApi(req, res, pathname) {
       if (!existing) {
         return sendJson(res, 404, { message: 'No time in yet' });
       }
+      const firstTimeOut = !existing.timeOut;
       existing.timeOut = timeOut;
+      if (firstTimeOut && timeOut) {
+        const emp = db.employees.find((e) => e.id === employeeId);
+        const empName = emp ? emp.name : employeeId;
+        const office = emp ? emp.office : 'Office';
+        pushNotification(db, {
+          type: 'attendance',
+          employeeId,
+          title: 'New Time Out',
+          message: `${empName} (${office}) timed out at ${timeOut}.`
+        });
+      }
       writeDb(db);
       return sendJson(res, 200, { attendance: existing });
     });

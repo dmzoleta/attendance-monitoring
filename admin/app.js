@@ -24,9 +24,28 @@ const adminRegisterModal = document.getElementById('admin-register-modal');
 const adminRegisterForm = document.getElementById('admin-register-form');
 const adminForgotModal = document.getElementById('admin-forgot-modal');
 const adminForgotForm = document.getElementById('admin-forgot-form');
+const notifBtn = document.getElementById('notif-btn');
+const notifPanel = document.getElementById('notif-panel');
+const notifList = document.getElementById('notif-list');
+const notifCount = document.getElementById('notif-count');
+const notifEmpty = document.getElementById('notif-empty');
+const markNotifReadBtn = document.getElementById('mark-notif-read');
+const msgBtn = document.getElementById('msg-btn');
+const msgPanel = document.getElementById('msg-panel');
+const msgList = document.getElementById('msg-list');
+const msgCount = document.getElementById('msg-count');
+const msgEmpty = document.getElementById('msg-empty');
+const markMsgReadBtn = document.getElementById('mark-msg-read');
+const menuBtn = document.getElementById('menu-btn');
+const menuPanel = document.getElementById('menu-panel');
+const helpBtn = document.getElementById('need-help-btn');
+const helpDetails = document.getElementById('help-details');
+const logoutBtn = document.getElementById('logout-btn');
 
 let employeesCache = [];
 let attendanceCache = [];
+let notificationsCache = [];
+let messagesCache = [];
 let refreshTimer = null;
 
 function formatDate(date) {
@@ -35,6 +54,21 @@ function formatDate(date) {
 
 function formatTime(date) {
   return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+}
+
+function formatDateTimeStamp(value) {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  const day = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  const time = date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+  return `${day} · ${time}`;
+}
+
+function updateBadge(el, count) {
+  if (!el) return;
+  el.textContent = count;
+  el.classList.toggle('hidden', count <= 0);
 }
 
 function tickClock() {
@@ -143,6 +177,93 @@ async function loadAttendanceHistory(from, to) {
     setStatusCell(row.lastElementChild, item.status);
     attendanceHistory.appendChild(row);
   });
+}
+
+function renderNotifications(list) {
+  notifList.innerHTML = '';
+  if (!list.length) {
+    notifEmpty.classList.remove('hidden');
+  } else {
+    notifEmpty.classList.add('hidden');
+  }
+  list.forEach((note) => {
+    const item = document.createElement('div');
+    item.className = `panel-item ${note.read ? '' : 'unread'}`;
+    item.innerHTML = `
+      <div class="panel-title">${note.title || 'Notification'}</div>
+      <div class="panel-message">${note.message || ''}</div>
+      <div class="panel-meta">${formatDateTimeStamp(note.createdAt)}</div>
+    `;
+    notifList.appendChild(item);
+  });
+  const unread = list.filter((n) => !n.read).length;
+  updateBadge(notifCount, unread);
+}
+
+async function loadNotifications() {
+  try {
+    const data = await api('/api/notifications');
+    notificationsCache = data.notifications || [];
+    renderNotifications(notificationsCache);
+  } catch (err) {
+    // ignore notification failures
+  }
+}
+
+function renderMessages(list) {
+  msgList.innerHTML = '';
+  if (!list.length) {
+    msgEmpty.classList.remove('hidden');
+  } else {
+    msgEmpty.classList.add('hidden');
+  }
+  list.forEach((msg) => {
+    const item = document.createElement('div');
+    item.className = `panel-item ${msg.read ? '' : 'unread'}`;
+    item.innerHTML = `
+      <div class="panel-title">${msg.subject || 'Concern'}</div>
+      <div class="panel-message">${msg.employeeName || 'Employee'}${msg.office ? ` · ${msg.office}` : ''}</div>
+      <div class="panel-message">${msg.message || ''}</div>
+      <div class="panel-meta">${formatDateTimeStamp(msg.createdAt)}</div>
+    `;
+    msgList.appendChild(item);
+  });
+  const unread = list.filter((m) => !m.read).length;
+  updateBadge(msgCount, unread);
+}
+
+async function loadMessages() {
+  try {
+    const data = await api('/api/messages');
+    messagesCache = data.messages || [];
+    renderMessages(messagesCache);
+  } catch (err) {
+    // ignore message failures
+  }
+}
+
+function closePanels() {
+  [notifPanel, msgPanel, menuPanel].forEach((panel) => {
+    if (panel) panel.classList.add('hidden');
+  });
+}
+
+function togglePanel(panel) {
+  const isOpen = panel && !panel.classList.contains('hidden');
+  closePanels();
+  if (panel && !isOpen) panel.classList.remove('hidden');
+}
+
+function logoutAdmin() {
+  closePanels();
+  loginScreen.classList.remove('hidden');
+  adminApp.classList.add('hidden');
+  loginForm.reset();
+  notificationsCache = [];
+  messagesCache = [];
+  updateBadge(notifCount, 0);
+  updateBadge(msgCount, 0);
+  if (refreshTimer) clearInterval(refreshTimer);
 }
 
 function openAddEmployee() {
@@ -298,6 +419,8 @@ function startAutoRefresh() {
   refreshTimer = setInterval(() => {
     if (adminApp.classList.contains('hidden')) return;
     loadSummary();
+    loadNotifications();
+    loadMessages();
     const active = document.querySelector('.tab-btn.active');
     if (active && active.dataset.view === 'dashboard-view') {
       loadAttendanceToday();
@@ -318,7 +441,7 @@ loginForm.addEventListener('submit', async (event) => {
     });
     loginScreen.classList.add('hidden');
     adminApp.classList.remove('hidden');
-    await Promise.all([loadSummary(), loadAttendanceToday(), loadEmployees()]);
+    await Promise.all([loadSummary(), loadAttendanceToday(), loadEmployees(), loadNotifications(), loadMessages()]);
     tickClock();
     startAutoRefresh();
   } catch (err) {
@@ -395,5 +518,65 @@ document.getElementById('open-admin-forgot').addEventListener('click', openAdmin
 document.getElementById('close-admin-forgot').addEventListener('click', closeAdminForgot);
 document.getElementById('cancel-admin-forgot').addEventListener('click', closeAdminForgot);
 adminForgotForm.addEventListener('submit', handleAdminForgot);
+
+if (notifBtn && notifPanel) {
+  notifBtn.addEventListener('click', (event) => {
+    event.stopPropagation();
+    togglePanel(notifPanel);
+    loadNotifications();
+  });
+  notifPanel.addEventListener('click', (event) => event.stopPropagation());
+}
+
+if (msgBtn && msgPanel) {
+  msgBtn.addEventListener('click', (event) => {
+    event.stopPropagation();
+    togglePanel(msgPanel);
+    loadMessages();
+  });
+  msgPanel.addEventListener('click', (event) => event.stopPropagation());
+}
+
+if (menuBtn && menuPanel) {
+  menuBtn.addEventListener('click', (event) => {
+    event.stopPropagation();
+    togglePanel(menuPanel);
+  });
+  menuPanel.addEventListener('click', (event) => event.stopPropagation());
+}
+
+if (markNotifReadBtn) {
+  markNotifReadBtn.addEventListener('click', async () => {
+    try {
+      await api('/api/notifications/read', { method: 'POST', body: JSON.stringify({ all: true }) });
+      await loadNotifications();
+    } catch (err) {
+      alert(err.message || 'Unable to mark notifications.');
+    }
+  });
+}
+
+if (markMsgReadBtn) {
+  markMsgReadBtn.addEventListener('click', async () => {
+    try {
+      await api('/api/messages/read', { method: 'POST', body: JSON.stringify({ all: true }) });
+      await loadMessages();
+    } catch (err) {
+      alert(err.message || 'Unable to mark messages.');
+    }
+  });
+}
+
+if (helpBtn && helpDetails) {
+  helpBtn.addEventListener('click', () => {
+    helpDetails.classList.toggle('hidden');
+  });
+}
+
+if (logoutBtn) {
+  logoutBtn.addEventListener('click', logoutAdmin);
+}
+
+document.addEventListener('click', closePanels);
 
 tickClock();

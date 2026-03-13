@@ -162,6 +162,11 @@ body {
 .top-actions {
   display: flex;
   gap: 8px;
+  align-items: center;
+}
+
+.action-group {
+  position: relative;
 }
 
 .icon-btn {
@@ -171,6 +176,127 @@ body {
   padding: 8px 10px;
   border-radius: 8px;
   cursor: pointer;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  min-width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: #ff4d4d;
+  color: white;
+  font-size: 10px;
+  font-weight: 700;
+  display: grid;
+  place-items: center;
+  border: 2px solid rgba(13, 45, 106, 0.85);
+}
+
+.dropdown-panel {
+  position: absolute;
+  top: 46px;
+  right: 0;
+  width: min(320px, 70vw);
+  background: white;
+  color: var(--text);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+  padding: 12px;
+  z-index: 30;
+}
+
+.panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.ghost-btn.small {
+  font-size: 11px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  background: #eef2ff;
+}
+
+.panel-list {
+  display: grid;
+  gap: 8px;
+  max-height: 280px;
+  overflow: auto;
+}
+
+.panel-item {
+  background: #f4f7ff;
+  border-radius: 10px;
+  padding: 10px;
+}
+
+.panel-item.unread {
+  border-left: 4px solid var(--blue);
+  background: #eef4ff;
+}
+
+.panel-title {
+  font-weight: 700;
+  font-size: 13px;
+  margin-bottom: 4px;
+}
+
+.panel-message {
+  font-size: 12px;
+  color: #3a4b70;
+}
+
+.panel-message + .panel-message {
+  margin-top: 4px;
+}
+
+.panel-meta {
+  font-size: 11px;
+  color: #7a86a6;
+  margin-top: 6px;
+}
+
+.panel-empty {
+  font-size: 12px;
+  color: #7a86a6;
+  margin: 8px 0 0;
+}
+
+.primary-btn.compact {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 10px;
+  margin-bottom: 8px;
+}
+
+.ghost-btn.danger {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #ffecec;
+  color: #b53131;
+  font-weight: 700;
+  margin-top: 10px;
+}
+
+.help-details {
+  background: #f7f9ff;
+  border-radius: 10px;
+  padding: 10px;
+  font-size: 12px;
+  color: #3b4f7d;
+  display: grid;
+  gap: 6px;
+  margin-bottom: 10px;
 }
 
 .tabs {

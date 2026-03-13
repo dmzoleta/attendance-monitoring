@@ -20,5 +20,7 @@
       "avatar": "assets/avatar-generic.png"
     }
   ],
-  "attendance": []
+  "attendance": [],
+  "notifications": [],
+  "messages": []
 }

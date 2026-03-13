@@ -73,6 +73,16 @@ body {
   background: #f9fbff;
 }
 
+.input-field textarea {
+  width: 100%;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid #d8e1f5;
+  background: #f9fbff;
+  resize: vertical;
+  min-height: 90px;
+}
+
 .password-row {
   display: flex;
   gap: 8px;
@@ -220,6 +230,12 @@ body {
   padding: 14px;
   box-shadow: var(--shadow);
   margin-top: 16px;
+}
+
+.muted {
+  margin: 8px 0 0;
+  color: #5b6b91;
+  font-size: 13px;
 }
 
 .modal {

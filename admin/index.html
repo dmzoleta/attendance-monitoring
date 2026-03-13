@@ -43,9 +43,46 @@
           </div>
         </div>
         <div class="top-actions">
-          <button class="icon-btn" title="Notifications">🔔</button>
-          <button class="icon-btn" title="Messages">✉️</button>
-          <button class="icon-btn" title="Menu">☰</button>
+          <div class="action-group">
+            <button class="icon-btn" id="notif-btn" title="Notifications">
+              🔔
+              <span class="badge hidden" id="notif-count">0</span>
+            </button>
+            <div class="dropdown-panel hidden" id="notif-panel">
+              <div class="panel-header">
+                <strong>Notifications</strong>
+                <button class="ghost-btn small" id="mark-notif-read">Mark all read</button>
+              </div>
+              <div class="panel-list" id="notif-list"></div>
+              <p class="panel-empty hidden" id="notif-empty">No notifications yet.</p>
+            </div>
+          </div>
+          <div class="action-group">
+            <button class="icon-btn" id="msg-btn" title="Messages">
+              ✉️
+              <span class="badge hidden" id="msg-count">0</span>
+            </button>
+            <div class="dropdown-panel hidden" id="msg-panel">
+              <div class="panel-header">
+                <strong>Messages</strong>
+                <button class="ghost-btn small" id="mark-msg-read">Mark all read</button>
+              </div>
+              <div class="panel-list" id="msg-list"></div>
+              <p class="panel-empty hidden" id="msg-empty">No messages yet.</p>
+            </div>
+          </div>
+          <div class="action-group">
+            <button class="icon-btn" id="menu-btn" title="Menu">☰</button>
+            <div class="dropdown-panel hidden" id="menu-panel">
+              <button class="primary-btn compact" id="need-help-btn">Need Help</button>
+              <div class="help-details hidden" id="help-details">
+                <div><strong>Contact:</strong> 0912-345-6789</div>
+                <div><strong>Email:</strong> sdo.marinduque@deped.gov.ph</div>
+                <div><strong>Location:</strong> DepEd SDO Marinduque, Boac</div>
+              </div>
+              <button class="ghost-btn danger" id="logout-btn">Log out</button>
+            </div>
+          </div>
         </div>
       </header>
 

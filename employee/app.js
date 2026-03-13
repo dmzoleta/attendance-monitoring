@@ -47,6 +47,11 @@ const openForgotBtn = document.getElementById('open-forgot');
 const closeForgotBtn = document.getElementById('close-forgot');
 const cancelForgotBtn = document.getElementById('cancel-forgot');
 const forgotForm = document.getElementById('forgot-form');
+const concernModal = document.getElementById('concern-modal');
+const openConcernBtn = document.getElementById('open-concern');
+const closeConcernBtn = document.getElementById('close-concern');
+const cancelConcernBtn = document.getElementById('cancel-concern');
+const concernForm = document.getElementById('concern-form');
 
 let currentUser = null;
 let attendanceCache = [];
@@ -353,6 +358,45 @@ async function handleForgot(event) {
   }
 }
 
+function openConcernModal() {
+  concernModal.classList.remove('hidden');
+}
+
+function closeConcernModal() {
+  concernModal.classList.add('hidden');
+  concernForm.reset();
+}
+
+async function handleConcern(event) {
+  event.preventDefault();
+  if (!currentUser) {
+    alert('Please log in first.');
+    return;
+  }
+  const formData = new FormData(concernForm);
+  const payload = Object.fromEntries(formData.entries());
+  try {
+    await api('/api/messages', {
+      method: 'POST',
+      body: JSON.stringify({
+        employeeId: currentUser.id,
+        employeeName: currentUser.name,
+        office: currentUser.office,
+        subject: payload.subject,
+        message: payload.message
+      })
+    });
+    alert('Concern sent to admin.');
+    closeConcernModal();
+  } catch (err) {
+    if (err.name === 'TypeError') {
+      alert('Server not reachable. Try again after the server wakes up.');
+    } else {
+      alert(err.message || 'Unable to send concern.');
+    }
+  }
+}
+
 navButtons.forEach((btn) => {
   btn.addEventListener('click', () => setView(btn.dataset.view));
 });
@@ -396,6 +440,11 @@ openForgotBtn.addEventListener('click', openForgotModal);
 closeForgotBtn.addEventListener('click', closeForgotModal);
 cancelForgotBtn.addEventListener('click', closeForgotModal);
 forgotForm.addEventListener('submit', handleForgot);
+
+if (openConcernBtn) openConcernBtn.addEventListener('click', openConcernModal);
+if (closeConcernBtn) closeConcernBtn.addEventListener('click', closeConcernModal);
+if (cancelConcernBtn) cancelConcernBtn.addEventListener('click', closeConcernModal);
+if (concernForm) concernForm.addEventListener('submit', handleConcern);
 
 setInterval(tickClock, 1000);
 
