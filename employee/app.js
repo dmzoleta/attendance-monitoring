@@ -521,6 +521,10 @@ async function handleBiometricLogin() {
     });
     await startEmployeeSession(verify.user);
   } catch (err) {
+    if (err && err.name === 'NotAllowedError') {
+      alert('Biometric login cancelled.');
+      return;
+    }
     alert(err.message || 'Biometric login failed.');
   }
 }

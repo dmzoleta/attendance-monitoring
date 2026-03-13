@@ -8,7 +8,6 @@ const {
   generateAuthenticationOptions,
   verifyAuthenticationResponse
 } = require('@simplewebauthn/server');
-const { isoBase64URL } = require('@simplewebauthn/server/helpers');
 
 const DEFAULT_ROOT = path.join(__dirname, '..');
 const ROOT = fs.existsSync(path.join(DEFAULT_ROOT, 'admin')) ? DEFAULT_ROOT : process.cwd();
@@ -192,6 +191,20 @@ function computeDailyStatus(record) {
   return late ? 'Late' : 'Present';
 }
 
+function base64urlToBuffer(value) {
+  if (!value) return Buffer.alloc(0);
+  const base64 = value.replace(/-/g, '+').replace(/_/g, '/');
+  const pad = base64.length % 4 ? '='.repeat(4 - (base64.length % 4)) : '';
+  return Buffer.from(base64 + pad, 'base64');
+}
+
+function bufferToBase64url(buffer) {
+  return Buffer.from(buffer).toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/g, '');
+}
+
 function findEmployeeByLogin(db, value) {
   const lookup = String(value || '').trim().toLowerCase();
   if (!lookup) return null;
@@ -324,10 +337,10 @@ function handleApi(req, res, pathname) {
         attestationType: 'none',
         authenticatorSelection: {
           residentKey: 'preferred',
-          userVerification: 'required'
+          userVerification: 'preferred'
         },
         excludeCredentials: (employee.webauthn || []).map((cred) => ({
-          id: isoBase64URL.toBuffer(cred.credentialID),
+          id: base64urlToBuffer(cred.credentialID),
           type: 'public-key',
           transports: cred.transports || ['internal']
         }))
@@ -360,8 +373,8 @@ function handleApi(req, res, pathname) {
       if (!verified || !registrationInfo) {
         return sendJson(res, 400, { ok: false, message: 'Registration not verified.' });
       }
-      const credentialID = isoBase64URL.fromBuffer(registrationInfo.credentialID);
-      const publicKey = isoBase64URL.fromBuffer(registrationInfo.credentialPublicKey);
+      const credentialID = bufferToBase64url(registrationInfo.credentialID);
+      const publicKey = bufferToBase64url(registrationInfo.credentialPublicKey);
       const exists = (employee.webauthn || []).some((cred) => cred.credentialID === credentialID);
       if (!exists) {
         employee.webauthn = employee.webauthn || [];
@@ -395,7 +408,7 @@ function handleApi(req, res, pathname) {
       }
       const options = generateAuthenticationOptions({
         rpID,
-        userVerification: 'required',
+        userVerification: 'preferred',
         allowCredentials
       });
       const key = employee ? employee.id : '_userless';
@@ -436,8 +449,8 @@ function handleApi(req, res, pathname) {
           expectedOrigin: origin,
           expectedRPID: rpID,
           authenticator: {
-            credentialID: isoBase64URL.toBuffer(authenticatorRecord.credentialID),
-            credentialPublicKey: isoBase64URL.toBuffer(authenticatorRecord.publicKey),
+            credentialID: base64urlToBuffer(authenticatorRecord.credentialID),
+            credentialPublicKey: base64urlToBuffer(authenticatorRecord.publicKey),
             counter: authenticatorRecord.counter
           }
         });
