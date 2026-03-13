@@ -165,6 +165,21 @@ function computeStatus(timeIn) {
   return minutes <= 8 * 60 ? 'Present' : 'Late';
 }
 
+function computeDailyStatus(record) {
+  if (!record) return 'Absent';
+  const amIn = record.timeInAM || record.timeIn || '';
+  const pmIn = record.timeInPM || '';
+  if (!amIn && !pmIn) return 'Absent';
+  let late = false;
+  if (amIn && timeToMinutes(amIn) > 8 * 60) late = true;
+  if (pmIn && timeToMinutes(pmIn) > 13 * 60) late = true;
+  return late ? 'Late' : 'Present';
+}
+
+function pickLatestValue(...values) {
+  return values.find((val) => val && String(val).trim().length > 0) || '';
+}
+
 function attendanceForDate(db, date) {
   return db.attendance.filter((att) => att.date === date);
 }
@@ -172,11 +187,13 @@ function attendanceForDate(db, date) {
 function enrichAttendance(db, list) {
   return list.map((att) => {
     const emp = db.employees.find((e) => e.id === att.employeeId);
+    const status = computeDailyStatus(att);
     return {
       ...att,
       employeeName: emp ? emp.name : 'Unknown',
       office: emp ? emp.office : 'Unknown',
-      position: emp ? emp.position : 'Unknown'
+      position: emp ? emp.position : 'Unknown',
+      status
     };
   });
 }
@@ -184,9 +201,18 @@ function enrichAttendance(db, list) {
 function summaryForDate(db, date) {
   const totalEmployees = db.employees.length;
   const todays = attendanceForDate(db, date);
-  const present = todays.filter((a) => a.status === 'Present').length;
-  const late = todays.filter((a) => a.status === 'Late').length;
-  const absent = totalEmployees - todays.length;
+  const attendedIds = new Set();
+  let present = 0;
+  let late = 0;
+  todays.forEach((att) => {
+    const hasAttendance = (att.timeInAM || att.timeInPM || att.timeIn);
+    if (!hasAttendance) return;
+    attendedIds.add(att.employeeId);
+    const status = computeDailyStatus(att);
+    if (status === 'Late') late += 1;
+    if (status === 'Present') present += 1;
+  });
+  const absent = totalEmployees - attendedIds.size;
   return { totalEmployees, present, late, absent };
 }
 
@@ -233,7 +259,8 @@ function handleApi(req, res, pathname) {
   }
   if (req.method === 'GET' && pathname === '/api/summary') {
     const db = readDb();
-    const date = isoToday();
+    const query = url.parse(req.url, true).query;
+    const date = String(query.date || isoToday());
     const summary = summaryForDate(db, date);
     return sendJson(res, 200, { date, ...summary });
   }
@@ -459,7 +486,8 @@ function handleApi(req, res, pathname) {
 
   if (req.method === 'GET' && pathname === '/api/attendance/today') {
     const db = readDb();
-    const date = isoToday();
+    const query = url.parse(req.url, true).query;
+    const date = String(query.date || isoToday());
     const todays = enrichAttendance(db, attendanceForDate(db, date));
     return sendJson(res, 200, { date, attendance: todays });
   }
@@ -482,16 +510,40 @@ function handleApi(req, res, pathname) {
       const date = body.date || isoToday();
       const employeeId = body.employeeId;
       const timeIn = body.timeIn;
+      const photo = body.photo || '';
+      const location = body.location || '';
+      const latitude = body.latitude || '';
+      const longitude = body.longitude || '';
       const existing = db.attendance.find((a) => a.employeeId === employeeId && a.date === date);
       if (existing) {
-        existing.timeIn = timeIn;
-        existing.location = body.location || existing.location;
-        existing.latitude = body.latitude || existing.latitude;
-        existing.longitude = body.longitude || existing.longitude;
-        existing.photo = body.photo || existing.photo;
-        existing.status = computeStatus(existing.timeIn);
+        if (existing.timeIn && !existing.timeInAM) existing.timeInAM = existing.timeIn;
+        if (existing.timeOut && !existing.timeOutAM) existing.timeOutAM = existing.timeOut;
+        let slot = '';
+        if (!existing.timeInAM) {
+          existing.timeInAM = timeIn;
+          existing.timeIn = timeIn;
+          existing.photoInAM = photo || existing.photoInAM;
+          existing.locationInAM = location || existing.locationInAM;
+          existing.latInAM = latitude || existing.latInAM;
+          existing.lngInAM = longitude || existing.lngInAM;
+          slot = 'AM';
+        } else if (!existing.timeInPM) {
+          existing.timeInPM = timeIn;
+          existing.photoInPM = photo || existing.photoInPM;
+          existing.locationInPM = location || existing.locationInPM;
+          existing.latInPM = latitude || existing.latInPM;
+          existing.lngInPM = longitude || existing.lngInPM;
+          slot = 'PM';
+        } else {
+          return sendJson(res, 409, { message: 'Time in already recorded.' });
+        }
+        existing.photo = pickLatestValue(photo, existing.photo);
+        existing.location = pickLatestValue(location, existing.location);
+        existing.latitude = pickLatestValue(latitude, existing.latitude);
+        existing.longitude = pickLatestValue(longitude, existing.longitude);
+        existing.status = computeDailyStatus(existing);
         writeDb(db);
-        return sendJson(res, 200, { attendance: existing });
+        return sendJson(res, 200, { attendance: existing, slot });
       }
       const record = {
         id: `ATT-${date}-${employeeId}`,
@@ -499,11 +551,31 @@ function handleApi(req, res, pathname) {
         date,
         timeIn,
         timeOut: '',
-        status: computeStatus(timeIn),
-        latitude: body.latitude || '',
-        longitude: body.longitude || '',
-        location: body.location || '',
-        photo: body.photo || ''
+        timeInAM: timeIn,
+        timeOutAM: '',
+        timeInPM: '',
+        timeOutPM: '',
+        photoInAM: photo,
+        photoOutAM: '',
+        photoInPM: '',
+        photoOutPM: '',
+        locationInAM: location,
+        locationOutAM: '',
+        locationInPM: '',
+        locationOutPM: '',
+        latInAM: latitude,
+        lngInAM: longitude,
+        latOutAM: '',
+        lngOutAM: '',
+        latInPM: '',
+        lngInPM: '',
+        latOutPM: '',
+        lngOutPM: '',
+        status: computeDailyStatus({ timeInAM: timeIn, timeInPM: '', timeIn }),
+        latitude,
+        longitude,
+        location,
+        photo
       };
       db.attendance.push(record);
       const emp = db.employees.find((e) => e.id === employeeId);
@@ -516,7 +588,7 @@ function handleApi(req, res, pathname) {
         message: `${empName} (${office}) timed in at ${timeIn}.`
       });
       writeDb(db);
-      return sendJson(res, 201, { attendance: record });
+      return sendJson(res, 201, { attendance: record, slot: 'AM' });
     });
   }
 
@@ -526,13 +598,42 @@ function handleApi(req, res, pathname) {
       const date = body.date || isoToday();
       const employeeId = body.employeeId;
       const timeOut = body.timeOut;
+      const photo = body.photo || '';
+      const location = body.location || '';
+      const latitude = body.latitude || '';
+      const longitude = body.longitude || '';
       const existing = db.attendance.find((a) => a.employeeId === employeeId && a.date === date);
       if (!existing) {
         return sendJson(res, 404, { message: 'No time in yet' });
       }
-      const firstTimeOut = !existing.timeOut;
-      existing.timeOut = timeOut;
-      if (firstTimeOut && timeOut) {
+      if (existing.timeIn && !existing.timeInAM) existing.timeInAM = existing.timeIn;
+      if (existing.timeOut && !existing.timeOutAM) existing.timeOutAM = existing.timeOut;
+      let slot = '';
+      if (!existing.timeOutAM && existing.timeInAM) {
+        existing.timeOutAM = timeOut;
+        existing.timeOut = timeOut;
+        existing.photoOutAM = photo || existing.photoOutAM;
+        existing.locationOutAM = location || existing.locationOutAM;
+        existing.latOutAM = latitude || existing.latOutAM;
+        existing.lngOutAM = longitude || existing.lngOutAM;
+        slot = 'AM';
+      } else if (existing.timeInPM && !existing.timeOutPM) {
+        existing.timeOutPM = timeOut;
+        existing.timeOut = timeOut;
+        existing.photoOutPM = photo || existing.photoOutPM;
+        existing.locationOutPM = location || existing.locationOutPM;
+        existing.latOutPM = latitude || existing.latOutPM;
+        existing.lngOutPM = longitude || existing.lngOutPM;
+        slot = 'PM';
+      } else {
+        return sendJson(res, 409, { message: 'Time out already recorded.' });
+      }
+      existing.photo = pickLatestValue(photo, existing.photo);
+      existing.location = pickLatestValue(location, existing.location);
+      existing.latitude = pickLatestValue(latitude, existing.latitude);
+      existing.longitude = pickLatestValue(longitude, existing.longitude);
+      existing.status = computeDailyStatus(existing);
+      if (timeOut) {
         const emp = db.employees.find((e) => e.id === employeeId);
         const empName = emp ? emp.name : employeeId;
         const office = emp ? emp.office : 'Office';
@@ -544,7 +645,7 @@ function handleApi(req, res, pathname) {
         });
       }
       writeDb(db);
-      return sendJson(res, 200, { attendance: existing });
+      return sendJson(res, 200, { attendance: existing, slot });
     });
   }
 

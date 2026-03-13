@@ -92,6 +92,29 @@ function timeNow() {
   return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 }
 
+function timeToMinutes(time) {
+  if (!time) return null;
+  const [h, m] = String(time).split(':').map(Number);
+  if (Number.isNaN(h) || Number.isNaN(m)) return null;
+  return h * 60 + m;
+}
+
+function hasAttendance(record) {
+  return !!(record.timeInAM || record.timeInPM || record.timeIn);
+}
+
+function isLateMorning(record) {
+  const t = record.timeInAM || record.timeIn || '';
+  const minutes = timeToMinutes(t);
+  return minutes !== null && minutes > 8 * 60;
+}
+
+function isLateAfternoon(record) {
+  const t = record.timeInPM || '';
+  const minutes = timeToMinutes(t);
+  return minutes !== null && minutes > 13 * 60;
+}
+
 function tickClock() {
   const now = new Date();
   empTime.textContent = formatTime(now);
@@ -106,11 +129,20 @@ function setView(viewId) {
 }
 
 function setStatusCell(cell, status) {
+  if (!cell) return;
   const statusLower = status.toLowerCase();
   cell.classList.remove('status-present', 'status-late', 'status-absent');
   if (statusLower === 'present') cell.classList.add('status-present');
   if (statusLower === 'late') cell.classList.add('status-late');
   if (statusLower === 'absent') cell.classList.add('status-absent');
+}
+
+function pickPhoto(item) {
+  return item.photoInAM || item.photoInPM || item.photoOutAM || item.photoOutPM || item.photo || '';
+}
+
+function pickLocation(item) {
+  return item.locationInAM || item.locationInPM || item.locationOutAM || item.locationOutPM || item.location || '';
 }
 
 async function api(path, options = {}, attempt = 0) {
@@ -154,11 +186,19 @@ async function loadAttendance() {
 }
 
 function computeStats() {
-  const totalDays = attendanceCache.length;
-  const lateCount = attendanceCache.filter((a) => a.status === 'Late').length;
-  const currentMonth = new Date();
-  const daysInMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0).getDate();
-  const daysSoFar = currentMonth.getDate();
+  const now = new Date();
+  const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const monthRecords = attendanceCache.filter((item) => item.date && item.date.startsWith(monthKey));
+  const byDate = new Map();
+  monthRecords.forEach((item) => {
+    if (!byDate.has(item.date)) byDate.set(item.date, item);
+  });
+
+  const records = Array.from(byDate.values());
+  const attended = records.filter(hasAttendance);
+  const totalDays = attended.length;
+  const lateCount = attended.filter((rec) => isLateMorning(rec) || isLateAfternoon(rec)).length;
+  const daysSoFar = now.getDate();
   const absent = Math.max(daysSoFar - totalDays, 0);
 
   statDays.textContent = totalDays;
@@ -169,14 +209,20 @@ function computeStats() {
 function renderRecords(list) {
   recordsTable.innerHTML = '';
   list.forEach((item) => {
+    const photo = pickPhoto(item);
+    const location = pickLocation(item);
     const row = document.createElement('tr');
     row.innerHTML = `
       <td>${item.date}</td>
-      <td>${item.timeIn || '--'}</td>
-      <td>${item.timeOut || '--'}</td>
-      <td>${item.status}</td>
+      <td>${item.timeInAM || item.timeIn || '--'}</td>
+      <td>${item.timeOutAM || '--'}</td>
+      <td>${item.timeInPM || '--'}</td>
+      <td>${item.timeOutPM || item.timeOut || '--'}</td>
+      <td class="status-cell">${item.status || '--'}</td>
+      <td>${photo ? `<img class="table-photo" src="${photo}" alt="Photo" />` : '--'}</td>
+      <td class="table-location">${location || '--'}</td>
     `;
-    setStatusCell(row.lastElementChild, item.status);
+    setStatusCell(row.querySelector('.status-cell'), item.status || '');
     recordsTable.appendChild(row);
   });
 }
@@ -221,24 +267,30 @@ async function markTimeIn() {
     longitude: locationLng.textContent,
     photo: photoData
   };
-  await api('/api/attendance/timein', { method: 'POST', body: JSON.stringify(payload) });
+  const result = await api('/api/attendance/timein', { method: 'POST', body: JSON.stringify(payload) });
   await loadAttendance();
   computeStats();
   filterRecordsByMonth();
-  alert('Time in recorded!');
+  const slotLabel = result.slot === 'PM' ? 'Afternoon' : 'Morning';
+  alert(`Time in recorded (${slotLabel}).`);
 }
 
 async function markTimeOut() {
   const payload = {
     employeeId: currentUser.id,
     timeOut: timeNow(),
-    date: isoToday()
+    date: isoToday(),
+    location: locationName.textContent,
+    latitude: locationLat.textContent,
+    longitude: locationLng.textContent,
+    photo: photoData
   };
-  await api('/api/attendance/timeout', { method: 'POST', body: JSON.stringify(payload) });
+  const result = await api('/api/attendance/timeout', { method: 'POST', body: JSON.stringify(payload) });
   await loadAttendance();
   computeStats();
   filterRecordsByMonth();
-  alert('Time out recorded!');
+  const slotLabel = result.slot === 'PM' ? 'Afternoon' : 'Morning';
+  alert(`Time out recorded (${slotLabel}).`);
 }
 
 loginForm.addEventListener('submit', async (event) => {
