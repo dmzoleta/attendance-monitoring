@@ -373,7 +373,7 @@ async function handleApi(req, res, pathname) {
           return sendJson(res, 200, { ok: true, address: osmData.display_name });
         }
       }
-      return sendJson(res, 200, { ok: true, address: `Lat ${lat.toFixed(4)}, Lng ${lng.toFixed(4)}` });
+      return sendJson(res, 200, { ok: false, address: '', message: 'Address unavailable.' });
     } catch (err) {
       return sendJson(res, 500, { ok: false, message: 'Unable to fetch address.' });
     }

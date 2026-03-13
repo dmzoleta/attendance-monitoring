@@ -161,7 +161,7 @@ async function reverseGeocode(lat, lng) {
     const data = await res.json();
     if (data && data.address) return data.address;
   }
-  return `Lat ${lat.toFixed(4)}, Lng ${lng.toFixed(4)}`;
+  return '';
 }
 
 function updateMapPreview(lat, lng) {
@@ -319,14 +319,19 @@ function updateLocation() {
       setGpsStatus('Fetching address…');
       try {
         const address = await reverseGeocode(latitude, longitude);
-        locationName.textContent = address;
-        empLocation.textContent = address;
-        setGpsStatus(`GPS accuracy: ±${Math.round(accuracy)}m`);
+        if (address) {
+          locationName.textContent = address;
+          empLocation.textContent = address;
+          setGpsStatus(`GPS accuracy: ±${Math.round(accuracy)}m`);
+        } else {
+          locationName.textContent = 'Address unavailable';
+          empLocation.textContent = 'Address unavailable';
+          setGpsStatus('Address unavailable. Tap Update to retry.');
+        }
       } catch (err) {
-        const fallback = `Lat ${latValue}, Lng ${lngValue}`;
-        locationName.textContent = fallback;
-        empLocation.textContent = fallback;
-        setGpsStatus('Using coordinates (address unavailable).');
+        locationName.textContent = 'Address unavailable';
+        empLocation.textContent = 'Address unavailable';
+        setGpsStatus('Address unavailable. Tap Update to retry.');
       }
     })
     .catch((err) => {
