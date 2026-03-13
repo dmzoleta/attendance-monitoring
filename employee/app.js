@@ -461,21 +461,19 @@ async function handleForgot(event) {
 async function handleBiometricRegister() {
   if (!ensureWebAuthn()) return;
   const username = String(loginForm.querySelector('input[name="username"]').value || '').trim();
-  const password = String(loginForm.querySelector('input[name="password"]').value || '').trim();
-  if (!username || !password) {
-    alert('Enter your username and password once to register biometrics.');
+  if (!username) {
+    alert('Enter your username or ID to register biometrics.');
     return;
   }
   try {
-    await api('/api/login', {
-      method: 'POST',
-      body: JSON.stringify({ role: 'employee', username, password })
-    });
     const optionsResp = await api('/api/webauthn/register/options', {
       method: 'POST',
       body: JSON.stringify({ username })
     });
     const options = optionsResp.options;
+    if (!options || !options.challenge || !options.user || !options.user.id) {
+      throw new Error('Biometric setup is not available. Please try again later.');
+    }
     options.challenge = base64urlToBuffer(options.challenge);
     options.user.id = base64urlToBuffer(options.user.id);
     if (options.excludeCredentials) {
@@ -505,6 +503,9 @@ async function handleBiometricLogin() {
       body: JSON.stringify(username ? { username } : {})
     });
     const options = optionsResp.options;
+    if (!options || !options.challenge) {
+      throw new Error('Biometric login is not available. Please try again later.');
+    }
     options.challenge = base64urlToBuffer(options.challenge);
     if (options.allowCredentials) {
       options.allowCredentials = options.allowCredentials.map((cred) => ({
