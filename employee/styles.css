@@ -130,6 +130,10 @@ body {
   color: #6a7aa6;
 }
 
+#login-status {
+  margin-top: 12px;
+}
+
 .footer {
   margin-top: 24px;
   font-size: 12px;

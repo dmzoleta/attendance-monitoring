@@ -61,11 +61,13 @@ const openConcernBtn = document.getElementById('open-concern');
 const closeConcernBtn = document.getElementById('close-concern');
 const cancelConcernBtn = document.getElementById('cancel-concern');
 const concernForm = document.getElementById('concern-form');
+const loginStatus = document.getElementById('login-status');
 
 let currentUser = null;
 let attendanceCache = [];
 let photoData = '';
 let pendingOtpEmail = '';
+let autoRestoreAttempted = false;
 const appConfig = typeof window !== 'undefined' && window.APP_CONFIG ? window.APP_CONFIG : {};
 const isCapacitor = typeof window !== 'undefined' && !!window.Capacitor;
 const defaultApiBase = appConfig.apiBase || '';
@@ -145,6 +147,37 @@ function setStatusCell(cell, status) {
   if (statusLower === 'present') cell.classList.add('status-present');
   if (statusLower === 'late') cell.classList.add('status-late');
   if (statusLower === 'absent') cell.classList.add('status-absent');
+}
+
+function setLoginStatus(message) {
+  if (!loginStatus) return;
+  if (message) {
+    loginStatus.textContent = message;
+    loginStatus.classList.remove('hidden');
+  } else {
+    loginStatus.textContent = '';
+    loginStatus.classList.add('hidden');
+  }
+}
+
+function saveLogin(username, password) {
+  localStorage.setItem('lastLogin', JSON.stringify({ username, password }));
+}
+
+function clearSavedLogin() {
+  localStorage.removeItem('lastLogin');
+}
+
+function saveProfile(payload) {
+  localStorage.setItem('employeeProfile', JSON.stringify(payload));
+}
+
+function loadProfile() {
+  try {
+    return JSON.parse(localStorage.getItem('employeeProfile') || 'null');
+  } catch (err) {
+    return null;
+  }
 }
 
 function pickPhoto(item) {
@@ -422,6 +455,7 @@ function logoutEmployee() {
   setView('emp-dashboard');
   appScreen.classList.add('hidden');
   loginScreen.classList.remove('hidden');
+  clearSavedLogin();
   closeServerModal();
 }
 
@@ -436,6 +470,16 @@ loginForm.addEventListener('submit', async (event) => {
       method: 'POST',
       body: JSON.stringify({ role: 'employee', username, password })
     });
+    saveLogin(username, password);
+    if (result.user) {
+      saveProfile({
+        name: result.user.name,
+        office: result.user.office,
+        employeeType: result.user.employeeType || 'Regular',
+        email: result.user.email || username,
+        password
+      });
+    }
     await startEmployeeSession(result.user);
   } catch (err) {
     const message = err.message || 'Invalid credentials. Use email or ID.';
@@ -491,6 +535,7 @@ async function handleRegister(event) {
       method: 'POST',
       body: JSON.stringify(payload)
     });
+    saveProfile(payload);
     const loginUser = loginForm.querySelector('input[name="username"]');
     const loginPass = loginForm.querySelector('input[name="password"]');
     if (loginUser) loginUser.value = payload.email || result.employee.email || result.employee.id;
@@ -700,3 +745,50 @@ if (!recordsMonth.value) {
 }
 
 tickClock();
+
+async function attemptAutoLogin() {
+  const savedLogin = localStorage.getItem('lastLogin');
+  if (!savedLogin) return;
+  if (autoRestoreAttempted) return;
+  let creds = null;
+  try {
+    creds = JSON.parse(savedLogin);
+  } catch (err) {
+    return;
+  }
+  if (!creds || !creds.username || !creds.password) return;
+  setLoginStatus('Signing you in automatically...');
+  try {
+    const result = await api('/api/login', {
+      method: 'POST',
+      body: JSON.stringify({ role: 'employee', username: creds.username, password: creds.password })
+    });
+    await startEmployeeSession(result.user);
+    setLoginStatus('');
+  } catch (err) {
+    setLoginStatus('');
+    const profile = loadProfile();
+    if (!autoRestoreAttempted && profile && profile.email) {
+      autoRestoreAttempted = true;
+      try {
+        const restore = await api('/api/register', {
+          method: 'POST',
+          body: JSON.stringify(profile)
+        });
+        pendingOtpEmail = profile.email;
+        openOtpModal();
+        if (restore.emailError) {
+          alert(`Account restored, but email not sent: ${restore.emailError}`);
+        } else if (restore.devOtp) {
+          alert(`Account restored. OTP (dev): ${restore.devOtp}`);
+        } else {
+          alert('Account restored. OTP sent to your email.');
+        }
+      } catch (restoreErr) {
+        // ignore restore errors
+      }
+    }
+  }
+}
+
+attemptAutoLogin();
