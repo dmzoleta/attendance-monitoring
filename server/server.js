@@ -5,8 +5,12 @@ const url = require('url');
 
 const DEFAULT_ROOT = path.join(__dirname, '..');
 const ROOT = fs.existsSync(path.join(DEFAULT_ROOT, 'admin')) ? DEFAULT_ROOT : process.cwd();
-const DATA_PATH = path.join(ROOT, 'data', 'db.json');
-const BACKUP_PATH = path.join(ROOT, 'data', 'db.json.bak');
+const ENV_DB_PATH = process.env.DB_PATH || process.env.RENDER_DB_PATH || '';
+const DATA_PATH = ENV_DB_PATH
+  ? path.resolve(ENV_DB_PATH)
+  : path.join(ROOT, 'data', 'db.json');
+const BACKUP_PATH = `${DATA_PATH}.bak`;
+const DATA_DIR = path.dirname(DATA_PATH);
 
 const DEFAULT_DB = {
   admins: [
@@ -58,6 +62,14 @@ function normalizeDb(db) {
 function readDb() {
   if (memoryDb) return memoryDb;
 
+  try {
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+    }
+  } catch (err) {
+    // ignore directory errors
+  }
+
   if (fs.existsSync(DATA_PATH)) {
     const raw = fs.readFileSync(DATA_PATH, 'utf8');
     const parsed = parseJsonSafe(raw);
@@ -77,12 +89,16 @@ function readDb() {
   }
 
   memoryDb = normalizeDb(JSON.parse(JSON.stringify(DEFAULT_DB)));
+  writeDb(memoryDb);
   return memoryDb;
 }
 
 function writeDb(db) {
   memoryDb = normalizeDb(db);
   try {
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+    }
     if (fs.existsSync(DATA_PATH)) {
       try {
         fs.copyFileSync(DATA_PATH, BACKUP_PATH);
