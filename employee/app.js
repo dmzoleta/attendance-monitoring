@@ -62,6 +62,7 @@ const closeConcernBtn = document.getElementById('close-concern');
 const cancelConcernBtn = document.getElementById('cancel-concern');
 const concernForm = document.getElementById('concern-form');
 const loginStatus = document.getElementById('login-status');
+const rememberLogin = document.getElementById('remember-login');
 
 let currentUser = null;
 let attendanceCache = [];
@@ -82,6 +83,10 @@ if (isCapacitor) {
 }
 
 serverUrlInput.value = storedOverride ? storedApiBase : apiBase;
+if (rememberLogin) {
+  const rememberFlag = localStorage.getItem('rememberLogin');
+  rememberLogin.checked = rememberFlag !== 'false';
+}
 
 function formatDate(date) {
   return date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
@@ -162,10 +167,12 @@ function setLoginStatus(message) {
 
 function saveLogin(username, password) {
   localStorage.setItem('lastLogin', JSON.stringify({ username, password }));
+  localStorage.setItem('rememberLogin', 'true');
 }
 
 function clearSavedLogin() {
   localStorage.removeItem('lastLogin');
+  localStorage.removeItem('rememberLogin');
 }
 
 function saveProfile(payload) {
@@ -470,7 +477,11 @@ loginForm.addEventListener('submit', async (event) => {
       method: 'POST',
       body: JSON.stringify({ role: 'employee', username, password })
     });
-    saveLogin(username, password);
+    if (!rememberLogin || rememberLogin.checked) {
+      saveLogin(username, password);
+    } else {
+      clearSavedLogin();
+    }
     if (result.user) {
       saveProfile({
         name: result.user.name,
@@ -747,6 +758,9 @@ if (!recordsMonth.value) {
 tickClock();
 
 async function attemptAutoLogin() {
+  if (rememberLogin && !rememberLogin.checked) return;
+  const rememberFlag = localStorage.getItem('rememberLogin');
+  if (rememberFlag === 'false') return;
   const savedLogin = localStorage.getItem('lastLogin');
   if (!savedLogin) return;
   if (autoRestoreAttempted) return;
