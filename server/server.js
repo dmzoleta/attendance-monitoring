@@ -165,6 +165,21 @@ async function ensureSchema() {
       read BOOLEAN DEFAULT false
     );`
   );
+  await pgQuery(
+    `CREATE TABLE IF NOT EXISTS reports (
+      id TEXT PRIMARY KEY,
+      employee_id TEXT REFERENCES employees(id) ON DELETE CASCADE,
+      employee_name TEXT,
+      office TEXT,
+      report_date DATE NOT NULL,
+      summary TEXT,
+      attachment_name TEXT,
+      attachment_data TEXT,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );`
+  );
+  await pgQuery(`CREATE INDEX IF NOT EXISTS idx_reports_employee ON reports (employee_id);`);
+  await pgQuery(`CREATE INDEX IF NOT EXISTS idx_reports_date ON reports (report_date);`);
   const adminCheck = await pgQuery('SELECT COUNT(*) AS count FROM admins');
   if (Number(adminCheck.rows[0].count) === 0) {
     const admin = DEFAULT_DB.admins[0];
