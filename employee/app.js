@@ -842,6 +842,7 @@ if (openConcernBtn) openConcernBtn.addEventListener('click', openConcernModal);
 if (closeConcernBtn) closeConcernBtn.addEventListener('click', closeConcernModal);
 if (cancelConcernBtn) cancelConcernBtn.addEventListener('click', closeConcernModal);
 if (concernForm) concernForm.addEventListener('submit', handleConcern);
+if (reportForm) reportForm.addEventListener('submit', handleDailyReport);
 
 setInterval(tickClock, 1000);
 
