@@ -780,6 +780,36 @@ async function insertMessagePg(data) {
   return msg;
 }
 
+async function insertReportPg(data) {
+  const report = {
+    id: makeId('RPT'),
+    employeeId: data.employeeId || '',
+    employeeName: data.employeeName || '',
+    office: data.office || '',
+    reportDate: data.reportDate || isoToday(),
+    summary: data.summary || '',
+    attachmentName: data.attachmentName || '',
+    attachmentData: data.attachmentData || '',
+    createdAt: new Date().toISOString()
+  };
+  await pgQuery(
+    `INSERT INTO reports (id, employee_id, employee_name, office, report_date, summary, attachment_name, attachment_data, created_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+    [
+      report.id,
+      report.employeeId,
+      report.employeeName,
+      report.office,
+      report.reportDate,
+      report.summary,
+      report.attachmentName,
+      report.attachmentData,
+      report.createdAt
+    ]
+  );
+  return report;
+}
+
 async function upsertAttendancePg(record) {
   const cols = [
     'id',
