@@ -712,6 +712,56 @@ async function handleConcern(event) {
   }
 }
 
+function resetReportForm() {
+  reportAttachmentData = '';
+  reportAttachmentName = '';
+  if (reportFileInput) reportFileInput.value = '';
+  if (reportFileName) reportFileName.textContent = 'No file selected';
+  if (reportPreviewBox) reportPreviewBox.classList.add('hidden');
+  if (reportPreviewImg) reportPreviewImg.removeAttribute('src');
+  if (reportForm) reportForm.reset();
+}
+
+async function handleDailyReport(event) {
+  event.preventDefault();
+  if (!currentUser) {
+    alert('Please log in first.');
+    return;
+  }
+  const formData = new FormData(reportForm);
+  const summary = String(formData.get('summary') || '').trim();
+  if (!summary) {
+    alert('Please write your daily report first.');
+    return;
+  }
+  try {
+    const result = await api('/api/reports', {
+      method: 'POST',
+      body: JSON.stringify({
+        employeeId: currentUser.id,
+        employeeName: currentUser.name,
+        office: currentUser.office,
+        reportDate: isoToday(),
+        summary,
+        attachmentName: reportAttachmentName,
+        attachment: reportAttachmentData
+      })
+    });
+    if (result && result.report) {
+      alert('Report submitted to admin.');
+    } else {
+      alert('Report submitted.');
+    }
+    resetReportForm();
+  } catch (err) {
+    if (err.name === 'TypeError') {
+      alert('Server not reachable. Try again after the server wakes up.');
+    } else {
+      alert(err.message || 'Unable to submit report.');
+    }
+  }
+}
+
 navButtons.forEach((btn) => {
   btn.addEventListener('click', () => setView(btn.dataset.view));
 });
