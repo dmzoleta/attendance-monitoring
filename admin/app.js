@@ -250,6 +250,7 @@ async function loadEmployees() {
   const data = await api('/api/employees');
   employeesCache = data.employees;
   renderEmployees(employeesCache);
+  populateDtrEmployees();
 }
 
 function renderEmployees(list) {
