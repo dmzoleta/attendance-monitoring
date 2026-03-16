@@ -121,6 +121,68 @@ function pickLocation(item) {
   return item.locationInAM || item.locationInPM || item.locationOutAM || item.locationOutPM || item.location || '';
 }
 
+function buildReportKey(employeeId, date) {
+  return `${employeeId || ''}|${date || ''}`;
+}
+
+function updateReportMap(list) {
+  reportMap = new Map();
+  list.forEach((report) => {
+    reportMap.set(buildReportKey(report.employeeId, report.reportDate), report);
+  });
+}
+
+function shorten(text, max = 90) {
+  const value = String(text || '');
+  if (value.length <= max) return value;
+  return `${value.slice(0, max)}…`;
+}
+
+function isImageAttachment(data) {
+  return typeof data === 'string' && data.startsWith('data:image');
+}
+
+function openReportPrint(report) {
+  if (!report) return;
+  const attachmentName = report.attachmentName || 'attachment';
+  const attachmentHtml = report.attachmentData
+    ? (isImageAttachment(report.attachmentData)
+      ? `<img src="${report.attachmentData}" alt="Attachment" style="max-width:100%; margin-top:12px; border-radius:10px;" />`
+      : `<a href="${report.attachmentData}" download="${attachmentName}">Download attachment</a>`)
+    : '<em>No attachment</em>';
+
+  const printWindow = window.open('', '', 'width=900,height=700');
+  printWindow.document.write(`
+    <html>
+      <head>
+        <title>Employee Daily Report</title>
+        <style>
+          body { font-family: "Trebuchet MS", sans-serif; padding: 24px; color: #1f2b45; }
+          h1 { color: #0d2d6a; margin-bottom: 6px; }
+          .meta { margin-bottom: 16px; color: #3b4a6b; }
+          .summary { background: #f4f7ff; padding: 14px; border-radius: 12px; }
+        </style>
+      </head>
+      <body>
+        <h1>SDO Marinduque Daily Report</h1>
+        <div class="meta">
+          <div><strong>Employee:</strong> ${report.employeeName || 'Employee'}</div>
+          <div><strong>Office:</strong> ${report.office || '--'}</div>
+          <div><strong>Date:</strong> ${report.reportDate || '--'}</div>
+        </div>
+        <div class="summary">${report.summary || ''}</div>
+        <div style="margin-top: 16px;">
+          <strong>Attachment:</strong><br />
+          ${attachmentHtml}
+        </div>
+      </body>
+    </html>
+  `);
+  printWindow.document.close();
+  printWindow.focus();
+  printWindow.print();
+}
+
 async function api(path, options = {}) {
   const res = await fetch(path, {
     headers: { 'Content-Type': 'application/json' },
