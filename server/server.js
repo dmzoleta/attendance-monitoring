@@ -1051,6 +1051,56 @@ async function handleApiPg(req, res, pathname) {
     return sendJson(res, 200, { ok: true });
   }
 
+  if (req.method === 'GET' && pathname === '/api/reports') {
+    const query = url.parse(req.url, true).query;
+    const from = query.from || '1900-01-01';
+    const to = query.to || '2999-12-31';
+    const employeeId = query.employeeId;
+    const params = [from, to];
+    let sql =
+      `SELECT * FROM reports
+       WHERE report_date >= $1 AND report_date <= $2`;
+    if (employeeId) {
+      sql += ' AND employee_id = $3';
+      params.push(employeeId);
+    }
+    sql += ' ORDER BY report_date DESC, created_at DESC';
+    const result = await pgQuery(sql, params);
+    return sendJson(res, 200, { reports: result.rows.map(mapReportRow) });
+  }
+
+  if (req.method === 'POST' && pathname === '/api/reports') {
+    const body = await collectBody(req);
+    const employeeId = String(body.employeeId || '').trim();
+    const summary = String(body.summary || '').trim();
+    const reportDate = String(body.reportDate || body.date || isoToday());
+    const attachmentData = String(body.attachment || body.attachmentData || '');
+    const attachmentName = String(body.attachmentName || '');
+
+    if (!employeeId || !summary) {
+      return sendJson(res, 400, { ok: false, message: 'Employee and summary are required.' });
+    }
+
+    const empRes = await pgQuery('SELECT name, office FROM employees WHERE id = $1', [employeeId]);
+    const empRow = empRes.rows[0];
+    const report = await insertReportPg({
+      employeeId,
+      employeeName: empRow ? empRow.name : String(body.employeeName || 'Unknown'),
+      office: empRow ? empRow.office : String(body.office || ''),
+      reportDate,
+      summary,
+      attachmentName,
+      attachmentData
+    });
+    await insertNotificationPg({
+      type: 'report',
+      title: 'New Daily Report',
+      message: `${report.employeeName || 'Employee'} submitted a report for ${reportDate}.`,
+      employeeId
+    });
+    return sendJson(res, 201, { ok: true, report });
+  }
+
   if (req.method === 'POST' && pathname === '/api/employees') {
     const body = await collectBody(req);
     const email = normalizeEmail(body.email || '');
