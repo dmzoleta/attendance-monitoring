@@ -603,6 +603,34 @@ function downloadReport() {
   printWindow.print();
 }
 
+async function handleReportPrintClick(event) {
+  const btn = event.target.closest('button[data-report]');
+  if (!btn) return;
+  const reportId = btn.dataset.report;
+  const employeeId = btn.dataset.employee;
+  const reportDate = btn.dataset.date;
+  let report = reportsCache.find((r) => r.id === reportId);
+  if (!report && employeeId && reportDate) {
+    try {
+      const query = new URLSearchParams({ employeeId, from: reportDate, to: reportDate }).toString();
+      const data = await api(`/api/reports?${query}`);
+      report = (data.reports || [])[0];
+      if (report) {
+        reportsCache = data.reports || [];
+        updateReportMap(reportsCache);
+      }
+    } catch (err) {
+      alert('Unable to load report.');
+      return;
+    }
+  }
+  if (!report) {
+    alert('No report found for this date.');
+    return;
+  }
+  openReportPrint(report);
+}
+
 function openAdminRegister() {
   adminRegisterModal.classList.remove('hidden');
 }
