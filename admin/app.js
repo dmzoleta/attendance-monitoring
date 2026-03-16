@@ -738,6 +738,18 @@ tabButtons.forEach((btn) => {
       const to = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
       loadAttendanceHistory(from, to);
     }
+    if (btn.dataset.view === 'reports-view') {
+      const today = new Date();
+      const from = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`;
+      const to = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+      if (reportsFrom) reportsFrom.value = from;
+      if (reportsTo) reportsTo.value = to;
+      loadReportsTable(from, to);
+      if (dtrMonth && !dtrMonth.value) {
+        dtrMonth.value = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+      }
+      populateDtrEmployees();
+    }
   });
 });
 
