@@ -136,6 +136,7 @@
                   <th>Time Out (PM)</th>
                   <th>Status</th>
                   <th>Photo</th>
+                  <th>Report</th>
                   <th>Location</th>
                 </tr>
               </thead>
@@ -191,6 +192,7 @@
                   <th>Time Out (PM)</th>
                   <th>Status</th>
                   <th>Photo</th>
+                  <th>Report</th>
                   <th>Location</th>
                 </tr>
               </thead>
@@ -234,6 +236,54 @@
               <button class="green-btn" id="download-report">Download PDF</button>
             </div>
             <div id="report-preview" class="report-preview"></div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <h3>Employee Daily Reports</h3>
+              <button class="ghost-btn" id="refresh-reports">Refresh</button>
+            </div>
+            <div class="filters">
+              <input type="date" id="reports-from" />
+              <input type="date" id="reports-to" />
+              <button class="ghost-btn" id="filter-reports">Apply</button>
+            </div>
+            <table class="data-table" id="reports-table">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Employee</th>
+                  <th>Office</th>
+                  <th>Summary</th>
+                  <th>Attachment</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <h3>Print DTR (Daily Time Record)</h3>
+            </div>
+            <div class="form-grid">
+              <label>
+                Select Employee
+                <select id="dtr-employee">
+                  <option value="" disabled selected>Select Employee</option>
+                </select>
+              </label>
+              <label>
+                Select Month
+                <input type="month" id="dtr-month" />
+              </label>
+            </div>
+            <div class="report-actions">
+              <button class="primary-btn" id="generate-dtr">Generate DTR</button>
+              <button class="green-btn" id="print-dtr">Print DTR</button>
+            </div>
+            <div id="dtr-preview" class="report-preview"></div>
           </div>
         </section>
       </main>
