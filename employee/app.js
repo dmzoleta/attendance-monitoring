@@ -144,6 +144,7 @@ function tickClock() {
   const now = new Date();
   empTime.textContent = formatTime(now);
   empDate.textContent = formatDate(now);
+  if (reportDateLabel) reportDateLabel.textContent = `Date: ${formatDate(now)}`;
 }
 
 function setView(viewId) {
