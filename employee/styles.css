@@ -383,6 +383,36 @@ body {
   padding: 12px;
 }
 
+.report-card .report-attachment {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.report-card .report-attachment input[type="file"] {
+  display: none;
+}
+
+.report-card #report-file-name {
+  font-size: 12px;
+}
+
+.report-preview {
+  margin-top: 10px;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px dashed #c8d6f2;
+  background: #f6f9ff;
+}
+
+.report-preview img {
+  width: 100%;
+  height: 160px;
+  object-fit: cover;
+  display: block;
+}
+
 .danger-btn {
   width: 100%;
   border: none;
