@@ -763,6 +763,10 @@ document.getElementById('refresh-attendance').addEventListener('click', () => {
 
 document.getElementById('refresh-employees').addEventListener('click', loadEmployees);
 
+attendanceTable.addEventListener('click', handleReportPrintClick);
+attendanceHistory.addEventListener('click', handleReportPrintClick);
+reportsTable.addEventListener('click', handleReportPrintClick);
+
 document.getElementById('filter-attendance').addEventListener('click', () => {
   const from = document.getElementById('attendance-from').value;
   const to = document.getElementById('attendance-to').value;
