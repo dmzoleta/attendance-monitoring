@@ -401,12 +401,16 @@ async function markTimeIn() {
     longitude: locationLng.textContent,
     photo: photoData
   };
-  const result = await api('/api/attendance/timein', { method: 'POST', body: JSON.stringify(payload) });
-  await loadAttendance();
-  computeStats();
-  filterRecordsByMonth();
-  const slotLabel = result.slot === 'PM' ? 'Afternoon' : 'Morning';
-  alert(`Time in recorded (${slotLabel}).`);
+  try {
+    const result = await api('/api/attendance/timein', { method: 'POST', body: JSON.stringify(payload) });
+    await loadAttendance();
+    computeStats();
+    filterRecordsByMonth();
+    const slotLabel = result.slot === 'PM' ? 'Afternoon' : 'Morning';
+    alert(`Time in recorded (${slotLabel}).`);
+  } catch (err) {
+    alert(err.message || 'Time in failed.');
+  }
 }
 
 async function markTimeOut() {
@@ -421,12 +425,16 @@ async function markTimeOut() {
     longitude: locationLng.textContent,
     photo: photoData
   };
-  const result = await api('/api/attendance/timeout', { method: 'POST', body: JSON.stringify(payload) });
-  await loadAttendance();
-  computeStats();
-  filterRecordsByMonth();
-  const slotLabel = result.slot === 'PM' ? 'Afternoon' : 'Morning';
-  alert(`Time out recorded (${slotLabel}).`);
+  try {
+    const result = await api('/api/attendance/timeout', { method: 'POST', body: JSON.stringify(payload) });
+    await loadAttendance();
+    computeStats();
+    filterRecordsByMonth();
+    const slotLabel = result.slot === 'PM' ? 'Afternoon' : 'Morning';
+    alert(`Time out recorded (${slotLabel}).`);
+  } catch (err) {
+    alert(err.message || 'Time out failed.');
+  }
 }
 
 async function startEmployeeSession(user) {

@@ -393,10 +393,46 @@ function timeToMinutes(time) {
   return h * 60 + m;
 }
 
-function getSessionForTime(time) {
+const AM_IN_START = 6 * 60;
+const AM_IN_END = 11 * 60 + 59;
+const AM_OUT_START = 12 * 60;
+const AM_OUT_END = 12 * 60 + 59;
+const PM_IN_START = 13 * 60;
+const PM_IN_END = 16 * 60 + 59;
+const PM_OUT_START = 17 * 60;
+
+function classifyTimeIn(time) {
   const minutes = timeToMinutes(time);
-  if (minutes === null) return 'AM';
-  return minutes < 13 * 60 ? 'AM' : 'PM';
+  if (minutes === null) {
+    return { ok: false, message: 'Invalid time.' };
+  }
+  if (minutes >= AM_IN_START && minutes <= AM_IN_END) {
+    return { ok: true, session: 'AM' };
+  }
+  if (minutes >= PM_IN_START && minutes <= PM_IN_END) {
+    return { ok: true, session: 'PM' };
+  }
+  return {
+    ok: false,
+    message: 'Time in allowed only 6:00–11:59 AM or 1:00–4:59 PM (PH time).'
+  };
+}
+
+function classifyTimeOut(time) {
+  const minutes = timeToMinutes(time);
+  if (minutes === null) {
+    return { ok: false, message: 'Invalid time.' };
+  }
+  if (minutes >= AM_OUT_START && minutes <= AM_OUT_END) {
+    return { ok: true, session: 'AM' };
+  }
+  if (minutes >= PM_OUT_START) {
+    return { ok: true, session: 'PM' };
+  }
+  return {
+    ok: false,
+    message: 'Time out allowed only 12:00–12:59 PM or 5:00 PM onwards (PH time).'
+  };
 }
 
 function hasAnyAttendance(record) {
@@ -1330,7 +1366,11 @@ async function handleApiPg(req, res, pathname) {
     const employeeId = body.employeeId;
     const rawTime = String(body.timeIn || '').trim();
     const timeIn = useServerTime ? nowPH.time : (rawTime || nowPH.time);
-    const session = getSessionForTime(timeIn);
+    const timeWindow = classifyTimeIn(timeIn);
+    if (!timeWindow.ok) {
+      return sendJson(res, 400, { message: timeWindow.message });
+    }
+    const session = timeWindow.session;
     const photo = body.photo || '';
     const location = body.location || '';
     const latitude = body.latitude || '';
@@ -1425,7 +1465,11 @@ async function handleApiPg(req, res, pathname) {
     const employeeId = body.employeeId;
     const rawTime = String(body.timeOut || '').trim();
     const timeOut = useServerTime ? nowPH.time : (rawTime || nowPH.time);
-    const session = getSessionForTime(timeOut);
+    const timeWindow = classifyTimeOut(timeOut);
+    if (!timeWindow.ok) {
+      return sendJson(res, 400, { message: timeWindow.message });
+    }
+    const session = timeWindow.session;
     const photo = body.photo || '';
     const location = body.location || '';
     const latitude = body.latitude || '';
@@ -2030,7 +2074,11 @@ async function handleApi(req, res, pathname) {
       const employeeId = body.employeeId;
       const rawTime = String(body.timeIn || '').trim();
       const timeIn = useServerTime ? nowPH.time : (rawTime || nowPH.time);
-      const session = getSessionForTime(timeIn);
+      const timeWindow = classifyTimeIn(timeIn);
+      if (!timeWindow.ok) {
+        return sendJson(res, 400, { message: timeWindow.message });
+      }
+      const session = timeWindow.session;
       const photo = body.photo || '';
       const location = body.location || '';
       const latitude = body.latitude || '';
@@ -2125,7 +2173,11 @@ async function handleApi(req, res, pathname) {
       const employeeId = body.employeeId;
       const rawTime = String(body.timeOut || '').trim();
       const timeOut = useServerTime ? nowPH.time : (rawTime || nowPH.time);
-      const session = getSessionForTime(timeOut);
+      const timeWindow = classifyTimeOut(timeOut);
+      if (!timeWindow.ok) {
+        return sendJson(res, 400, { message: timeWindow.message });
+      }
+      const session = timeWindow.session;
       const photo = body.photo || '';
       const location = body.location || '';
       const latitude = body.latitude || '';
