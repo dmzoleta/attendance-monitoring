@@ -745,6 +745,23 @@ function pushMessage(db, data) {
   return msg;
 }
 
+function pushReport(db, data) {
+  const report = {
+    id: makeId('RPT'),
+    employeeId: data.employeeId || '',
+    employeeName: data.employeeName || '',
+    office: data.office || '',
+    reportDate: data.reportDate || isoToday(),
+    summary: data.summary || '',
+    attachmentName: data.attachmentName || '',
+    attachmentData: data.attachmentData || '',
+    createdAt: new Date().toISOString()
+  };
+  db.reports.unshift(report);
+  if (db.reports.length > 500) db.reports = db.reports.slice(0, 500);
+  return report;
+}
+
 async function insertNotificationPg(data) {
   const note = {
     id: makeId('NTF'),
