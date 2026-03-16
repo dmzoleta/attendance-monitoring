@@ -416,7 +416,7 @@ async function generateDtr() {
   const to = `${year}-${String(month).padStart(2, '0')}-${String(toDate.getDate()).padStart(2, '0')}`;
   const query = new URLSearchParams({ from, to, employeeId }).toString();
   const data = await api(`/api/attendance?${query}`);
-  const list = data.attendance || [];
+  const list = (data.attendance || []).slice().sort((a, b) => String(a.date).localeCompare(String(b.date)));
 
   dtrPreview.innerHTML = '';
   if (!list.length) {
