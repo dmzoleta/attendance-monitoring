@@ -364,6 +364,122 @@ async function loadMessages() {
   }
 }
 
+function renderReportsTable(list) {
+  reportsTable.innerHTML = '';
+  list.forEach((report) => {
+    const attachmentLabel = report.attachmentName || (report.attachmentData ? 'Attachment' : '--');
+    const row = document.createElement('tr');
+    row.innerHTML = `
+      <td>${report.reportDate || '--'}</td>
+      <td>${report.employeeName || '--'}</td>
+      <td>${report.office || '--'}</td>
+      <td class="summary-cell">${shorten(report.summary || '--')}</td>
+      <td>${attachmentLabel}</td>
+      <td>
+        <button class="table-action-btn ghost" data-report="${report.id}" data-employee="${report.employeeId}" data-date="${report.reportDate}">Print</button>
+      </td>
+    `;
+    reportsTable.appendChild(row);
+  });
+  updateReportMap(list);
+}
+
+async function loadReportsTable(from, to) {
+  const query = new URLSearchParams({ from, to }).toString();
+  const data = await api(`/api/reports?${query}`);
+  reportsCache = data.reports || [];
+  renderReportsTable(reportsCache);
+}
+
+function populateDtrEmployees() {
+  if (!dtrEmployee) return;
+  dtrEmployee.innerHTML = '<option value="" disabled selected>Select Employee</option>';
+  employeesCache.forEach((emp) => {
+    const option = document.createElement('option');
+    option.value = emp.id;
+    option.textContent = `${emp.name} (${emp.id})`;
+    dtrEmployee.appendChild(option);
+  });
+}
+
+async function generateDtr() {
+  const employeeId = dtrEmployee.value;
+  const monthValue = dtrMonth.value;
+  if (!employeeId || !monthValue) {
+    dtrPreview.textContent = 'Select an employee and month first.';
+    return;
+  }
+  const [year, month] = monthValue.split('-').map(Number);
+  const from = `${year}-${String(month).padStart(2, '0')}-01`;
+  const toDate = new Date(year, month, 0);
+  const to = `${year}-${String(month).padStart(2, '0')}-${String(toDate.getDate()).padStart(2, '0')}`;
+  const query = new URLSearchParams({ from, to, employeeId }).toString();
+  const data = await api(`/api/attendance?${query}`);
+  const list = data.attendance || [];
+
+  dtrPreview.innerHTML = '';
+  if (!list.length) {
+    dtrPreview.textContent = 'No attendance records found for this employee.';
+    return;
+  }
+
+  const table = document.createElement('table');
+  table.className = 'data-table';
+  table.innerHTML = `
+    <thead>
+      <tr>
+        <th>Date</th>
+        <th>Time In (AM)</th>
+        <th>Time Out (AM)</th>
+        <th>Time In (PM)</th>
+        <th>Time Out (PM)</th>
+        <th>Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${list.map((item) => `
+        <tr>
+          <td>${item.date}</td>
+          <td>${item.timeInAM || item.timeIn || '--'}</td>
+          <td>${item.timeOutAM || '--'}</td>
+          <td>${item.timeInPM || '--'}</td>
+          <td>${item.timeOutPM || item.timeOut || '--'}</td>
+          <td>${item.status || '--'}</td>
+        </tr>
+      `).join('')}
+    </tbody>
+  `;
+  dtrPreview.appendChild(table);
+}
+
+function printDtr() {
+  if (!dtrPreview.innerHTML.trim()) {
+    dtrPreview.textContent = 'Generate a DTR first.';
+    return;
+  }
+  const printWindow = window.open('', '', 'width=900,height=700');
+  printWindow.document.write(`
+    <html>
+      <head>
+        <title>DTR Print</title>
+        <style>
+          body { font-family: "Trebuchet MS", sans-serif; padding: 24px; }
+          h1 { color: #0d2d6a; }
+          table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+          th, td { border-bottom: 1px solid #ddd; padding: 8px; text-align: left; }
+        </style>
+      </head>
+      <body>
+        <h1>SDO Marinduque - Daily Time Record</h1>
+        ${dtrPreview.innerHTML}
+      </body>
+    </html>
+  `);
+  printWindow.document.close();
+  printWindow.focus();
+  printWindow.print();
+}
+
 function closePanels() {
   [notifPanel, msgPanel, menuPanel].forEach((panel) => {
     if (panel) panel.classList.add('hidden');
