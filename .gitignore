@@ -6,3 +6,4 @@ ios/
 .DS_Store
 npm-debug.log*
 .env
+.npm-cache/

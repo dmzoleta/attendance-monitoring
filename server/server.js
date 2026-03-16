@@ -2,6 +2,12 @@
 const fs = require('fs');
 const path = require('path');
 const url = require('url');
+const { Pool } = require('pg');
+try {
+  require('dotenv').config();
+} catch (err) {
+  // dotenv is optional; ignore if not installed
+}
 
 const DEFAULT_ROOT = path.join(__dirname, '..');
 const ROOT = fs.existsSync(path.join(DEFAULT_ROOT, 'admin')) ? DEFAULT_ROOT : process.cwd();
@@ -28,6 +34,21 @@ const DEFAULT_DB = {
   messages: []
 };
 
+const USE_PG = !!(process.env.DATABASE_URL || process.env.PGHOST || process.env.PGUSER || process.env.PGDATABASE);
+const pool = USE_PG
+  ? new Pool(
+      process.env.DATABASE_URL
+        ? { connectionString: process.env.DATABASE_URL }
+        : {
+            host: process.env.PGHOST || 'localhost',
+            port: Number(process.env.PGPORT || 5432),
+            user: process.env.PGUSER || 'sdo_user',
+            password: process.env.PGPASSWORD || 'sdo_pass',
+            database: process.env.PGDATABASE || 'sdo_attendance'
+          }
+    )
+  : null;
+
 const MIME = {
   '.html': 'text/html; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
@@ -45,6 +66,184 @@ function parseJsonSafe(raw) {
   } catch (err) {
     return { ok: false, error: err };
   }
+}
+
+async function pgQuery(text, params) {
+  if (!pool) throw new Error('PostgreSQL not configured.');
+  return pool.query(text, params);
+}
+
+async function ensureSchema() {
+  if (!USE_PG) return;
+  await pgQuery(
+    `CREATE TABLE IF NOT EXISTS admins (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      username TEXT UNIQUE NOT NULL,
+      password TEXT NOT NULL,
+      office TEXT NOT NULL
+    );`
+  );
+  await pgQuery(
+    `CREATE TABLE IF NOT EXISTS employees (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      position TEXT,
+      office TEXT,
+      email TEXT,
+      username TEXT,
+      employee_type TEXT,
+      password TEXT,
+      status TEXT,
+      avatar TEXT,
+      verified BOOLEAN DEFAULT false,
+      otp TEXT,
+      otp_expires_at BIGINT,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );`
+  );
+  await pgQuery(`CREATE INDEX IF NOT EXISTS idx_employees_email ON employees (LOWER(email));`);
+  await pgQuery(`CREATE INDEX IF NOT EXISTS idx_employees_username ON employees (LOWER(username));`);
+  await pgQuery(
+    `CREATE TABLE IF NOT EXISTS attendance (
+      id TEXT PRIMARY KEY,
+      employee_id TEXT REFERENCES employees(id) ON DELETE CASCADE,
+      date DATE NOT NULL,
+      time_in TEXT,
+      time_out TEXT,
+      time_in_am TEXT,
+      time_out_am TEXT,
+      time_in_pm TEXT,
+      time_out_pm TEXT,
+      photo_in_am TEXT,
+      photo_out_am TEXT,
+      photo_in_pm TEXT,
+      photo_out_pm TEXT,
+      location_in_am TEXT,
+      location_out_am TEXT,
+      location_in_pm TEXT,
+      location_out_pm TEXT,
+      lat_in_am TEXT,
+      lng_in_am TEXT,
+      lat_out_am TEXT,
+      lng_out_am TEXT,
+      lat_in_pm TEXT,
+      lng_in_pm TEXT,
+      lat_out_pm TEXT,
+      lng_out_pm TEXT,
+      status TEXT,
+      latitude TEXT,
+      longitude TEXT,
+      location TEXT,
+      photo TEXT,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE (employee_id, date)
+    );`
+  );
+  await pgQuery(
+    `CREATE TABLE IF NOT EXISTS notifications (
+      id TEXT PRIMARY KEY,
+      type TEXT,
+      title TEXT,
+      message TEXT,
+      employee_id TEXT,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      read BOOLEAN DEFAULT false
+    );`
+  );
+  await pgQuery(
+    `CREATE TABLE IF NOT EXISTS messages (
+      id TEXT PRIMARY KEY,
+      employee_id TEXT,
+      employee_name TEXT,
+      office TEXT,
+      subject TEXT,
+      message TEXT,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      read BOOLEAN DEFAULT false
+    );`
+  );
+  const adminCheck = await pgQuery('SELECT COUNT(*) AS count FROM admins');
+  if (Number(adminCheck.rows[0].count) === 0) {
+    const admin = DEFAULT_DB.admins[0];
+    await pgQuery(
+      'INSERT INTO admins (id, name, username, password, office) VALUES ($1, $2, $3, $4, $5)',
+      [admin.id, admin.name, admin.username, admin.password, admin.office]
+    );
+  }
+}
+
+function formatDbDate(value) {
+  if (!value) return '';
+  if (typeof value === 'string') return value.slice(0, 10);
+  return value.toISOString().slice(0, 10);
+}
+
+function mapEmployeeRow(row) {
+  return {
+    id: row.id,
+    name: row.name,
+    position: row.position || '',
+    office: row.office || '',
+    email: row.email || '',
+    username: row.username || '',
+    employeeType: row.employee_type || 'Regular',
+    password: row.password || '',
+    status: row.status || '',
+    avatar: row.avatar || '',
+    verified: row.verified === true,
+    otp: row.otp || '',
+    otpExpiresAt: row.otp_expires_at ? Number(row.otp_expires_at) : 0
+  };
+}
+
+function mapAdminRow(row) {
+  return {
+    id: row.id,
+    name: row.name,
+    username: row.username,
+    password: row.password,
+    office: row.office
+  };
+}
+
+function mapAttendanceRow(row) {
+  return {
+    id: row.id,
+    employeeId: row.employee_id,
+    date: formatDbDate(row.date),
+    timeIn: row.time_in || '',
+    timeOut: row.time_out || '',
+    timeInAM: row.time_in_am || '',
+    timeOutAM: row.time_out_am || '',
+    timeInPM: row.time_in_pm || '',
+    timeOutPM: row.time_out_pm || '',
+    photoInAM: row.photo_in_am || '',
+    photoOutAM: row.photo_out_am || '',
+    photoInPM: row.photo_in_pm || '',
+    photoOutPM: row.photo_out_pm || '',
+    locationInAM: row.location_in_am || '',
+    locationOutAM: row.location_out_am || '',
+    locationInPM: row.location_in_pm || '',
+    locationOutPM: row.location_out_pm || '',
+    latInAM: row.lat_in_am || '',
+    lngInAM: row.lng_in_am || '',
+    latOutAM: row.lat_out_am || '',
+    lngOutAM: row.lng_out_am || '',
+    latInPM: row.lat_in_pm || '',
+    lngInPM: row.lng_in_pm || '',
+    latOutPM: row.lat_out_pm || '',
+    lngOutPM: row.lng_out_pm || '',
+    status: row.status || '',
+    latitude: row.latitude || '',
+    longitude: row.longitude || '',
+    location: row.location || '',
+    photo: row.photo || '',
+    employeeName: row.employee_name || undefined,
+    office: row.office || undefined,
+    position: row.position || undefined
+  };
 }
 
 let memoryDb = null;
@@ -232,6 +431,114 @@ function getGoogleMapsKey() {
   return process.env.GOOGLE_MAPS_KEY || process.env.GMAPS_KEY || '';
 }
 
+function canSeed() {
+  return String(process.env.ALLOW_SEED || '').toLowerCase() === 'true';
+}
+
+function getSeedEmployees() {
+  return [
+    {
+      id: 'SDO-001',
+      name: 'Juan Dela Cruz',
+      position: 'IT Officer',
+      office: 'ICT Unit',
+      email: 'juan.delacruz@example.com',
+      username: 'juan.delacruz@example.com',
+      employeeType: 'Regular',
+      password: 'password123',
+      status: 'Active',
+      avatar: 'assets/avatar-generic.svg',
+      verified: true,
+      otp: '',
+      otpExpiresAt: 0
+    },
+    {
+      id: 'SDO-002',
+      name: 'Joji Ama',
+      position: 'Registrar',
+      office: 'Records Unit',
+      email: 'joji.ama@example.com',
+      username: 'joji.ama@example.com',
+      employeeType: 'COS',
+      password: 'password123',
+      status: 'Active',
+      avatar: 'assets/avatar-generic.svg',
+      verified: true,
+      otp: '',
+      otpExpiresAt: 0
+    }
+  ];
+}
+
+function getSeedAttendance(date) {
+  return [
+    {
+      id: `ATT-${date}-SDO-001`,
+      employeeId: 'SDO-001',
+      date,
+      timeIn: '08:05',
+      timeOut: '17:02',
+      timeInAM: '08:05',
+      timeOutAM: '12:01',
+      timeInPM: '13:02',
+      timeOutPM: '17:02',
+      photoInAM: '',
+      photoOutAM: '',
+      photoInPM: '',
+      photoOutPM: '',
+      locationInAM: '',
+      locationOutAM: '',
+      locationInPM: '',
+      locationOutPM: '',
+      latInAM: '',
+      lngInAM: '',
+      latOutAM: '',
+      lngOutAM: '',
+      latInPM: '',
+      lngInPM: '',
+      latOutPM: '',
+      lngOutPM: '',
+      status: 'Late',
+      latitude: '',
+      longitude: '',
+      location: '',
+      photo: ''
+    },
+    {
+      id: `ATT-${date}-SDO-002`,
+      employeeId: 'SDO-002',
+      date,
+      timeIn: '07:55',
+      timeOut: '17:00',
+      timeInAM: '07:55',
+      timeOutAM: '12:00',
+      timeInPM: '13:00',
+      timeOutPM: '17:00',
+      photoInAM: '',
+      photoOutAM: '',
+      photoInPM: '',
+      photoOutPM: '',
+      locationInAM: '',
+      locationOutAM: '',
+      locationInPM: '',
+      locationOutPM: '',
+      latInAM: '',
+      lngInAM: '',
+      latOutAM: '',
+      lngOutAM: '',
+      latInPM: '',
+      lngInPM: '',
+      latOutPM: '',
+      lngOutPM: '',
+      status: 'Present',
+      latitude: '',
+      longitude: '',
+      location: '',
+      photo: ''
+    }
+  ];
+}
+
 async function sendOtpEmail(to, code) {
   const config = getBrevoConfig();
   if (!config) {
@@ -334,18 +641,201 @@ function pushMessage(db, data) {
   return msg;
 }
 
-async function handleApi(req, res, pathname) {
-  setCors(res);
-  if (req.method === 'OPTIONS') {
-    res.writeHead(204);
-    return res.end();
+async function insertNotificationPg(data) {
+  const note = {
+    id: makeId('NTF'),
+    type: data.type || 'info',
+    title: data.title || 'Notification',
+    message: data.message || '',
+    employeeId: data.employeeId || '',
+    createdAt: new Date().toISOString(),
+    read: false
+  };
+  await pgQuery(
+    'INSERT INTO notifications (id, type, title, message, employee_id, created_at, read) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+    [note.id, note.type, note.title, note.message, note.employeeId, note.createdAt, note.read]
+  );
+  return note;
+}
+
+async function insertMessagePg(data) {
+  const msg = {
+    id: makeId('MSG'),
+    employeeId: data.employeeId || '',
+    employeeName: data.employeeName || 'Unknown',
+    office: data.office || '',
+    subject: data.subject || 'Concern',
+    message: data.message || '',
+    createdAt: new Date().toISOString(),
+    read: false
+  };
+  await pgQuery(
+    'INSERT INTO messages (id, employee_id, employee_name, office, subject, message, created_at, read) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
+    [msg.id, msg.employeeId, msg.employeeName, msg.office, msg.subject, msg.message, msg.createdAt, msg.read]
+  );
+  return msg;
+}
+
+async function upsertAttendancePg(record) {
+  const cols = [
+    'id',
+    'employee_id',
+    'date',
+    'time_in',
+    'time_out',
+    'time_in_am',
+    'time_out_am',
+    'time_in_pm',
+    'time_out_pm',
+    'photo_in_am',
+    'photo_out_am',
+    'photo_in_pm',
+    'photo_out_pm',
+    'location_in_am',
+    'location_out_am',
+    'location_in_pm',
+    'location_out_pm',
+    'lat_in_am',
+    'lng_in_am',
+    'lat_out_am',
+    'lng_out_am',
+    'lat_in_pm',
+    'lng_in_pm',
+    'lat_out_pm',
+    'lng_out_pm',
+    'status',
+    'latitude',
+    'longitude',
+    'location',
+    'photo',
+    'updated_at'
+  ];
+  const values = [
+    record.id,
+    record.employeeId,
+    record.date,
+    record.timeIn,
+    record.timeOut,
+    record.timeInAM,
+    record.timeOutAM,
+    record.timeInPM,
+    record.timeOutPM,
+    record.photoInAM,
+    record.photoOutAM,
+    record.photoInPM,
+    record.photoOutPM,
+    record.locationInAM,
+    record.locationOutAM,
+    record.locationInPM,
+    record.locationOutPM,
+    record.latInAM,
+    record.lngInAM,
+    record.latOutAM,
+    record.lngOutAM,
+    record.latInPM,
+    record.lngInPM,
+    record.latOutPM,
+    record.lngOutPM,
+    record.status,
+    record.latitude,
+    record.longitude,
+    record.location,
+    record.photo,
+    new Date().toISOString()
+  ];
+  const placeholders = values.map((_, idx) => `$${idx + 1}`).join(', ');
+  const updates = cols
+    .filter((col) => !['id', 'employee_id', 'date'].includes(col))
+    .map((col) => `${col} = EXCLUDED.${col}`)
+    .join(', ');
+  await pgQuery(
+    `INSERT INTO attendance (${cols.join(', ')}) VALUES (${placeholders})
+     ON CONFLICT (employee_id, date) DO UPDATE SET ${updates}`,
+    values
+  );
+}
+
+async function handleApiPg(req, res, pathname) {
+  if (req.method === 'GET' && pathname === '/api/db-health') {
+    const [admins, employees, attendance, notifications, messages] = await Promise.all([
+      pgQuery('SELECT COUNT(*) AS count FROM admins'),
+      pgQuery('SELECT COUNT(*) AS count FROM employees'),
+      pgQuery('SELECT COUNT(*) AS count FROM attendance'),
+      pgQuery('SELECT COUNT(*) AS count FROM notifications'),
+      pgQuery('SELECT COUNT(*) AS count FROM messages')
+    ]);
+    return sendJson(res, 200, {
+      ok: true,
+      mode: 'postgres',
+      counts: {
+        admins: Number(admins.rows[0].count),
+        employees: Number(employees.rows[0].count),
+        attendance: Number(attendance.rows[0].count),
+        notifications: Number(notifications.rows[0].count),
+        messages: Number(messages.rows[0].count)
+      },
+      time: Date.now()
+    });
   }
+
+  if (req.method === 'POST' && pathname === '/api/dev/seed') {
+    if (!canSeed()) {
+      return sendJson(res, 403, { ok: false, message: 'Seeding disabled. Set ALLOW_SEED=true in .env.' });
+    }
+    const existing = await pgQuery('SELECT COUNT(*) AS count FROM employees');
+    if (Number(existing.rows[0].count) > 0) {
+      return sendJson(res, 409, { ok: false, message: 'Employees already exist. Seed skipped.' });
+    }
+    const seedEmployees = getSeedEmployees();
+    for (const emp of seedEmployees) {
+      await pgQuery(
+        `INSERT INTO employees (id, name, position, office, email, username, employee_type, password, status, avatar, verified, otp, otp_expires_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+        [
+          emp.id,
+          emp.name,
+          emp.position,
+          emp.office,
+          emp.email,
+          emp.username,
+          emp.employeeType,
+          emp.password,
+          emp.status,
+          emp.avatar,
+          emp.verified,
+          emp.otp,
+          emp.otpExpiresAt
+        ]
+      );
+    }
+    const today = isoToday();
+    const seedAttendance = getSeedAttendance(today);
+    for (const record of seedAttendance) {
+      await upsertAttendancePg(record);
+    }
+    return sendJson(res, 200, { ok: true, employees: seedEmployees.length, attendance: seedAttendance.length });
+  }
+
   if (req.method === 'GET' && pathname === '/api/summary') {
-    const db = readDb();
     const query = url.parse(req.url, true).query;
     const date = String(query.date || isoToday());
-    const summary = summaryForDate(db, date);
-    return sendJson(res, 200, { date, ...summary });
+    const totalRes = await pgQuery('SELECT COUNT(*) AS count FROM employees');
+    const totalEmployees = Number(totalRes.rows[0].count);
+    const attendanceRes = await pgQuery('SELECT * FROM attendance WHERE date = $1', [date]);
+    const todays = attendanceRes.rows.map(mapAttendanceRow);
+    const attendedIds = new Set();
+    let present = 0;
+    let late = 0;
+    todays.forEach((att) => {
+      const hasAttendance = att.timeInAM || att.timeInPM || att.timeIn;
+      if (!hasAttendance) return;
+      attendedIds.add(att.employeeId);
+      const status = computeDailyStatus(att);
+      if (status === 'Late') late += 1;
+      if (status === 'Present') present += 1;
+    });
+    const absent = totalEmployees - attendedIds.size;
+    return sendJson(res, 200, { date, totalEmployees, present, late, absent });
   }
 
   if (req.method === 'GET' && pathname === '/api/health') {
@@ -353,13 +843,635 @@ async function handleApi(req, res, pathname) {
   }
 
   if (req.method === 'GET' && pathname === '/api/employees') {
-    const db = readDb();
-    return sendJson(res, 200, { employees: db.employees });
+    const result = await pgQuery('SELECT * FROM employees ORDER BY id');
+    return sendJson(res, 200, { employees: result.rows.map(mapEmployeeRow) });
   }
 
   if (req.method === 'GET' && pathname === '/api/notifications') {
+    const result = await pgQuery('SELECT * FROM notifications ORDER BY created_at DESC');
+    const notifications = result.rows.map((row) => ({
+      id: row.id,
+      type: row.type,
+      title: row.title,
+      message: row.message,
+      employeeId: row.employee_id || '',
+      createdAt: row.created_at ? new Date(row.created_at).toISOString() : '',
+      read: row.read === true
+    }));
+    return sendJson(res, 200, { notifications });
+  }
+
+  if (req.method === 'POST' && pathname === '/api/notifications/read') {
+    const body = await collectBody(req);
+    if (body && body.all) {
+      await pgQuery('UPDATE notifications SET read = true');
+    } else if (Array.isArray(body.ids) && body.ids.length) {
+      await pgQuery('UPDATE notifications SET read = true WHERE id = ANY($1::text[])', [body.ids]);
+    }
+    return sendJson(res, 200, { ok: true });
+  }
+
+  if (req.method === 'GET' && pathname === '/api/messages') {
+    const result = await pgQuery('SELECT * FROM messages ORDER BY created_at DESC');
+    const messages = result.rows.map((row) => ({
+      id: row.id,
+      employeeId: row.employee_id || '',
+      employeeName: row.employee_name || '',
+      office: row.office || '',
+      subject: row.subject || '',
+      message: row.message || '',
+      createdAt: row.created_at ? new Date(row.created_at).toISOString() : '',
+      read: row.read === true
+    }));
+    return sendJson(res, 200, { messages });
+  }
+
+  if (req.method === 'POST' && pathname === '/api/messages') {
+    const body = await collectBody(req);
+    const employeeId = String(body.employeeId || '').trim();
+    const message = String(body.message || '').trim();
+    const subject = String(body.subject || 'Concern').trim();
+    if (!employeeId || !message) {
+      return sendJson(res, 400, { ok: false, message: 'Employee and message are required.' });
+    }
+    const empRes = await pgQuery('SELECT name, office FROM employees WHERE id = $1', [employeeId]);
+    const empRow = empRes.rows[0];
+    const newMsg = await insertMessagePg({
+      employeeId,
+      employeeName: empRow ? empRow.name : String(body.employeeName || 'Unknown'),
+      office: empRow ? empRow.office : String(body.office || ''),
+      subject,
+      message
+    });
+    return sendJson(res, 201, { ok: true, message: newMsg });
+  }
+
+  if (req.method === 'POST' && pathname === '/api/messages/read') {
+    const body = await collectBody(req);
+    if (body && body.all) {
+      await pgQuery('UPDATE messages SET read = true');
+    } else if (Array.isArray(body.ids) && body.ids.length) {
+      await pgQuery('UPDATE messages SET read = true WHERE id = ANY($1::text[])', [body.ids]);
+    }
+    return sendJson(res, 200, { ok: true });
+  }
+
+  if (req.method === 'POST' && pathname === '/api/employees') {
+    const body = await collectBody(req);
+    const email = normalizeEmail(body.email || '');
+    const countRes = await pgQuery('SELECT COUNT(*) AS count FROM employees');
+    const nextId = body.id || `SDO-${String(Number(countRes.rows[0].count) + 1).padStart(3, '0')}`;
+    const newEmp = {
+      id: nextId,
+      name: body.name || 'New Employee',
+      position: body.position || 'Staff',
+      office: body.office || 'Office',
+      email,
+      username: email || body.username || '',
+      employeeType: body.employeeType || 'Regular',
+      password: body.password || 'password123',
+      status: 'Active',
+      avatar: body.avatar || 'assets/avatar-generic.png',
+      verified: true,
+      otp: '',
+      otpExpiresAt: 0
+    };
+    await pgQuery(
+      `INSERT INTO employees (id, name, position, office, email, username, employee_type, password, status, avatar, verified, otp, otp_expires_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+      [
+        newEmp.id,
+        newEmp.name,
+        newEmp.position,
+        newEmp.office,
+        newEmp.email,
+        newEmp.username,
+        newEmp.employeeType,
+        newEmp.password,
+        newEmp.status,
+        newEmp.avatar,
+        newEmp.verified,
+        newEmp.otp,
+        newEmp.otpExpiresAt
+      ]
+    );
+    return sendJson(res, 201, { employee: newEmp });
+  }
+
+  if (req.method === 'POST' && pathname === '/api/admin/register') {
+    const body = await collectBody(req);
+    const name = String(body.name || '').trim();
+    const username = String(body.username || '').trim();
+    const password = String(body.password || '').trim();
+    const office = String(body.office || '').trim();
+
+    if (!name || !username || !password || !office) {
+      return sendJson(res, 400, { ok: false, message: 'All fields are required.' });
+    }
+
+    const existing = await pgQuery('SELECT 1 FROM admins WHERE LOWER(username) = LOWER($1)', [username]);
+    if (existing.rows.length) {
+      return sendJson(res, 409, { ok: false, message: 'Username is already taken.' });
+    }
+
+    const countRes = await pgQuery('SELECT COUNT(*) AS count FROM admins');
+    const newAdmin = {
+      id: `ADM-${String(Number(countRes.rows[0].count) + 1).padStart(3, '0')}`,
+      name,
+      username,
+      password,
+      office
+    };
+    await pgQuery(
+      'INSERT INTO admins (id, name, username, password, office) VALUES ($1, $2, $3, $4, $5)',
+      [newAdmin.id, newAdmin.name, newAdmin.username, newAdmin.password, newAdmin.office]
+    );
+    return sendJson(res, 201, { ok: true, admin: newAdmin });
+  }
+
+  if (req.method === 'POST' && pathname === '/api/register') {
+    const body = await collectBody(req);
+    const name = String(body.name || '').trim();
+    const office = String(body.office || '').trim();
+    const employeeType = String(body.employeeType || '').trim();
+    const position = String(body.position || 'Staff').trim();
+    const email = normalizeEmail(body.email || '');
+    const password = String(body.password || '').trim();
+
+    if (!name || !office || !employeeType || !email || !password) {
+      return sendJson(res, 400, { ok: false, message: 'All fields are required.' });
+    }
+
+    if (employeeType === 'Regular' && !isDepedEmail(email)) {
+      return sendJson(res, 400, { ok: false, message: 'Regular employees must use a DepEd email.' });
+    }
+
+    const existingRes = await pgQuery(
+      'SELECT * FROM employees WHERE LOWER(email) = LOWER($1) OR LOWER(username) = LOWER($1)',
+      [email]
+    );
+
+    if (existingRes.rows.length) {
+      const existing = mapEmployeeRow(existingRes.rows[0]);
+      const otp = generateOtp();
+      existing.name = name;
+      existing.office = office;
+      existing.employeeType = employeeType;
+      existing.position = position || existing.position;
+      existing.email = email;
+      existing.username = email;
+      existing.password = password;
+      existing.verified = false;
+      existing.otp = otp;
+      existing.otpExpiresAt = Date.now() + 10 * 60 * 1000;
+
+      await pgQuery(
+        `UPDATE employees SET name=$1, position=$2, office=$3, email=$4, username=$5, employee_type=$6, password=$7, verified=$8, otp=$9, otp_expires_at=$10 WHERE id=$11`,
+        [
+          existing.name,
+          existing.position,
+          existing.office,
+          existing.email,
+          existing.username,
+          existing.employeeType,
+          existing.password,
+          existing.verified,
+          existing.otp,
+          existing.otpExpiresAt,
+          existing.id
+        ]
+      );
+
+      let devOtp = '';
+      let emailError = '';
+      try {
+        const mailResult = await sendOtpEmail(email, otp);
+        if (!mailResult.ok) {
+          devOtp = otp;
+          emailError = mailResult.reason || 'Brevo request failed';
+        }
+      } catch (err) {
+        devOtp = otp;
+        emailError = err.message || 'Brevo request failed';
+      }
+      return sendJson(res, 200, {
+        ok: true,
+        employee: existing,
+        devOtp,
+        emailSent: !emailError,
+        emailError,
+        message: 'Account updated. OTP sent to your email.'
+      });
+    }
+
+    const countRes = await pgQuery('SELECT COUNT(*) AS count FROM employees');
+    const nextId = `SDO-${String(Number(countRes.rows[0].count) + 1).padStart(3, '0')}`;
+    const otp = generateOtp();
+    const newEmp = {
+      id: nextId,
+      name,
+      position,
+      office,
+      email,
+      username: email,
+      employeeType,
+      password,
+      status: 'Active',
+      avatar: 'assets/avatar-generic.svg',
+      verified: false,
+      otp,
+      otpExpiresAt: Date.now() + 10 * 60 * 1000
+    };
+
+    await pgQuery(
+      `INSERT INTO employees (id, name, position, office, email, username, employee_type, password, status, avatar, verified, otp, otp_expires_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+      [
+        newEmp.id,
+        newEmp.name,
+        newEmp.position,
+        newEmp.office,
+        newEmp.email,
+        newEmp.username,
+        newEmp.employeeType,
+        newEmp.password,
+        newEmp.status,
+        newEmp.avatar,
+        newEmp.verified,
+        newEmp.otp,
+        newEmp.otpExpiresAt
+      ]
+    );
+
+    let devOtp = '';
+    let emailError = '';
+    try {
+      const mailResult = await sendOtpEmail(email, otp);
+      if (!mailResult.ok) {
+        devOtp = otp;
+        emailError = mailResult.reason || 'Brevo request failed';
+      }
+    } catch (err) {
+      devOtp = otp;
+      emailError = err.message || 'Brevo request failed';
+    }
+
+    return sendJson(res, 201, {
+      ok: true,
+      employee: newEmp,
+      devOtp,
+      emailSent: !emailError,
+      emailError
+    });
+  }
+
+  if (req.method === 'POST' && pathname === '/api/register/verify') {
+    const body = await collectBody(req);
+    const email = normalizeEmail(body.email || '');
+    const otp = String(body.otp || '').trim();
+    if (!email || !otp) {
+      return sendJson(res, 400, { ok: false, message: 'Email and OTP are required.' });
+    }
+    const employeeRes = await pgQuery('SELECT * FROM employees WHERE LOWER(email) = LOWER($1)', [email]);
+    if (!employeeRes.rows.length) return sendJson(res, 404, { ok: false, message: 'Employee not found.' });
+    const employee = mapEmployeeRow(employeeRes.rows[0]);
+    if (!employee.otp || employee.otp !== otp) {
+      return sendJson(res, 400, { ok: false, message: 'Invalid OTP.' });
+    }
+    if (employee.otpExpiresAt && Date.now() > employee.otpExpiresAt) {
+      return sendJson(res, 400, { ok: false, message: 'OTP expired. Please resend.' });
+    }
+    await pgQuery('UPDATE employees SET verified = true, otp = $1, otp_expires_at = $2 WHERE id = $3', ['', 0, employee.id]);
+    return sendJson(res, 200, { ok: true });
+  }
+
+  if (req.method === 'POST' && pathname === '/api/register/resend') {
+    const body = await collectBody(req);
+    const email = normalizeEmail(body.email || '');
+    if (!email) return sendJson(res, 400, { ok: false, message: 'Email is required.' });
+    const employeeRes = await pgQuery('SELECT * FROM employees WHERE LOWER(email) = LOWER($1)', [email]);
+    if (!employeeRes.rows.length) return sendJson(res, 404, { ok: false, message: 'Employee not found.' });
+    const employee = mapEmployeeRow(employeeRes.rows[0]);
+    const otp = generateOtp();
+    const expires = Date.now() + 10 * 60 * 1000;
+    await pgQuery('UPDATE employees SET otp = $1, otp_expires_at = $2 WHERE id = $3', [otp, expires, employee.id]);
+    let devOtp = '';
+    let emailError = '';
+    try {
+      const mailResult = await sendOtpEmail(email, otp);
+      if (!mailResult.ok) {
+        devOtp = otp;
+        emailError = mailResult.reason || 'Brevo request failed';
+      }
+    } catch (err) {
+      devOtp = otp;
+      emailError = err.message || 'Brevo request failed';
+    }
+    return sendJson(res, 200, {
+      ok: true,
+      devOtp,
+      emailSent: !emailError,
+      emailError
+    });
+  }
+
+  if (req.method === 'POST' && pathname === '/api/password-reset') {
+    const body = await collectBody(req);
+    const role = String(body.role || '').trim();
+    const username = String(body.username || '').trim();
+    const newPassword = String(body.newPassword || '').trim();
+
+    if (!role || !username || !newPassword) {
+      return sendJson(res, 400, { ok: false, message: 'All fields are required.' });
+    }
+
+    if (role === 'admin') {
+      const adminRes = await pgQuery('SELECT * FROM admins WHERE LOWER(username) = LOWER($1)', [username]);
+      if (!adminRes.rows.length) return sendJson(res, 404, { ok: false, message: 'Admin not found.' });
+      await pgQuery('UPDATE admins SET password = $1 WHERE id = $2', [newPassword, adminRes.rows[0].id]);
+      return sendJson(res, 200, { ok: true });
+    }
+
+    const lookup = username.toLowerCase();
+    const empRes = await pgQuery(
+      'SELECT * FROM employees WHERE LOWER(username) = $1 OR LOWER(email) = $1 OR LOWER(id) = $1 OR LOWER(name) = $1',
+      [lookup]
+    );
+    if (!empRes.rows.length) return sendJson(res, 404, { ok: false, message: 'Employee not found.' });
+    await pgQuery('UPDATE employees SET password = $1 WHERE id = $2', [newPassword, empRes.rows[0].id]);
+    return sendJson(res, 200, { ok: true });
+  }
+
+  if (req.method === 'POST' && pathname === '/api/login') {
+    const body = await collectBody(req);
+    const username = String(body.username || '').trim();
+    const password = String(body.password || '').trim();
+    if (!username || !password) {
+      return sendJson(res, 400, { ok: false, message: 'Missing credentials' });
+    }
+
+    const adminRes = await pgQuery('SELECT * FROM admins WHERE LOWER(username) = LOWER($1)', [username]);
+    if (adminRes.rows.length) {
+      const admin = mapAdminRow(adminRes.rows[0]);
+      if (admin.password === password) {
+        return sendJson(res, 200, { ok: true, user: admin, role: 'admin' });
+      }
+    }
+
+    const lookup = username.toLowerCase();
+    const empRes = await pgQuery(
+      'SELECT * FROM employees WHERE LOWER(username) = $1 OR LOWER(email) = $1 OR LOWER(id) = $1 OR LOWER(name) = $1',
+      [lookup]
+    );
+    if (!empRes.rows.length) {
+      return sendJson(res, 401, { ok: false, message: 'Invalid credentials' });
+    }
+    const emp = mapEmployeeRow(empRes.rows[0]);
+    if (emp.password !== password) {
+      return sendJson(res, 401, { ok: false, message: 'Invalid credentials' });
+    }
+    if (emp.verified === false) {
+      return sendJson(res, 403, { ok: false, message: 'Email not verified. Please enter the OTP sent to your email.' });
+    }
+    return sendJson(res, 200, { ok: true, user: emp, role: 'employee' });
+  }
+
+  if (req.method === 'GET' && pathname === '/api/attendance/today') {
+    const query = url.parse(req.url, true).query;
+    const date = String(query.date || isoToday());
+    const result = await pgQuery(
+      `SELECT a.*, e.name AS employee_name, e.office, e.position
+       FROM attendance a
+       LEFT JOIN employees e ON e.id = a.employee_id
+       WHERE a.date = $1
+       ORDER BY a.date DESC`,
+      [date]
+    );
+    const attendance = result.rows.map((row) => {
+      const rec = mapAttendanceRow(row);
+      rec.employeeName = row.employee_name || 'Unknown';
+      rec.office = row.office || 'Unknown';
+      rec.position = row.position || 'Unknown';
+      rec.status = computeDailyStatus(rec);
+      return rec;
+    });
+    return sendJson(res, 200, { date, attendance });
+  }
+
+  if (req.method === 'GET' && pathname === '/api/attendance') {
+    const query = url.parse(req.url, true).query;
+    const from = query.from || '1900-01-01';
+    const to = query.to || '2999-12-31';
+    const employeeId = query.employeeId;
+    const params = [from, to];
+    let sql =
+      `SELECT a.*, e.name AS employee_name, e.office, e.position
+       FROM attendance a
+       LEFT JOIN employees e ON e.id = a.employee_id
+       WHERE a.date >= $1 AND a.date <= $2`;
+    if (employeeId) {
+      sql += ' AND a.employee_id = $3';
+      params.push(employeeId);
+    }
+    sql += ' ORDER BY a.date DESC';
+    const result = await pgQuery(sql, params);
+    const attendance = result.rows.map((row) => {
+      const rec = mapAttendanceRow(row);
+      rec.employeeName = row.employee_name || 'Unknown';
+      rec.office = row.office || 'Unknown';
+      rec.position = row.position || 'Unknown';
+      rec.status = computeDailyStatus(rec);
+      return rec;
+    });
+    return sendJson(res, 200, { attendance });
+  }
+
+  if (req.method === 'POST' && pathname === '/api/attendance/timein') {
+    const body = await collectBody(req);
+    const date = body.date || isoToday();
+    const employeeId = body.employeeId;
+    const timeIn = body.timeIn;
+    const photo = body.photo || '';
+    const location = body.location || '';
+    const latitude = body.latitude || '';
+    const longitude = body.longitude || '';
+    const existingRes = await pgQuery(
+      'SELECT * FROM attendance WHERE employee_id = $1 AND date = $2',
+      [employeeId, date]
+    );
+    if (existingRes.rows.length) {
+      const existing = mapAttendanceRow(existingRes.rows[0]);
+      if (existing.timeIn && !existing.timeInAM) existing.timeInAM = existing.timeIn;
+      if (existing.timeOut && !existing.timeOutAM) existing.timeOutAM = existing.timeOut;
+      let slot = '';
+      if (!existing.timeInAM) {
+        existing.timeInAM = timeIn;
+        existing.timeIn = timeIn;
+        existing.photoInAM = photo || existing.photoInAM;
+        existing.locationInAM = location || existing.locationInAM;
+        existing.latInAM = latitude || existing.latInAM;
+        existing.lngInAM = longitude || existing.lngInAM;
+        slot = 'AM';
+      } else if (!existing.timeInPM) {
+        existing.timeInPM = timeIn;
+        existing.photoInPM = photo || existing.photoInPM;
+        existing.locationInPM = location || existing.locationInPM;
+        existing.latInPM = latitude || existing.latInPM;
+        existing.lngInPM = longitude || existing.lngInPM;
+        slot = 'PM';
+      } else {
+        return sendJson(res, 409, { message: 'Time in already recorded.' });
+      }
+      existing.photo = pickLatestValue(photo, existing.photo);
+      existing.location = pickLatestValue(location, existing.location);
+      existing.latitude = pickLatestValue(latitude, existing.latitude);
+      existing.longitude = pickLatestValue(longitude, existing.longitude);
+      existing.status = computeDailyStatus(existing);
+      await upsertAttendancePg(existing);
+      return sendJson(res, 200, { attendance: existing, slot });
+    }
+    const record = {
+      id: `ATT-${date}-${employeeId}`,
+      employeeId,
+      date,
+      timeIn,
+      timeOut: '',
+      timeInAM: timeIn,
+      timeOutAM: '',
+      timeInPM: '',
+      timeOutPM: '',
+      photoInAM: photo,
+      photoOutAM: '',
+      photoInPM: '',
+      photoOutPM: '',
+      locationInAM: location,
+      locationOutAM: '',
+      locationInPM: '',
+      locationOutPM: '',
+      latInAM: latitude,
+      lngInAM: longitude,
+      latOutAM: '',
+      lngOutAM: '',
+      latInPM: '',
+      lngInPM: '',
+      latOutPM: '',
+      lngOutPM: '',
+      status: computeDailyStatus({ timeInAM: timeIn, timeInPM: '', timeIn }),
+      latitude,
+      longitude,
+      location,
+      photo
+    };
+    await upsertAttendancePg(record);
+    const empRes = await pgQuery('SELECT name, office FROM employees WHERE id = $1', [employeeId]);
+    const empRow = empRes.rows[0];
+    await insertNotificationPg({
+      type: 'attendance',
+      employeeId,
+      title: 'New Time In',
+      message: `${empRow ? empRow.name : employeeId} (${empRow ? empRow.office : 'Office'}) timed in at ${timeIn}.`
+    });
+    return sendJson(res, 201, { attendance: record, slot: 'AM' });
+  }
+
+  if (req.method === 'POST' && pathname === '/api/attendance/timeout') {
+    const body = await collectBody(req);
+    const date = body.date || isoToday();
+    const employeeId = body.employeeId;
+    const timeOut = body.timeOut;
+    const photo = body.photo || '';
+    const location = body.location || '';
+    const latitude = body.latitude || '';
+    const longitude = body.longitude || '';
+    const existingRes = await pgQuery(
+      'SELECT * FROM attendance WHERE employee_id = $1 AND date = $2',
+      [employeeId, date]
+    );
+    if (!existingRes.rows.length) {
+      return sendJson(res, 404, { message: 'No time in yet' });
+    }
+    const existing = mapAttendanceRow(existingRes.rows[0]);
+    if (existing.timeIn && !existing.timeInAM) existing.timeInAM = existing.timeIn;
+    if (existing.timeOut && !existing.timeOutAM) existing.timeOutAM = existing.timeOut;
+    let slot = '';
+    if (!existing.timeOutAM && existing.timeInAM) {
+      existing.timeOutAM = timeOut;
+      existing.timeOut = timeOut;
+      existing.photoOutAM = photo || existing.photoOutAM;
+      existing.locationOutAM = location || existing.locationOutAM;
+      existing.latOutAM = latitude || existing.latOutAM;
+      existing.lngOutAM = longitude || existing.lngOutAM;
+      slot = 'AM';
+    } else if (existing.timeInPM && !existing.timeOutPM) {
+      existing.timeOutPM = timeOut;
+      existing.timeOut = timeOut;
+      existing.photoOutPM = photo || existing.photoOutPM;
+      existing.locationOutPM = location || existing.locationOutPM;
+      existing.latOutPM = latitude || existing.latOutPM;
+      existing.lngOutPM = longitude || existing.lngOutPM;
+      slot = 'PM';
+    } else {
+      return sendJson(res, 409, { message: 'Time out already recorded.' });
+    }
+    existing.photo = pickLatestValue(photo, existing.photo);
+    existing.location = pickLatestValue(location, existing.location);
+    existing.latitude = pickLatestValue(latitude, existing.latitude);
+    existing.longitude = pickLatestValue(longitude, existing.longitude);
+    existing.status = computeDailyStatus(existing);
+    await upsertAttendancePg(existing);
+    if (timeOut) {
+      const empRes = await pgQuery('SELECT name, office FROM employees WHERE id = $1', [employeeId]);
+      const empRow = empRes.rows[0];
+      await insertNotificationPg({
+        type: 'attendance',
+        employeeId,
+        title: 'New Time Out',
+        message: `${empRow ? empRow.name : employeeId} (${empRow ? empRow.office : 'Office'}) timed out at ${timeOut}.`
+      });
+    }
+    return sendJson(res, 200, { attendance: existing, slot });
+  }
+
+  return sendJson(res, 404, { message: 'Not found' });
+}
+
+async function handleApi(req, res, pathname) {
+  setCors(res);
+  if (req.method === 'OPTIONS') {
+    res.writeHead(204);
+    return res.end();
+  }
+  if (req.method === 'GET' && pathname === '/api/db-health') {
     const db = readDb();
-    return sendJson(res, 200, { notifications: db.notifications || [] });
+    return sendJson(res, 200, {
+      ok: true,
+      mode: 'json',
+      counts: {
+        admins: db.admins.length,
+        employees: db.employees.length,
+        attendance: db.attendance.length,
+        notifications: (db.notifications || []).length,
+        messages: (db.messages || []).length
+      },
+      time: Date.now()
+    });
+  }
+
+  if (req.method === 'POST' && pathname === '/api/dev/seed') {
+    if (!canSeed()) {
+      return sendJson(res, 403, { ok: false, message: 'Seeding disabled. Set ALLOW_SEED=true in .env.' });
+    }
+    const db = readDb();
+    if (db.employees.length > 0) {
+      return sendJson(res, 409, { ok: false, message: 'Employees already exist. Seed skipped.' });
+    }
+    const seedEmployees = getSeedEmployees();
+    const today = isoToday();
+    const seedAttendance = getSeedAttendance(today);
+    db.employees.push(...seedEmployees);
+    db.attendance.push(...seedAttendance);
+    writeDb(db);
+    return sendJson(res, 200, { ok: true, employees: seedEmployees.length, attendance: seedAttendance.length });
   }
 
   if (req.method === 'GET' && pathname === '/api/reverse-geocode') {
@@ -439,6 +1551,32 @@ async function handleApi(req, res, pathname) {
       res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' });
       return res.end('Map error.');
     }
+  }
+
+  if (USE_PG) {
+    return handleApiPg(req, res, pathname);
+  }
+
+  if (req.method === 'GET' && pathname === '/api/summary') {
+    const db = readDb();
+    const query = url.parse(req.url, true).query;
+    const date = String(query.date || isoToday());
+    const summary = summaryForDate(db, date);
+    return sendJson(res, 200, { date, ...summary });
+  }
+
+  if (req.method === 'GET' && pathname === '/api/health') {
+    return sendJson(res, 200, { ok: true, time: Date.now() });
+  }
+
+  if (req.method === 'GET' && pathname === '/api/employees') {
+    const db = readDb();
+    return sendJson(res, 200, { employees: db.employees });
+  }
+
+  if (req.method === 'GET' && pathname === '/api/notifications') {
+    const db = readDb();
+    return sendJson(res, 200, { notifications: db.notifications || [] });
   }
 
   if (req.method === 'POST' && pathname === '/api/notifications/read') {
@@ -968,6 +2106,13 @@ const server = http.createServer((req, res) => {
 });
 
 const PORT = process.env.PORT || 5173;
-server.listen(PORT, '0.0.0.0', () => {
-  console.log(`Server running on http://localhost:${PORT}`);
-});
+(async () => {
+  try {
+    await ensureSchema();
+  } catch (err) {
+    console.error('Database initialization failed:', err.message || err);
+  }
+  server.listen(PORT, '0.0.0.0', () => {
+    console.log(`Server running on http://localhost:${PORT}`);
+  });
+})();

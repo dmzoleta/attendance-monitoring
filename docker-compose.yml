@@ -1,0 +1,17 @@
+version: "3.9"
+services:
+  postgres:
+    image: postgres:16
+    container_name: sdo-postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: sdo_user
+      POSTGRES_PASSWORD: sdo_pass
+      POSTGRES_DB: sdo_attendance
+    volumes:
+      - sdo_pgdata:/var/lib/postgresql/data
+
+volumes:
+  sdo_pgdata:
