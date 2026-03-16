@@ -14,6 +14,16 @@ const currentDate = document.getElementById('current-date');
 const attendanceTable = document.getElementById('attendance-table').querySelector('tbody');
 const employeesTable = document.getElementById('employees-table').querySelector('tbody');
 const attendanceHistory = document.getElementById('attendance-history').querySelector('tbody');
+const reportsTable = document.getElementById('reports-table').querySelector('tbody');
+const reportsFrom = document.getElementById('reports-from');
+const reportsTo = document.getElementById('reports-to');
+const filterReportsBtn = document.getElementById('filter-reports');
+const refreshReportsBtn = document.getElementById('refresh-reports');
+const dtrEmployee = document.getElementById('dtr-employee');
+const dtrMonth = document.getElementById('dtr-month');
+const generateDtrBtn = document.getElementById('generate-dtr');
+const printDtrBtn = document.getElementById('print-dtr');
+const dtrPreview = document.getElementById('dtr-preview');
 
 const addEmployeeModal = document.getElementById('add-employee-modal');
 const addEmployeeForm = document.getElementById('add-employee-form');
@@ -46,6 +56,8 @@ let employeesCache = [];
 let attendanceCache = [];
 let notificationsCache = [];
 let messagesCache = [];
+let reportsCache = [];
+let reportMap = new Map();
 let refreshTimer = null;
 
 function formatDate(date) {
