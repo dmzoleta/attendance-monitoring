@@ -1441,39 +1441,6 @@ async function handleApi(req, res, pathname) {
     res.writeHead(204);
     return res.end();
   }
-  if (req.method === 'GET' && pathname === '/api/db-health') {
-    const db = readDb();
-    return sendJson(res, 200, {
-      ok: true,
-      mode: 'json',
-      counts: {
-        admins: db.admins.length,
-        employees: db.employees.length,
-        attendance: db.attendance.length,
-        notifications: (db.notifications || []).length,
-        messages: (db.messages || []).length
-      },
-      time: Date.now()
-    });
-  }
-
-  if (req.method === 'POST' && pathname === '/api/dev/seed') {
-    if (!canSeed()) {
-      return sendJson(res, 403, { ok: false, message: 'Seeding disabled. Set ALLOW_SEED=true in .env.' });
-    }
-    const db = readDb();
-    if (db.employees.length > 0) {
-      return sendJson(res, 409, { ok: false, message: 'Employees already exist. Seed skipped.' });
-    }
-    const seedEmployees = getSeedEmployees();
-    const today = isoToday();
-    const seedAttendance = getSeedAttendance(today);
-    db.employees.push(...seedEmployees);
-    db.attendance.push(...seedAttendance);
-    writeDb(db);
-    return sendJson(res, 200, { ok: true, employees: seedEmployees.length, attendance: seedAttendance.length });
-  }
-
   if (req.method === 'GET' && pathname === '/api/reverse-geocode') {
     const query = url.parse(req.url, true).query;
     const lat = parseFloat(query.lat);
@@ -1555,6 +1522,39 @@ async function handleApi(req, res, pathname) {
 
   if (USE_PG) {
     return handleApiPg(req, res, pathname);
+  }
+
+  if (req.method === 'GET' && pathname === '/api/db-health') {
+    const db = readDb();
+    return sendJson(res, 200, {
+      ok: true,
+      mode: 'json',
+      counts: {
+        admins: db.admins.length,
+        employees: db.employees.length,
+        attendance: db.attendance.length,
+        notifications: (db.notifications || []).length,
+        messages: (db.messages || []).length
+      },
+      time: Date.now()
+    });
+  }
+
+  if (req.method === 'POST' && pathname === '/api/dev/seed') {
+    if (!canSeed()) {
+      return sendJson(res, 403, { ok: false, message: 'Seeding disabled. Set ALLOW_SEED=true in .env.' });
+    }
+    const db = readDb();
+    if (db.employees.length > 0) {
+      return sendJson(res, 409, { ok: false, message: 'Employees already exist. Seed skipped.' });
+    }
+    const seedEmployees = getSeedEmployees();
+    const today = isoToday();
+    const seedAttendance = getSeedAttendance(today);
+    db.employees.push(...seedEmployees);
+    db.attendance.push(...seedAttendance);
+    writeDb(db);
+    return sendJson(res, 200, { ok: true, employees: seedEmployees.length, attendance: seedAttendance.length });
   }
 
   if (req.method === 'GET' && pathname === '/api/summary') {
