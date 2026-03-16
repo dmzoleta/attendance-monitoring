@@ -269,11 +269,17 @@ function renderEmployees(list) {
 
 async function loadAttendanceHistory(from, to) {
   const query = new URLSearchParams({ from, to }).toString();
-  const data = await api(`/api/attendance?${query}`);
+  const [data, reportData] = await Promise.all([
+    api(`/api/attendance?${query}`),
+    api(`/api/reports?${query}`)
+  ]);
+  reportsCache = reportData.reports || [];
+  updateReportMap(reportsCache);
   attendanceHistory.innerHTML = '';
   data.attendance.forEach((item) => {
     const photo = pickPhoto(item);
     const location = pickLocation(item);
+    const report = reportMap.get(buildReportKey(item.employeeId, item.date));
     const row = document.createElement('tr');
     row.innerHTML = `
       <td>${item.date}</td>
@@ -285,6 +291,9 @@ async function loadAttendanceHistory(from, to) {
       <td>${item.timeOutPM || item.timeOut || '--'}</td>
       <td class="status-cell">${item.status || '--'}</td>
       <td>${photo ? `<img class="table-photo" src="${photo}" alt="Photo" />` : '--'}</td>
+      <td>
+        ${report ? `<button class="table-action-btn" data-report="${report.id}" data-employee="${item.employeeId}" data-date="${item.date}">Print Report</button>` : '--'}
+      </td>
       <td class="table-location">${location || '--'}</td>
     `;
     setStatusCell(row.querySelector('.status-cell'), item.status || '');
