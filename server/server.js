@@ -1901,6 +1901,56 @@ async function handleApi(req, res, pathname) {
     });
   }
 
+  if (req.method === 'GET' && pathname === '/api/reports') {
+    const db = readDb();
+    const query = url.parse(req.url, true).query;
+    const from = query.from || '1900-01-01';
+    const to = query.to || '2999-12-31';
+    const employeeId = query.employeeId;
+    let list = db.reports || [];
+    list = list.filter((r) => r.reportDate >= from && r.reportDate <= to);
+    if (employeeId) list = list.filter((r) => r.employeeId === employeeId);
+    list.sort((a, b) => {
+      if (a.reportDate === b.reportDate) {
+        return String(b.createdAt || '').localeCompare(String(a.createdAt || ''));
+      }
+      return String(b.reportDate).localeCompare(String(a.reportDate));
+    });
+    return sendJson(res, 200, { reports: list });
+  }
+
+  if (req.method === 'POST' && pathname === '/api/reports') {
+    return collectBody(req).then((body) => {
+      const db = readDb();
+      const employeeId = String(body.employeeId || '').trim();
+      const summary = String(body.summary || '').trim();
+      const reportDate = String(body.reportDate || body.date || isoToday());
+      const attachmentData = String(body.attachment || body.attachmentData || '');
+      const attachmentName = String(body.attachmentName || '');
+      if (!employeeId || !summary) {
+        return sendJson(res, 400, { ok: false, message: 'Employee and summary are required.' });
+      }
+      const emp = db.employees.find((e) => e.id === employeeId);
+      const report = pushReport(db, {
+        employeeId,
+        employeeName: emp ? emp.name : String(body.employeeName || 'Unknown'),
+        office: emp ? emp.office : String(body.office || ''),
+        reportDate,
+        summary,
+        attachmentName,
+        attachmentData
+      });
+      pushNotification(db, {
+        type: 'report',
+        title: 'New Daily Report',
+        message: `${report.employeeName || 'Employee'} submitted a report for ${reportDate}.`,
+        employeeId
+      });
+      writeDb(db);
+      return sendJson(res, 201, { ok: true, report });
+    });
+  }
+
   if (req.method === 'POST' && pathname === '/api/employees') {
     return collectBody(req).then((body) => {
       const db = readDb();
