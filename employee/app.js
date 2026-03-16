@@ -785,6 +785,32 @@ photoInput.addEventListener('change', (event) => {
   reader.readAsDataURL(file);
 });
 
+if (reportFileInput) {
+  reportFileInput.addEventListener('change', (event) => {
+    const file = event.target.files[0];
+    if (!file) {
+      reportAttachmentData = '';
+      reportAttachmentName = '';
+      if (reportFileName) reportFileName.textContent = 'No file selected';
+      if (reportPreviewBox) reportPreviewBox.classList.add('hidden');
+      return;
+    }
+    reportAttachmentName = file.name;
+    if (reportFileName) reportFileName.textContent = file.name;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      reportAttachmentData = e.target.result;
+      if (file.type && file.type.startsWith('image/')) {
+        if (reportPreviewImg) reportPreviewImg.src = reportAttachmentData;
+        if (reportPreviewBox) reportPreviewBox.classList.remove('hidden');
+      } else if (reportPreviewBox) {
+        reportPreviewBox.classList.add('hidden');
+      }
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
 toggleButtons.forEach((btn) => {
   btn.addEventListener('click', () => {
     const input = btn.parentElement.querySelector('input');
