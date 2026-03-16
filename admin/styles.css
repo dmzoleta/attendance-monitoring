@@ -408,6 +408,29 @@ body {
   color: #3a4b70;
 }
 
+.table-action-btn {
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: none;
+  background: #1f4bb8;
+  color: #fff;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.table-action-btn.ghost {
+  background: #eef2ff;
+  color: #1f4bb8;
+  border: 1px solid #cdd7f5;
+}
+
+.summary-cell {
+  max-width: 260px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .search-row {
   display: flex;
   gap: 12px;
