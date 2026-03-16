@@ -368,10 +368,49 @@ function isoToday() {
   return `${y}-${m}-${d}`;
 }
 
+function getPhilippineNow() {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Manila',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  }).formatToParts(new Date());
+  const map = {};
+  parts.forEach((p) => {
+    if (p.type !== 'literal') map[p.type] = p.value;
+  });
+  const date = `${map.year}-${map.month}-${map.day}`;
+  const time = `${map.hour}:${map.minute}`;
+  return { date, time };
+}
+
 function timeToMinutes(time) {
   if (!time) return null;
   const [h, m] = time.split(':').map(Number);
   return h * 60 + m;
+}
+
+function getSessionForTime(time) {
+  const minutes = timeToMinutes(time);
+  if (minutes === null) return 'AM';
+  return minutes < 13 * 60 ? 'AM' : 'PM';
+}
+
+function hasAnyAttendance(record) {
+  return Boolean(
+    record &&
+    (
+      record.timeInAM ||
+      record.timeOutAM ||
+      record.timeInPM ||
+      record.timeOutPM ||
+      record.timeIn ||
+      record.timeOut
+    )
+  );
 }
 
 function computeStatus(timeIn) {
@@ -381,10 +420,9 @@ function computeStatus(timeIn) {
 }
 
 function computeDailyStatus(record) {
-  if (!record) return 'Absent';
+  if (!hasAnyAttendance(record)) return 'Absent';
   const amIn = record.timeInAM || record.timeIn || '';
   const pmIn = record.timeInPM || '';
-  if (!amIn && !pmIn) return 'Absent';
   let late = false;
   if (amIn && timeToMinutes(amIn) > 8 * 60) late = true;
   if (pmIn && timeToMinutes(pmIn) > 13 * 60) late = true;
@@ -595,8 +633,7 @@ function summaryForDate(db, date) {
   let present = 0;
   let late = 0;
   todays.forEach((att) => {
-    const hasAttendance = (att.timeInAM || att.timeInPM || att.timeIn);
-    if (!hasAttendance) return;
+    if (!hasAnyAttendance(att)) return;
     attendedIds.add(att.employeeId);
     const status = computeDailyStatus(att);
     if (status === 'Late') late += 1;
@@ -827,8 +864,7 @@ async function handleApiPg(req, res, pathname) {
     let present = 0;
     let late = 0;
     todays.forEach((att) => {
-      const hasAttendance = att.timeInAM || att.timeInPM || att.timeIn;
-      if (!hasAttendance) return;
+      if (!hasAnyAttendance(att)) return;
       attendedIds.add(att.employeeId);
       const status = computeDailyStatus(att);
       if (status === 'Late') late += 1;
@@ -1288,9 +1324,13 @@ async function handleApiPg(req, res, pathname) {
 
   if (req.method === 'POST' && pathname === '/api/attendance/timein') {
     const body = await collectBody(req);
-    const date = body.date || isoToday();
+    const nowPH = getPhilippineNow();
+    const useServerTime = body.useServerTime !== false;
+    const date = useServerTime ? nowPH.date : (body.date || nowPH.date);
     const employeeId = body.employeeId;
-    const timeIn = body.timeIn;
+    const rawTime = String(body.timeIn || '').trim();
+    const timeIn = useServerTime ? nowPH.time : (rawTime || nowPH.time);
+    const session = getSessionForTime(timeIn);
     const photo = body.photo || '';
     const location = body.location || '';
     const latitude = body.latitude || '';
@@ -1303,32 +1343,29 @@ async function handleApiPg(req, res, pathname) {
       const existing = mapAttendanceRow(existingRes.rows[0]);
       if (existing.timeIn && !existing.timeInAM) existing.timeInAM = existing.timeIn;
       if (existing.timeOut && !existing.timeOutAM) existing.timeOutAM = existing.timeOut;
-      let slot = '';
-      if (!existing.timeInAM) {
+      if (session === 'AM') {
+        if (existing.timeInAM) return sendJson(res, 409, { message: 'Time in already recorded.' });
         existing.timeInAM = timeIn;
-        existing.timeIn = timeIn;
         existing.photoInAM = photo || existing.photoInAM;
         existing.locationInAM = location || existing.locationInAM;
         existing.latInAM = latitude || existing.latInAM;
         existing.lngInAM = longitude || existing.lngInAM;
-        slot = 'AM';
-      } else if (!existing.timeInPM) {
+      } else {
+        if (existing.timeInPM) return sendJson(res, 409, { message: 'Time in already recorded.' });
         existing.timeInPM = timeIn;
         existing.photoInPM = photo || existing.photoInPM;
         existing.locationInPM = location || existing.locationInPM;
         existing.latInPM = latitude || existing.latInPM;
         existing.lngInPM = longitude || existing.lngInPM;
-        slot = 'PM';
-      } else {
-        return sendJson(res, 409, { message: 'Time in already recorded.' });
       }
+      if (!existing.timeIn) existing.timeIn = timeIn;
       existing.photo = pickLatestValue(photo, existing.photo);
       existing.location = pickLatestValue(location, existing.location);
       existing.latitude = pickLatestValue(latitude, existing.latitude);
       existing.longitude = pickLatestValue(longitude, existing.longitude);
       existing.status = computeDailyStatus(existing);
       await upsertAttendancePg(existing);
-      return sendJson(res, 200, { attendance: existing, slot });
+      return sendJson(res, 200, { attendance: existing, slot: session });
     }
     const record = {
       id: `ATT-${date}-${employeeId}`,
@@ -1336,27 +1373,33 @@ async function handleApiPg(req, res, pathname) {
       date,
       timeIn,
       timeOut: '',
-      timeInAM: timeIn,
+      timeInAM: session === 'AM' ? timeIn : '',
       timeOutAM: '',
-      timeInPM: '',
+      timeInPM: session === 'PM' ? timeIn : '',
       timeOutPM: '',
-      photoInAM: photo,
+      photoInAM: session === 'AM' ? photo : '',
       photoOutAM: '',
-      photoInPM: '',
+      photoInPM: session === 'PM' ? photo : '',
       photoOutPM: '',
-      locationInAM: location,
+      locationInAM: session === 'AM' ? location : '',
       locationOutAM: '',
-      locationInPM: '',
+      locationInPM: session === 'PM' ? location : '',
       locationOutPM: '',
-      latInAM: latitude,
-      lngInAM: longitude,
+      latInAM: session === 'AM' ? latitude : '',
+      lngInAM: session === 'AM' ? longitude : '',
       latOutAM: '',
       lngOutAM: '',
-      latInPM: '',
-      lngInPM: '',
+      latInPM: session === 'PM' ? latitude : '',
+      lngInPM: session === 'PM' ? longitude : '',
       latOutPM: '',
       lngOutPM: '',
-      status: computeDailyStatus({ timeInAM: timeIn, timeInPM: '', timeIn }),
+      status: computeDailyStatus({
+        timeInAM: session === 'AM' ? timeIn : '',
+        timeInPM: session === 'PM' ? timeIn : '',
+        timeOutAM: '',
+        timeOutPM: '',
+        timeIn
+      }),
       latitude,
       longitude,
       location,
@@ -1371,14 +1414,18 @@ async function handleApiPg(req, res, pathname) {
       title: 'New Time In',
       message: `${empRow ? empRow.name : employeeId} (${empRow ? empRow.office : 'Office'}) timed in at ${timeIn}.`
     });
-    return sendJson(res, 201, { attendance: record, slot: 'AM' });
+    return sendJson(res, 201, { attendance: record, slot: session });
   }
 
   if (req.method === 'POST' && pathname === '/api/attendance/timeout') {
     const body = await collectBody(req);
-    const date = body.date || isoToday();
+    const nowPH = getPhilippineNow();
+    const useServerTime = body.useServerTime !== false;
+    const date = useServerTime ? nowPH.date : (body.date || nowPH.date);
     const employeeId = body.employeeId;
-    const timeOut = body.timeOut;
+    const rawTime = String(body.timeOut || '').trim();
+    const timeOut = useServerTime ? nowPH.time : (rawTime || nowPH.time);
+    const session = getSessionForTime(timeOut);
     const photo = body.photo || '';
     const location = body.location || '';
     const latitude = body.latitude || '';
@@ -1388,31 +1435,76 @@ async function handleApiPg(req, res, pathname) {
       [employeeId, date]
     );
     if (!existingRes.rows.length) {
-      return sendJson(res, 404, { message: 'No time in yet' });
+      const record = {
+        id: `ATT-${date}-${employeeId}`,
+        employeeId,
+        date,
+        timeIn: '',
+        timeOut,
+        timeInAM: '',
+        timeOutAM: session === 'AM' ? timeOut : '',
+        timeInPM: '',
+        timeOutPM: session === 'PM' ? timeOut : '',
+        photoInAM: '',
+        photoOutAM: session === 'AM' ? photo : '',
+        photoInPM: '',
+        photoOutPM: session === 'PM' ? photo : '',
+        locationInAM: '',
+        locationOutAM: session === 'AM' ? location : '',
+        locationInPM: '',
+        locationOutPM: session === 'PM' ? location : '',
+        latInAM: '',
+        lngInAM: '',
+        latOutAM: session === 'AM' ? latitude : '',
+        lngOutAM: session === 'AM' ? longitude : '',
+        latInPM: '',
+        lngInPM: '',
+        latOutPM: session === 'PM' ? latitude : '',
+        lngOutPM: session === 'PM' ? longitude : '',
+        status: computeDailyStatus({
+          timeInAM: '',
+          timeOutAM: session === 'AM' ? timeOut : '',
+          timeInPM: '',
+          timeOutPM: session === 'PM' ? timeOut : '',
+          timeOut
+        }),
+        latitude,
+        longitude,
+        location,
+        photo
+      };
+      await upsertAttendancePg(record);
+      if (timeOut) {
+        const empRes = await pgQuery('SELECT name, office FROM employees WHERE id = $1', [employeeId]);
+        const empRow = empRes.rows[0];
+        await insertNotificationPg({
+          type: 'attendance',
+          employeeId,
+          title: 'New Time Out',
+          message: `${empRow ? empRow.name : employeeId} (${empRow ? empRow.office : 'Office'}) timed out at ${timeOut}.`
+        });
+      }
+      return sendJson(res, 201, { attendance: record, slot: session });
     }
     const existing = mapAttendanceRow(existingRes.rows[0]);
     if (existing.timeIn && !existing.timeInAM) existing.timeInAM = existing.timeIn;
     if (existing.timeOut && !existing.timeOutAM) existing.timeOutAM = existing.timeOut;
-    let slot = '';
-    if (!existing.timeOutAM && existing.timeInAM) {
+    if (session === 'AM') {
+      if (existing.timeOutAM) return sendJson(res, 409, { message: 'Time out already recorded.' });
       existing.timeOutAM = timeOut;
-      existing.timeOut = timeOut;
       existing.photoOutAM = photo || existing.photoOutAM;
       existing.locationOutAM = location || existing.locationOutAM;
       existing.latOutAM = latitude || existing.latOutAM;
       existing.lngOutAM = longitude || existing.lngOutAM;
-      slot = 'AM';
-    } else if (existing.timeInPM && !existing.timeOutPM) {
+    } else {
+      if (existing.timeOutPM) return sendJson(res, 409, { message: 'Time out already recorded.' });
       existing.timeOutPM = timeOut;
-      existing.timeOut = timeOut;
       existing.photoOutPM = photo || existing.photoOutPM;
       existing.locationOutPM = location || existing.locationOutPM;
       existing.latOutPM = latitude || existing.latOutPM;
       existing.lngOutPM = longitude || existing.lngOutPM;
-      slot = 'PM';
-    } else {
-      return sendJson(res, 409, { message: 'Time out already recorded.' });
     }
+    if (!existing.timeOut) existing.timeOut = timeOut;
     existing.photo = pickLatestValue(photo, existing.photo);
     existing.location = pickLatestValue(location, existing.location);
     existing.latitude = pickLatestValue(latitude, existing.latitude);
@@ -1429,7 +1521,7 @@ async function handleApiPg(req, res, pathname) {
         message: `${empRow ? empRow.name : employeeId} (${empRow ? empRow.office : 'Office'}) timed out at ${timeOut}.`
       });
     }
-    return sendJson(res, 200, { attendance: existing, slot });
+    return sendJson(res, 200, { attendance: existing, slot: session });
   }
 
   return sendJson(res, 404, { message: 'Not found' });
@@ -1932,9 +2024,13 @@ async function handleApi(req, res, pathname) {
   if (req.method === 'POST' && pathname === '/api/attendance/timein') {
     return collectBody(req).then((body) => {
       const db = readDb();
-      const date = body.date || isoToday();
+      const nowPH = getPhilippineNow();
+      const useServerTime = body.useServerTime !== false;
+      const date = useServerTime ? nowPH.date : (body.date || nowPH.date);
       const employeeId = body.employeeId;
-      const timeIn = body.timeIn;
+      const rawTime = String(body.timeIn || '').trim();
+      const timeIn = useServerTime ? nowPH.time : (rawTime || nowPH.time);
+      const session = getSessionForTime(timeIn);
       const photo = body.photo || '';
       const location = body.location || '';
       const latitude = body.latitude || '';
@@ -1943,32 +2039,29 @@ async function handleApi(req, res, pathname) {
       if (existing) {
         if (existing.timeIn && !existing.timeInAM) existing.timeInAM = existing.timeIn;
         if (existing.timeOut && !existing.timeOutAM) existing.timeOutAM = existing.timeOut;
-        let slot = '';
-        if (!existing.timeInAM) {
+        if (session === 'AM') {
+          if (existing.timeInAM) return sendJson(res, 409, { message: 'Time in already recorded.' });
           existing.timeInAM = timeIn;
-          existing.timeIn = timeIn;
           existing.photoInAM = photo || existing.photoInAM;
           existing.locationInAM = location || existing.locationInAM;
           existing.latInAM = latitude || existing.latInAM;
           existing.lngInAM = longitude || existing.lngInAM;
-          slot = 'AM';
-        } else if (!existing.timeInPM) {
+        } else {
+          if (existing.timeInPM) return sendJson(res, 409, { message: 'Time in already recorded.' });
           existing.timeInPM = timeIn;
           existing.photoInPM = photo || existing.photoInPM;
           existing.locationInPM = location || existing.locationInPM;
           existing.latInPM = latitude || existing.latInPM;
           existing.lngInPM = longitude || existing.lngInPM;
-          slot = 'PM';
-        } else {
-          return sendJson(res, 409, { message: 'Time in already recorded.' });
         }
+        if (!existing.timeIn) existing.timeIn = timeIn;
         existing.photo = pickLatestValue(photo, existing.photo);
         existing.location = pickLatestValue(location, existing.location);
         existing.latitude = pickLatestValue(latitude, existing.latitude);
         existing.longitude = pickLatestValue(longitude, existing.longitude);
         existing.status = computeDailyStatus(existing);
         writeDb(db);
-        return sendJson(res, 200, { attendance: existing, slot });
+        return sendJson(res, 200, { attendance: existing, slot: session });
       }
       const record = {
         id: `ATT-${date}-${employeeId}`,
@@ -1976,27 +2069,33 @@ async function handleApi(req, res, pathname) {
         date,
         timeIn,
         timeOut: '',
-        timeInAM: timeIn,
+        timeInAM: session === 'AM' ? timeIn : '',
         timeOutAM: '',
-        timeInPM: '',
+        timeInPM: session === 'PM' ? timeIn : '',
         timeOutPM: '',
-        photoInAM: photo,
+        photoInAM: session === 'AM' ? photo : '',
         photoOutAM: '',
-        photoInPM: '',
+        photoInPM: session === 'PM' ? photo : '',
         photoOutPM: '',
-        locationInAM: location,
+        locationInAM: session === 'AM' ? location : '',
         locationOutAM: '',
-        locationInPM: '',
+        locationInPM: session === 'PM' ? location : '',
         locationOutPM: '',
-        latInAM: latitude,
-        lngInAM: longitude,
+        latInAM: session === 'AM' ? latitude : '',
+        lngInAM: session === 'AM' ? longitude : '',
         latOutAM: '',
         lngOutAM: '',
-        latInPM: '',
-        lngInPM: '',
+        latInPM: session === 'PM' ? latitude : '',
+        lngInPM: session === 'PM' ? longitude : '',
         latOutPM: '',
         lngOutPM: '',
-        status: computeDailyStatus({ timeInAM: timeIn, timeInPM: '', timeIn }),
+        status: computeDailyStatus({
+          timeInAM: session === 'AM' ? timeIn : '',
+          timeInPM: session === 'PM' ? timeIn : '',
+          timeOutAM: '',
+          timeOutPM: '',
+          timeIn
+        }),
         latitude,
         longitude,
         location,
@@ -2013,46 +2112,97 @@ async function handleApi(req, res, pathname) {
         message: `${empName} (${office}) timed in at ${timeIn}.`
       });
       writeDb(db);
-      return sendJson(res, 201, { attendance: record, slot: 'AM' });
+      return sendJson(res, 201, { attendance: record, slot: session });
     });
   }
 
   if (req.method === 'POST' && pathname === '/api/attendance/timeout') {
     return collectBody(req).then((body) => {
       const db = readDb();
-      const date = body.date || isoToday();
+      const nowPH = getPhilippineNow();
+      const useServerTime = body.useServerTime !== false;
+      const date = useServerTime ? nowPH.date : (body.date || nowPH.date);
       const employeeId = body.employeeId;
-      const timeOut = body.timeOut;
+      const rawTime = String(body.timeOut || '').trim();
+      const timeOut = useServerTime ? nowPH.time : (rawTime || nowPH.time);
+      const session = getSessionForTime(timeOut);
       const photo = body.photo || '';
       const location = body.location || '';
       const latitude = body.latitude || '';
       const longitude = body.longitude || '';
       const existing = db.attendance.find((a) => a.employeeId === employeeId && a.date === date);
       if (!existing) {
-        return sendJson(res, 404, { message: 'No time in yet' });
+        const record = {
+          id: `ATT-${date}-${employeeId}`,
+          employeeId,
+          date,
+          timeIn: '',
+          timeOut,
+          timeInAM: '',
+          timeOutAM: session === 'AM' ? timeOut : '',
+          timeInPM: '',
+          timeOutPM: session === 'PM' ? timeOut : '',
+          photoInAM: '',
+          photoOutAM: session === 'AM' ? photo : '',
+          photoInPM: '',
+          photoOutPM: session === 'PM' ? photo : '',
+          locationInAM: '',
+          locationOutAM: session === 'AM' ? location : '',
+          locationInPM: '',
+          locationOutPM: session === 'PM' ? location : '',
+          latInAM: '',
+          lngInAM: '',
+          latOutAM: session === 'AM' ? latitude : '',
+          lngOutAM: session === 'AM' ? longitude : '',
+          latInPM: '',
+          lngInPM: '',
+          latOutPM: session === 'PM' ? latitude : '',
+          lngOutPM: session === 'PM' ? longitude : '',
+          status: computeDailyStatus({
+            timeInAM: '',
+            timeOutAM: session === 'AM' ? timeOut : '',
+            timeInPM: '',
+            timeOutPM: session === 'PM' ? timeOut : '',
+            timeOut
+          }),
+          latitude,
+          longitude,
+          location,
+          photo
+        };
+        db.attendance.push(record);
+        if (timeOut) {
+          const emp = db.employees.find((e) => e.id === employeeId);
+          const empName = emp ? emp.name : employeeId;
+          const office = emp ? emp.office : 'Office';
+          pushNotification(db, {
+            type: 'attendance',
+            employeeId,
+            title: 'New Time Out',
+            message: `${empName} (${office}) timed out at ${timeOut}.`
+          });
+        }
+        writeDb(db);
+        return sendJson(res, 201, { attendance: record, slot: session });
       }
       if (existing.timeIn && !existing.timeInAM) existing.timeInAM = existing.timeIn;
       if (existing.timeOut && !existing.timeOutAM) existing.timeOutAM = existing.timeOut;
-      let slot = '';
-      if (!existing.timeOutAM && existing.timeInAM) {
+      if (session === 'AM') {
+        if (existing.timeOutAM) return sendJson(res, 409, { message: 'Time out already recorded.' });
         existing.timeOutAM = timeOut;
-        existing.timeOut = timeOut;
         existing.photoOutAM = photo || existing.photoOutAM;
         existing.locationOutAM = location || existing.locationOutAM;
         existing.latOutAM = latitude || existing.latOutAM;
         existing.lngOutAM = longitude || existing.lngOutAM;
-        slot = 'AM';
-      } else if (existing.timeInPM && !existing.timeOutPM) {
+      } else {
+        if (existing.timeOutPM) return sendJson(res, 409, { message: 'Time out already recorded.' });
         existing.timeOutPM = timeOut;
-        existing.timeOut = timeOut;
         existing.photoOutPM = photo || existing.photoOutPM;
         existing.locationOutPM = location || existing.locationOutPM;
         existing.latOutPM = latitude || existing.latOutPM;
         existing.lngOutPM = longitude || existing.lngOutPM;
-        slot = 'PM';
-      } else {
-        return sendJson(res, 409, { message: 'Time out already recorded.' });
       }
+      if (!existing.timeOut) existing.timeOut = timeOut;
       existing.photo = pickLatestValue(photo, existing.photo);
       existing.location = pickLatestValue(location, existing.location);
       existing.latitude = pickLatestValue(latitude, existing.latitude);
@@ -2070,7 +2220,7 @@ async function handleApi(req, res, pathname) {
         });
       }
       writeDb(db);
-      return sendJson(res, 200, { attendance: existing, slot });
+      return sendJson(res, 200, { attendance: existing, slot: session });
     });
   }
 

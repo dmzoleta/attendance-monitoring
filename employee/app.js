@@ -117,7 +117,7 @@ function timeToMinutes(time) {
 }
 
 function hasAttendance(record) {
-  return !!(record.timeInAM || record.timeInPM || record.timeIn);
+  return !!(record.timeInAM || record.timeOutAM || record.timeInPM || record.timeOutPM || record.timeIn || record.timeOut);
 }
 
 function isLateMorning(record) {
@@ -395,6 +395,7 @@ async function markTimeIn() {
     employeeId: currentUser.id,
     timeIn: timeNow(),
     date: isoToday(),
+    useServerTime: true,
     location: locationName.textContent,
     latitude: locationLat.textContent,
     longitude: locationLng.textContent,
@@ -414,6 +415,7 @@ async function markTimeOut() {
     employeeId: currentUser.id,
     timeOut: timeNow(),
     date: isoToday(),
+    useServerTime: true,
     location: locationName.textContent,
     latitude: locationLat.textContent,
     longitude: locationLng.textContent,
