@@ -4,7 +4,8 @@
   "description": "This is a simple offline-friendly prototype that matches the admin and employee UI formats from your images. It includes:",
   "main": "index.js",
   "scripts": {
-    "start": "node server/server.js"
+    "start": "node server/server.js",
+    "autopush": "node scripts/auto-push.js"
   },
   "keywords": [],
   "author": "",
@@ -15,6 +16,7 @@
     "@capacitor/cli": "^8.2.0",
     "@capacitor/core": "^8.2.0",
     "@capacitor/ios": "^8.2.0",
+    "chokidar": "^3.6.0",
     "dotenv": "^16.4.7",
     "pg": "^8.13.1"
   },

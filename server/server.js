@@ -31,7 +31,8 @@ const DEFAULT_DB = {
   employees: [],
   attendance: [],
   notifications: [],
-  messages: []
+  messages: [],
+  reports: []
 };
 
 const USE_PG = !!(process.env.DATABASE_URL || process.env.PGHOST || process.env.PGUSER || process.env.PGDATABASE);
@@ -255,6 +256,7 @@ function normalizeDb(db) {
   if (!Array.isArray(safe.attendance)) safe.attendance = [];
   if (!Array.isArray(safe.notifications)) safe.notifications = [];
   if (!Array.isArray(safe.messages)) safe.messages = [];
+  if (!Array.isArray(safe.reports)) safe.reports = [];
   return safe;
 }
 
