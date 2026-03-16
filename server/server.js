@@ -262,6 +262,20 @@ function mapAttendanceRow(row) {
   };
 }
 
+function mapReportRow(row) {
+  return {
+    id: row.id,
+    employeeId: row.employee_id,
+    employeeName: row.employee_name || '',
+    office: row.office || '',
+    reportDate: formatDbDate(row.report_date),
+    summary: row.summary || '',
+    attachmentName: row.attachment_name || '',
+    attachmentData: row.attachment_data || '',
+    createdAt: row.created_at ? new Date(row.created_at).toISOString() : ''
+  };
+}
+
 let memoryDb = null;
 
 function normalizeDb(db) {
