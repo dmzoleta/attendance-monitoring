@@ -891,12 +891,13 @@ async function upsertAttendancePg(record) {
 
 async function handleApiPg(req, res, pathname) {
   if (req.method === 'GET' && pathname === '/api/db-health') {
-    const [admins, employees, attendance, notifications, messages] = await Promise.all([
+    const [admins, employees, attendance, notifications, messages, reports] = await Promise.all([
       pgQuery('SELECT COUNT(*) AS count FROM admins'),
       pgQuery('SELECT COUNT(*) AS count FROM employees'),
       pgQuery('SELECT COUNT(*) AS count FROM attendance'),
       pgQuery('SELECT COUNT(*) AS count FROM notifications'),
-      pgQuery('SELECT COUNT(*) AS count FROM messages')
+      pgQuery('SELECT COUNT(*) AS count FROM messages'),
+      pgQuery('SELECT COUNT(*) AS count FROM reports')
     ]);
     return sendJson(res, 200, {
       ok: true,
@@ -906,7 +907,8 @@ async function handleApiPg(req, res, pathname) {
         employees: Number(employees.rows[0].count),
         attendance: Number(attendance.rows[0].count),
         notifications: Number(notifications.rows[0].count),
-        messages: Number(messages.rows[0].count)
+        messages: Number(messages.rows[0].count),
+        reports: Number(reports.rows[0].count)
       },
       time: Date.now()
     });
