@@ -477,6 +477,7 @@ function logoutEmployee() {
   attendanceCache = [];
   photoData = '';
   if (photoPreview) photoPreview.src = 'assets/photo-placeholder.svg';
+  resetReportForm();
   loginForm.reset();
   setView('emp-dashboard');
   appScreen.classList.add('hidden');
