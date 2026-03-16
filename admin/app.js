@@ -776,6 +776,32 @@ document.getElementById('filter-attendance').addEventListener('click', () => {
 document.getElementById('generate-report').addEventListener('click', generateReport);
 document.getElementById('download-report').addEventListener('click', downloadReport);
 
+if (filterReportsBtn) {
+  filterReportsBtn.addEventListener('click', () => {
+    const from = reportsFrom.value;
+    const to = reportsTo.value;
+    if (!from || !to) {
+      alert('Select start and end dates.');
+      return;
+    }
+    loadReportsTable(from, to);
+  });
+}
+
+if (refreshReportsBtn) {
+  refreshReportsBtn.addEventListener('click', () => {
+    const today = new Date();
+    const from = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`;
+    const to = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    if (reportsFrom) reportsFrom.value = from;
+    if (reportsTo) reportsTo.value = to;
+    loadReportsTable(from, to);
+  });
+}
+
+if (generateDtrBtn) generateDtrBtn.addEventListener('click', generateDtr);
+if (printDtrBtn) printDtrBtn.addEventListener('click', printDtr);
+
 document.getElementById('open-admin-register').addEventListener('click', openAdminRegister);
 document.getElementById('close-admin-register').addEventListener('click', closeAdminRegister);
 document.getElementById('cancel-admin-register').addEventListener('click', closeAdminRegister);
