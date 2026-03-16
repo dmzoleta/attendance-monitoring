@@ -1800,7 +1800,8 @@ async function handleApi(req, res, pathname) {
         employees: db.employees.length,
         attendance: db.attendance.length,
         notifications: (db.notifications || []).length,
-        messages: (db.messages || []).length
+        messages: (db.messages || []).length,
+        reports: (db.reports || []).length
       },
       time: Date.now()
     });
