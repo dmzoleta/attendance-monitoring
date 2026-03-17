@@ -77,11 +77,13 @@ let reportAttachmentData = '';
 let reportAttachmentName = '';
 let pendingOtpEmail = '';
 let autoRestoreAttempted = false;
+let lastAddress = '';
 const appConfig = typeof window !== 'undefined' && window.APP_CONFIG ? window.APP_CONFIG : {};
 const isCapacitor = typeof window !== 'undefined' && !!window.Capacitor;
 const defaultApiBase = appConfig.apiBase || '';
 const storedApiBase = localStorage.getItem('apiBase') || '';
 const storedOverride = localStorage.getItem('apiBaseOverride') === 'true';
+lastAddress = localStorage.getItem('lastAddress') || '';
 
 let apiBase = '';
 if (isCapacitor) {
@@ -205,10 +207,25 @@ function pickLocation(item) {
 }
 
 async function reverseGeocode(lat, lng) {
-  const res = await fetch(`${apiBase}/api/reverse-geocode?lat=${lat}&lng=${lng}`);
-  if (res.ok) {
-    const data = await res.json();
-    if (data && data.address) return data.address;
+  try {
+    const res = await fetch(`${apiBase}/api/reverse-geocode?lat=${lat}&lng=${lng}`);
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.address) return data.address;
+    }
+  } catch (err) {
+    // ignore server reverse-geocode errors
+  }
+
+  try {
+    const osmUrl = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&addressdetails=1`;
+    const osmRes = await fetch(osmUrl, { headers: { 'Accept-Language': 'en' } });
+    if (osmRes.ok) {
+      const osmData = await osmRes.json();
+      if (osmData && osmData.display_name) return osmData.display_name;
+    }
+  } catch (err) {
+    // ignore fallback errors
   }
   return '';
 }
@@ -272,16 +289,32 @@ async function applyLocationUpdate(pos) {
       if (address) {
         locationName.textContent = address;
         empLocation.textContent = address;
+        lastAddress = address;
+        localStorage.setItem('lastAddress', address);
+        setGpsStatus(`Live GPS · ±${Math.round(accuracy)}m`);
+      } else {
+        const fallback = lastAddress || localStorage.getItem('lastAddress') || '';
+        if (fallback && moved < 80) {
+          locationName.textContent = fallback;
+          empLocation.textContent = fallback;
+          setGpsStatus(`Live GPS · ±${Math.round(accuracy)}m`);
+        } else {
+          locationName.textContent = 'Address unavailable';
+          empLocation.textContent = 'Address unavailable';
+          setGpsStatus('Address unavailable. Live GPS continues.');
+        }
+      }
+    } catch (err) {
+      const fallback = lastAddress || localStorage.getItem('lastAddress') || '';
+      if (fallback && moved < 80) {
+        locationName.textContent = fallback;
+        empLocation.textContent = fallback;
         setGpsStatus(`Live GPS · ±${Math.round(accuracy)}m`);
       } else {
         locationName.textContent = 'Address unavailable';
         empLocation.textContent = 'Address unavailable';
         setGpsStatus('Address unavailable. Live GPS continues.');
       }
-    } catch (err) {
-      locationName.textContent = 'Address unavailable';
-      empLocation.textContent = 'Address unavailable';
-      setGpsStatus('Address unavailable. Live GPS continues.');
     }
     lastAddressAt = now;
   } else {
@@ -414,7 +447,7 @@ function filterRecordsByMonth() {
 
 function updateLocation() {
   if (!navigator.geolocation) {
-    locationName.textContent = 'Boac';
+    locationName.textContent = lastAddress || 'Address unavailable';
     setGpsStatus('Geolocation not supported on this device.');
     return;
   }

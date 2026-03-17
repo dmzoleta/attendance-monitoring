@@ -427,6 +427,19 @@ body::before {
   color: #2b3f6d;
 }
 
+.place-line {
+  font-size: 14px;
+}
+
+.location-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 6px;
+  font-size: 12px;
+  color: #5b6b91;
+}
+
 .action-row {
   display: flex;
   gap: 10px;
