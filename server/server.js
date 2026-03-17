@@ -558,8 +558,32 @@ function pickGoogleResult(results) {
   return results[0];
 }
 
+function scoreAddressParts(parts) {
+  if (!parts) return 0;
+  let score = 0;
+  if (parts.roadLine) score += 3;
+  if (parts.place) score += 3;
+  if (parts.municipality) score += 2;
+  if (parts.province) score += 1.5;
+  if (parts.postcode) score += 0.5;
+  if (parts.country) score += 0.5;
+  return score;
+}
+
+function formatAddressParts(parts) {
+  if (!parts) return '';
+  const list = [];
+  if (parts.roadLine) list.push(parts.roadLine);
+  if (parts.place && !list.includes(parts.place)) list.push(parts.place);
+  if (parts.municipality && !list.includes(parts.municipality)) list.push(parts.municipality);
+  if (parts.province && !list.includes(parts.province)) list.push(parts.province);
+  if (parts.postcode) list.push(parts.postcode);
+  if (parts.country) list.push(parts.country);
+  return list.join(', ');
+}
+
 function formatOsmAddress(osmData) {
-  if (!osmData) return '';
+  if (!osmData) return { address: '', score: 0 };
   const addr = osmData.address || {};
   const roadLine = [addr.house_number, addr.road].filter(Boolean).join(' ');
   const place =
@@ -576,15 +600,41 @@ function formatOsmAddress(osmData) {
     addr.city;
   const municipality = addr.city || addr.town || addr.municipality || addr.county;
   const province = addr.state || addr.region || addr.province;
-  const parts = [];
-  if (roadLine) parts.push(roadLine);
-  if (place && !parts.includes(place)) parts.push(place);
-  if (municipality && !parts.includes(municipality)) parts.push(municipality);
-  if (province && !parts.includes(province)) parts.push(province);
-  if (addr.postcode) parts.push(addr.postcode);
-  if (addr.country) parts.push(addr.country);
-  if (parts.length) return parts.join(', ');
-  return osmData.display_name || '';
+  const parts = {
+    roadLine,
+    place,
+    municipality,
+    province,
+    postcode: addr.postcode || '',
+    country: addr.country || ''
+  };
+  const address = formatAddressParts(parts) || osmData.display_name || '';
+  return { address, score: scoreAddressParts(parts) };
+}
+
+function formatPhotonFeature(feature) {
+  if (!feature || !feature.properties) return { address: '', score: 0 };
+  const props = feature.properties;
+  const roadLine = [props.housenumber, props.street].filter(Boolean).join(' ');
+  const place =
+    props.neighbourhood ||
+    props.suburb ||
+    props.district ||
+    props.locality ||
+    props.name ||
+    props.city;
+  const municipality = props.city || props.county;
+  const province = props.state || props.region;
+  const parts = {
+    roadLine,
+    place,
+    municipality,
+    province,
+    postcode: props.postcode || '',
+    country: props.country || ''
+  };
+  const address = formatAddressParts(parts);
+  return { address, score: scoreAddressParts(parts) };
 }
 
 function canSeed() {
@@ -1780,15 +1830,34 @@ async function handleApi(req, res, pathname) {
           }
         }
       }
+      let best = { address: '', score: 0 };
       const osmUrl = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1&namedetails=1`;
       const osmRes = await fetch(osmUrl, { headers: { 'Accept-Language': 'en,fil;q=0.9' } });
       if (osmRes.ok) {
         const osmData = await osmRes.json();
         const formatted = formatOsmAddress(osmData);
-        if (formatted) {
-          return sendJson(res, 200, { ok: true, address: formatted });
+        if (formatted.address && formatted.score > best.score) {
+          best = formatted;
         }
       }
+
+      const photonUrl = `https://photon.komoot.io/reverse?lat=${lat}&lon=${lng}&lang=en&limit=5`;
+      const photonRes = await fetch(photonUrl);
+      if (photonRes.ok) {
+        const photonData = await photonRes.json();
+        const features = Array.isArray(photonData.features) ? photonData.features : [];
+        features.forEach((feature) => {
+          const formatted = formatPhotonFeature(feature);
+          if (formatted.address && formatted.score > best.score) {
+            best = formatted;
+          }
+        });
+      }
+
+      if (best.address) {
+        return sendJson(res, 200, { ok: true, address: best.address });
+      }
+
       return sendJson(res, 200, { ok: false, address: '', message: 'Address unavailable.' });
     } catch (err) {
       return sendJson(res, 500, { ok: false, message: 'Unable to fetch address.' });
