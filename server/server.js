@@ -536,6 +536,57 @@ function getGoogleMapsKey() {
   return process.env.GOOGLE_MAPS_KEY || process.env.GMAPS_KEY || '';
 }
 
+function pickGoogleResult(results) {
+  if (!Array.isArray(results) || results.length === 0) return null;
+  const priorities = [
+    'street_address',
+    'premise',
+    'subpremise',
+    'route',
+    'intersection',
+    'neighborhood',
+    'sublocality',
+    'sublocality_level_1',
+    'locality',
+    'administrative_area_level_3',
+    'administrative_area_level_2'
+  ];
+  for (const type of priorities) {
+    const found = results.find((result) => Array.isArray(result.types) && result.types.includes(type));
+    if (found) return found;
+  }
+  return results[0];
+}
+
+function formatOsmAddress(osmData) {
+  if (!osmData) return '';
+  const addr = osmData.address || {};
+  const roadLine = [addr.house_number, addr.road].filter(Boolean).join(' ');
+  const place =
+    addr.barangay ||
+    addr.neighbourhood ||
+    addr.suburb ||
+    addr.village ||
+    addr.hamlet ||
+    addr.quarter ||
+    addr.city_district ||
+    addr.subdistrict ||
+    addr.municipality ||
+    addr.town ||
+    addr.city;
+  const municipality = addr.city || addr.town || addr.municipality || addr.county;
+  const province = addr.state || addr.region || addr.province;
+  const parts = [];
+  if (roadLine) parts.push(roadLine);
+  if (place && !parts.includes(place)) parts.push(place);
+  if (municipality && !parts.includes(municipality)) parts.push(municipality);
+  if (province && !parts.includes(province)) parts.push(province);
+  if (addr.postcode) parts.push(addr.postcode);
+  if (addr.country) parts.push(addr.country);
+  if (parts.length) return parts.join(', ');
+  return osmData.display_name || '';
+}
+
 function canSeed() {
   return String(process.env.ALLOW_SEED || '').toLowerCase() === 'true';
 }
@@ -1717,21 +1768,25 @@ async function handleApi(req, res, pathname) {
     const apiKey = getGoogleMapsKey();
     try {
       if (apiKey) {
-        const gUrl = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${apiKey}`;
+        const gUrl = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${apiKey}&language=en&region=PH`;
         const gRes = await fetch(gUrl);
         if (gRes.ok) {
           const gData = await gRes.json();
-          if (gData.results && gData.results[0]) {
-            return sendJson(res, 200, { ok: true, address: gData.results[0].formatted_address });
+          if (gData.results && gData.results.length) {
+            const picked = pickGoogleResult(gData.results);
+            if (picked && picked.formatted_address) {
+              return sendJson(res, 200, { ok: true, address: picked.formatted_address });
+            }
           }
         }
       }
-      const osmUrl = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}`;
-      const osmRes = await fetch(osmUrl, { headers: { 'Accept-Language': 'en' } });
+      const osmUrl = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1&namedetails=1`;
+      const osmRes = await fetch(osmUrl, { headers: { 'Accept-Language': 'en,fil;q=0.9' } });
       if (osmRes.ok) {
         const osmData = await osmRes.json();
-        if (osmData.display_name) {
-          return sendJson(res, 200, { ok: true, address: osmData.display_name });
+        const formatted = formatOsmAddress(osmData);
+        if (formatted) {
+          return sendJson(res, 200, { ok: true, address: formatted });
         }
       }
       return sendJson(res, 200, { ok: false, address: '', message: 'Address unavailable.' });

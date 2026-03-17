@@ -218,11 +218,37 @@ async function reverseGeocode(lat, lng) {
   }
 
   try {
-    const osmUrl = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&addressdetails=1`;
-    const osmRes = await fetch(osmUrl, { headers: { 'Accept-Language': 'en' } });
+    const osmUrl = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1&namedetails=1`;
+    const osmRes = await fetch(osmUrl, { headers: { 'Accept-Language': 'en,fil;q=0.9' } });
     if (osmRes.ok) {
       const osmData = await osmRes.json();
-      if (osmData && osmData.display_name) return osmData.display_name;
+      if (osmData) {
+        const addr = osmData.address || {};
+        const roadLine = [addr.house_number, addr.road].filter(Boolean).join(' ');
+        const place =
+          addr.barangay ||
+          addr.neighbourhood ||
+          addr.suburb ||
+          addr.village ||
+          addr.hamlet ||
+          addr.quarter ||
+          addr.city_district ||
+          addr.subdistrict ||
+          addr.municipality ||
+          addr.town ||
+          addr.city;
+        const municipality = addr.city || addr.town || addr.municipality || addr.county;
+        const province = addr.state || addr.region || addr.province;
+        const parts = [];
+        if (roadLine) parts.push(roadLine);
+        if (place && !parts.includes(place)) parts.push(place);
+        if (municipality && !parts.includes(municipality)) parts.push(municipality);
+        if (province && !parts.includes(province)) parts.push(province);
+        if (addr.postcode) parts.push(addr.postcode);
+        if (addr.country) parts.push(addr.country);
+        if (parts.length) return parts.join(', ');
+        if (osmData.display_name) return osmData.display_name;
+      }
     }
   } catch (err) {
     // ignore fallback errors
@@ -246,6 +272,9 @@ let gpsWatchId = null;
 let lastCoords = null;
 let lastMapAt = 0;
 let lastAddressAt = 0;
+const ADDRESS_ACCURACY_THRESHOLD = 20;
+const ADDRESS_STABLE_HITS = 2;
+let accuracyStreak = 0;
 
 function toRadians(value) {
   return (value * Math.PI) / 180;
@@ -280,6 +309,23 @@ async function applyLocationUpdate(pos) {
   if (shouldUpdateMap) {
     updateMapPreview(latitude, longitude);
     lastMapAt = now;
+  }
+
+  if (accuracy <= ADDRESS_ACCURACY_THRESHOLD) {
+    accuracyStreak += 1;
+  } else {
+    accuracyStreak = 0;
+  }
+
+  if (accuracy > ADDRESS_ACCURACY_THRESHOLD || accuracyStreak < ADDRESS_STABLE_HITS) {
+    const fallback = lastAddress || localStorage.getItem('lastAddress') || '';
+    if (fallback) {
+      locationName.textContent = fallback;
+      empLocation.textContent = fallback;
+    }
+    setGpsStatus(`Improving GPS accuracy · ±${Math.round(accuracy)}m`);
+    lastCoords = { lat: latitude, lng: longitude };
+    return;
   }
 
   if (shouldUpdateAddress) {
@@ -342,7 +388,7 @@ function startGpsWatch() {
         setGpsStatus('Unable to get GPS. Tap Update to retry.');
       }
     },
-    { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 }
+    { enableHighAccuracy: true, timeout: 30000, maximumAge: 0 }
   );
 }
 
@@ -463,7 +509,7 @@ function updateLocation() {
         alert('Please allow location access (Allow While Using) for accurate GPS.');
       }
     },
-    { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 }
+    { enableHighAccuracy: true, timeout: 30000, maximumAge: 0 }
   );
 }
 
