@@ -225,35 +225,98 @@ function setGpsStatus(message) {
   if (gpsStatus) gpsStatus.textContent = message;
 }
 
-function requestAccurateLocation() {
-  return new Promise((resolve, reject) => {
-    let best = null;
-    let resolved = false;
-    const watchId = navigator.geolocation.watchPosition(
-      (pos) => {
-        if (!best || pos.coords.accuracy < best.coords.accuracy) {
-          best = pos;
-        }
-        if (pos.coords.accuracy <= 50) {
-          navigator.geolocation.clearWatch(watchId);
-          resolved = true;
-          resolve(best);
-        }
-      },
-      (err) => {
-        navigator.geolocation.clearWatch(watchId);
-        if (!resolved) reject(err);
-      },
-      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
-    );
+let gpsWatchId = null;
+let lastCoords = null;
+let lastMapAt = 0;
+let lastAddressAt = 0;
 
-    setTimeout(() => {
-      if (resolved) return;
-      navigator.geolocation.clearWatch(watchId);
-      if (best) return resolve(best);
-      reject(new Error('Unable to get accurate GPS location.'));
-    }, 20000);
-  });
+function toRadians(value) {
+  return (value * Math.PI) / 180;
+}
+
+function distanceMeters(a, b) {
+  if (!a || !b) return 0;
+  const R = 6371000;
+  const dLat = toRadians(b.lat - a.lat);
+  const dLng = toRadians(b.lng - a.lng);
+  const lat1 = toRadians(a.lat);
+  const lat2 = toRadians(b.lat);
+  const h =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+
+async function applyLocationUpdate(pos) {
+  const { latitude, longitude, accuracy } = pos.coords;
+  const latValue = latitude.toFixed(4);
+  const lngValue = longitude.toFixed(4);
+  locationLat.textContent = latValue;
+  locationLng.textContent = lngValue;
+  if (locationAccuracy) locationAccuracy.textContent = `${Math.round(accuracy)} m`;
+
+  const now = Date.now();
+  const moved = lastCoords ? distanceMeters(lastCoords, { lat: latitude, lng: longitude }) : 9999;
+  const shouldUpdateMap = moved > 10 || now - lastMapAt > 10000;
+  const shouldUpdateAddress = moved > 25 || now - lastAddressAt > 20000;
+
+  if (shouldUpdateMap) {
+    updateMapPreview(latitude, longitude);
+    lastMapAt = now;
+  }
+
+  if (shouldUpdateAddress) {
+    setGpsStatus('Fetching address…');
+    try {
+      const address = await reverseGeocode(latitude, longitude);
+      if (address) {
+        locationName.textContent = address;
+        empLocation.textContent = address;
+        setGpsStatus(`Live GPS · ±${Math.round(accuracy)}m`);
+      } else {
+        locationName.textContent = 'Address unavailable';
+        empLocation.textContent = 'Address unavailable';
+        setGpsStatus('Address unavailable. Live GPS continues.');
+      }
+    } catch (err) {
+      locationName.textContent = 'Address unavailable';
+      empLocation.textContent = 'Address unavailable';
+      setGpsStatus('Address unavailable. Live GPS continues.');
+    }
+    lastAddressAt = now;
+  } else {
+    setGpsStatus(`Live GPS · ±${Math.round(accuracy)}m`);
+  }
+
+  lastCoords = { lat: latitude, lng: longitude };
+}
+
+function startGpsWatch() {
+  if (!navigator.geolocation) {
+    setGpsStatus('Geolocation not supported on this device.');
+    return;
+  }
+  if (gpsWatchId !== null) return;
+  setGpsStatus('Live GPS started. Waiting for signal…');
+  gpsWatchId = navigator.geolocation.watchPosition(
+    (pos) => {
+      applyLocationUpdate(pos);
+    },
+    (err) => {
+      if (err && err.code === 1) {
+        setGpsStatus('Location denied. Tap Update to allow.');
+      } else {
+        setGpsStatus('Unable to get GPS. Tap Update to retry.');
+      }
+    },
+    { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 }
+  );
+}
+
+function stopGpsWatch() {
+  if (gpsWatchId === null) return;
+  navigator.geolocation.clearWatch(gpsWatchId);
+  gpsWatchId = null;
 }
 
 async function api(path, options = {}, attempt = 0) {
@@ -356,39 +419,19 @@ function updateLocation() {
     return;
   }
   setGpsStatus('Requesting location permission…');
-  requestAccurateLocation()
-    .then(async (pos) => {
-      const { latitude, longitude, accuracy } = pos.coords;
-      const latValue = latitude.toFixed(4);
-      const lngValue = longitude.toFixed(4);
-      locationLat.textContent = latValue;
-      locationLng.textContent = lngValue;
-      if (locationAccuracy) locationAccuracy.textContent = `${Math.round(accuracy)} m`;
-      updateMapPreview(latitude, longitude);
-      setGpsStatus('Fetching address…');
-      try {
-        const address = await reverseGeocode(latitude, longitude);
-        if (address) {
-          locationName.textContent = address;
-          empLocation.textContent = address;
-          setGpsStatus(`GPS accuracy: ±${Math.round(accuracy)}m`);
-        } else {
-          locationName.textContent = 'Address unavailable';
-          empLocation.textContent = 'Address unavailable';
-          setGpsStatus('Address unavailable. Tap Update to retry.');
-        }
-      } catch (err) {
-        locationName.textContent = 'Address unavailable';
-        empLocation.textContent = 'Address unavailable';
-        setGpsStatus('Address unavailable. Tap Update to retry.');
-      }
-    })
-    .catch((err) => {
+  navigator.geolocation.getCurrentPosition(
+    (pos) => {
+      applyLocationUpdate(pos);
+      startGpsWatch();
+    },
+    (err) => {
       setGpsStatus('Location denied or unavailable. Tap Update to allow.');
       if (err && err.code === 1) {
         alert('Please allow location access (Allow While Using) for accurate GPS.');
       }
-    });
+    },
+    { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 }
+  );
 }
 
 function requirePhoto() {
@@ -484,6 +527,7 @@ function logoutEmployee() {
   loginScreen.classList.remove('hidden');
   clearSavedLogin();
   closeServerModal();
+  stopGpsWatch();
 }
 
 loginForm.addEventListener('submit', async (event) => {
