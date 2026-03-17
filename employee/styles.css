@@ -5,6 +5,8 @@
   --yellow: #f2b93b;
   --red: #d84545;
   --gray: #f4f6fb;
+  --surface: #ffffff;
+  --border: #d8e1f5;
   --shadow: 0 12px 30px rgba(13, 45, 106, 0.18);
 }
 
@@ -19,6 +21,17 @@ body {
   color: #1f2a44;
 }
 
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background:
+    radial-gradient(circle at 12% 10%, rgba(42, 93, 187, 0.12), transparent 45%),
+    radial-gradient(circle at 88% 18%, rgba(216, 69, 69, 0.12), transparent 45%),
+    radial-gradient(circle at 20% 85%, rgba(47, 138, 70, 0.12), transparent 55%);
+  z-index: -1;
+}
+
 .hidden {
   display: none !important;
 }
@@ -31,6 +44,7 @@ body {
   box-shadow: var(--shadow);
   border-radius: 28px;
   overflow: hidden;
+  border: 1px solid rgba(13, 45, 106, 0.08);
 }
 
 .login-screen {
@@ -69,15 +83,23 @@ body {
   width: 100%;
   padding: 12px;
   border-radius: 12px;
-  border: 1px solid #d8e1f5;
+  border: 1px solid var(--border);
   background: #f9fbff;
+}
+
+.input-field input:focus,
+.input-field select:focus,
+.input-field textarea:focus {
+  border-color: rgba(42, 93, 187, 0.6);
+  box-shadow: 0 0 0 3px rgba(42, 93, 187, 0.12);
+  outline: none;
 }
 
 .input-field select {
   width: 100%;
   padding: 12px;
   border-radius: 12px;
-  border: 1px solid #d8e1f5;
+  border: 1px solid var(--border);
   background: #f9fbff;
 }
 
@@ -85,7 +107,7 @@ body {
   width: 100%;
   padding: 12px;
   border-radius: 12px;
-  border: 1px solid #d8e1f5;
+  border: 1px solid var(--border);
   background: #f9fbff;
   resize: vertical;
   min-height: 90px;
@@ -107,6 +129,12 @@ body {
   background: linear-gradient(120deg, #1f4fa6, #2a79ff);
   box-shadow: 0 10px 18px rgba(34, 95, 190, 0.22);
   cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease;
+}
+
+.primary-btn:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.03);
 }
 
 .ghost-btn,
@@ -116,6 +144,13 @@ body {
   color: #2b4b84;
   font-weight: 600;
   cursor: pointer;
+  transition: color 0.15s ease, transform 0.15s ease;
+}
+
+.ghost-btn:hover,
+.link-btn:hover {
+  color: #1f4fa6;
+  transform: translateY(-1px);
 }
 
 .link-btn {
@@ -162,6 +197,9 @@ body {
   padding: 14px 16px;
   background: linear-gradient(120deg, var(--navy), var(--blue));
   color: white;
+  position: sticky;
+  top: 0;
+  z-index: 20;
 }
 
 .brand {
@@ -192,6 +230,12 @@ body {
   padding: 6px 8px;
   border-radius: 8px;
   cursor: pointer;
+  transition: background 0.15s ease, transform 0.15s ease;
+}
+
+.icon-btn:hover {
+  background: rgba(255, 255, 255, 0.25);
+  transform: translateY(-1px);
 }
 
 .content {
@@ -207,6 +251,18 @@ body {
   padding: 12px;
   border-radius: 14px;
   box-shadow: var(--shadow);
+  border: 1px solid rgba(13, 45, 106, 0.06);
+  position: relative;
+  overflow: hidden;
+}
+
+.profile-card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(120deg, rgba(42, 93, 187, 0.12), transparent 50%);
+  opacity: 0.5;
+  pointer-events: none;
 }
 
 .profile-card img {
@@ -238,6 +294,17 @@ body {
   color: white;
   font-weight: 700;
   text-align: left;
+  box-shadow: var(--shadow);
+  position: relative;
+  overflow: hidden;
+}
+
+.stat-card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(120deg, rgba(255, 255, 255, 0.2), transparent 45%);
+  opacity: 0.6;
 }
 
 .stat-card strong {
@@ -264,6 +331,7 @@ body {
   padding: 14px;
   box-shadow: var(--shadow);
   margin-top: 16px;
+  border: 1px solid rgba(13, 45, 106, 0.06);
 }
 
 .muted {
@@ -301,6 +369,7 @@ body {
   background: linear-gradient(140deg, #d5e5ff, #f1f6ff);
   display: grid;
   place-items: center;
+  border: 1px solid rgba(13, 45, 106, 0.1);
 }
 
 #map-preview {
@@ -439,6 +508,14 @@ body {
   min-width: 720px;
 }
 
+.data-table tbody tr:nth-child(even) {
+  background: #f8faff;
+}
+
+.data-table tbody tr:hover {
+  background: #eef3ff;
+}
+
 .data-table th,
 .data-table td {
   padding: 8px 6px;
@@ -450,6 +527,7 @@ body {
   overflow-x: auto;
   border-radius: 12px;
   -webkit-overflow-scrolling: touch;
+  border: 1px solid #e8ecf7;
 }
 
 .data-table td.status-present { color: #2f8f48; font-weight: 700; }
@@ -482,6 +560,8 @@ body {
   padding: 10px 8px 14px;
   background: white;
   border-top: 1px solid #e4e9f7;
+  box-shadow: 0 -8px 24px rgba(13, 45, 106, 0.12);
+  backdrop-filter: blur(6px);
 }
 
 .nav-btn {
@@ -495,10 +575,15 @@ body {
   align-items: center;
   gap: 4px;
   font-size: 12px;
+  transition: color 0.15s ease, transform 0.15s ease;
 }
 
 .nav-btn.active {
   color: #1f4fa6;
+}
+
+.nav-btn:hover {
+  transform: translateY(-1px);
 }
 
 .nav-icon {
