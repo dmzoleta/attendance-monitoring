@@ -121,6 +121,18 @@ function pickLocation(item) {
   return item.locationInAM || item.locationInPM || item.locationOutAM || item.locationOutPM || item.location || '';
 }
 
+function hasAnyAttendanceLocal(item) {
+  if (!item) return false;
+  return !!(
+    item.timeInAM ||
+    item.timeOutAM ||
+    item.timeInPM ||
+    item.timeOutPM ||
+    item.timeIn ||
+    item.timeOut
+  );
+}
+
 function buildReportKey(employeeId, date) {
   return `${employeeId || ''}|${date || ''}`;
 }
@@ -417,40 +429,115 @@ async function generateDtr() {
   const query = new URLSearchParams({ from, to, employeeId }).toString();
   const data = await api(`/api/attendance?${query}`);
   const list = (data.attendance || []).slice().sort((a, b) => String(a.date).localeCompare(String(b.date)));
+  const map = new Map(list.map((item) => [item.date, item]));
+  const employee = employeesCache.find((emp) => emp.id === employeeId);
+  const employeeName = employee ? employee.name : (list[0] ? list[0].employeeName : 'Employee');
+  const employeeOffice = employee ? employee.office : (list[0] ? list[0].office : '');
+  const monthLabel = new Date(year, month - 1, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  const daysInMonth = toDate.getDate();
 
-  dtrPreview.innerHTML = '';
-  if (!list.length) {
-    dtrPreview.textContent = 'No attendance records found for this employee.';
-    return;
+  const rows = [];
+  for (let day = 1; day <= daysInMonth; day += 1) {
+    const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    const rec = map.get(dateStr);
+    const hasAttendance = hasAnyAttendanceLocal(rec);
+    const dayOfWeek = new Date(year, month - 1, day).getDay();
+    const weekendLabel = dayOfWeek === 0 ? 'Sun' : (dayOfWeek === 6 ? 'Sat' : '');
+
+    if (!hasAttendance) {
+      if (weekendLabel) {
+        rows.push(`
+          <tr>
+            <td class="center">${day}</td>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td class="center weekend">${weekendLabel}</td>
+          </tr>
+        `);
+      } else {
+        rows.push(`
+          <tr>
+            <td class="center">${day}</td>
+            <td colspan="4" class="center absent">ABSENT</td>
+            <td></td>
+            <td></td>
+          </tr>
+        `);
+      }
+      continue;
+    }
+
+    rows.push(`
+      <tr>
+        <td class="center">${day}</td>
+        <td class="center">${rec.timeInAM || rec.timeIn || ''}</td>
+        <td class="center">${rec.timeOutAM || ''}</td>
+        <td class="center">${rec.timeInPM || ''}</td>
+        <td class="center">${rec.timeOutPM || rec.timeOut || ''}</td>
+        <td></td>
+        <td class="center">${weekendLabel}</td>
+      </tr>
+    `);
   }
 
-  const table = document.createElement('table');
-  table.className = 'data-table';
-  table.innerHTML = `
-    <thead>
-      <tr>
-        <th>Date</th>
-        <th>Time In (AM)</th>
-        <th>Time Out (AM)</th>
-        <th>Time In (PM)</th>
-        <th>Time Out (PM)</th>
-        <th>Status</th>
-      </tr>
-    </thead>
-    <tbody>
-      ${list.map((item) => `
-        <tr>
-          <td>${item.date}</td>
-          <td>${item.timeInAM || item.timeIn || '--'}</td>
-          <td>${item.timeOutAM || '--'}</td>
-          <td>${item.timeInPM || '--'}</td>
-          <td>${item.timeOutPM || item.timeOut || '--'}</td>
-          <td>${item.status || '--'}</td>
-        </tr>
-      `).join('')}
-    </tbody>
+  dtrPreview.innerHTML = `
+    <div class="dtr-sheet">
+      <div class="dtr-header">
+        <div>
+          <div class="dtr-title">DAILY TIME RECORD</div>
+          <div class="dtr-sub">Name: <strong>${employeeName}</strong></div>
+          <div class="dtr-sub">For the month of <strong>${monthLabel}</strong></div>
+          <div class="dtr-sub">Office hours for arrival and departure</div>
+        </div>
+        <div class="dtr-formno">CIVIL SERVICE FORM No. 48</div>
+      </div>
+
+      <div class="dtr-meta">
+        <div>(Regular days)</div>
+        <div>(Saturdays)</div>
+        <div>Service as required</div>
+      </div>
+
+      <table class="dtr-table">
+        <thead>
+          <tr>
+            <th rowspan="2" class="center">DAY</th>
+            <th colspan="2" class="center">A.M.</th>
+            <th colspan="2" class="center">P.M.</th>
+            <th colspan="2" class="center">UNDERTIME</th>
+          </tr>
+          <tr>
+            <th class="center">Arrival</th>
+            <th class="center">Departure</th>
+            <th class="center">Arrival</th>
+            <th class="center">Departure</th>
+            <th class="center">Hours</th>
+            <th class="center">Minutes</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows.join('')}
+        </tbody>
+      </table>
+
+      <div class="dtr-footer">
+        <div class="dtr-total">TOTAL</div>
+        <p class="dtr-cert">
+          I CERTIFY on my honor that the above is a true and correct report of the hours of work performed,
+          record of which was made daily at the time of arrival at and departure from office.
+        </p>
+        <div class="dtr-signatures">
+          <div>Verified as to the prescribed office hours</div>
+          <div class="line"></div>
+          <div class="line"></div>
+        </div>
+        <div class="dtr-office">Office: <strong>${employeeOffice || ''}</strong></div>
+      </div>
+    </div>
   `;
-  dtrPreview.appendChild(table);
 }
 
 function printDtr() {
@@ -464,14 +551,26 @@ function printDtr() {
       <head>
         <title>DTR Print</title>
         <style>
-          body { font-family: "Trebuchet MS", sans-serif; padding: 24px; }
-          h1 { color: #0d2d6a; }
-          table { width: 100%; border-collapse: collapse; margin-top: 16px; }
-          th, td { border-bottom: 1px solid #ddd; padding: 8px; text-align: left; }
+          body { font-family: "Times New Roman", serif; padding: 24px; color: #1b1b1b; }
+          .dtr-sheet { border: 1px solid #222; padding: 16px; }
+          .dtr-header { display: flex; justify-content: space-between; align-items: flex-start; }
+          .dtr-title { font-weight: 700; font-size: 18px; }
+          .dtr-sub { font-size: 12px; margin-top: 2px; }
+          .dtr-formno { font-size: 12px; }
+          .dtr-meta { display: flex; gap: 18px; font-size: 11px; margin: 6px 0 10px; }
+          .dtr-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+          .dtr-table th, .dtr-table td { border: 1px solid #222; padding: 4px; }
+          .center { text-align: center; }
+          .absent { font-weight: 700; letter-spacing: 2px; }
+          .weekend { color: #a00; font-weight: 700; }
+          .dtr-footer { margin-top: 14px; font-size: 11px; }
+          .dtr-total { font-weight: 700; margin-bottom: 8px; }
+          .dtr-signatures { display: flex; gap: 12px; align-items: center; margin-top: 8px; }
+          .line { flex: 1; border-bottom: 1px solid #222; height: 1px; }
+          .dtr-office { margin-top: 6px; }
         </style>
       </head>
       <body>
-        <h1>SDO Marinduque - Daily Time Record</h1>
         ${dtrPreview.innerHTML}
       </body>
     </html>

@@ -560,6 +560,94 @@ body::before {
   min-height: 80px;
 }
 
+.dtr-sheet {
+  background: white;
+  border: 1px solid #222;
+  padding: 16px;
+  font-family: "Times New Roman", serif;
+  color: #1b1b1b;
+}
+
+.dtr-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.dtr-title {
+  font-weight: 700;
+  font-size: 18px;
+}
+
+.dtr-sub {
+  font-size: 12px;
+  margin-top: 2px;
+}
+
+.dtr-formno {
+  font-size: 12px;
+}
+
+.dtr-meta {
+  display: flex;
+  gap: 18px;
+  font-size: 11px;
+  margin: 6px 0 10px;
+}
+
+.dtr-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.dtr-table th,
+.dtr-table td {
+  border: 1px solid #222;
+  padding: 4px;
+}
+
+.center {
+  text-align: center;
+}
+
+.absent {
+  font-weight: 700;
+  letter-spacing: 2px;
+}
+
+.weekend {
+  color: #a00;
+  font-weight: 700;
+}
+
+.dtr-footer {
+  margin-top: 14px;
+  font-size: 11px;
+}
+
+.dtr-total {
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.dtr-signatures {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-top: 8px;
+}
+
+.dtr-signatures .line {
+  flex: 1;
+  border-bottom: 1px solid #222;
+  height: 1px;
+}
+
+.dtr-office {
+  margin-top: 6px;
+}
+
 .modal {
   position: fixed;
   inset: 0;
