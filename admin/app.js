@@ -322,8 +322,42 @@ async function openReportPrint(report) {
     </html>
   `);
   printWindow.document.close();
-  printWindow.focus();
-  printWindow.print();
+  const finalizePrint = () => {
+    try {
+      printWindow.focus();
+      printWindow.print();
+    } catch (err) {
+      // ignore print errors
+    }
+  };
+
+  const waitForImages = () => {
+    const images = Array.from(printWindow.document.images || []);
+    if (!images.length) {
+      finalizePrint();
+      return;
+    }
+    let done = 0;
+    const checkDone = () => {
+      done += 1;
+      if (done >= images.length) finalizePrint();
+    };
+    images.forEach((img) => {
+      if (img.complete) {
+        checkDone();
+      } else {
+        img.addEventListener('load', checkDone, { once: true });
+        img.addEventListener('error', checkDone, { once: true });
+      }
+    });
+    setTimeout(finalizePrint, 1500);
+  };
+
+  if (printWindow.document.readyState === 'complete') {
+    waitForImages();
+  } else {
+    printWindow.onload = waitForImages;
+  }
 }
 
 async function api(path, options = {}) {
