@@ -67,6 +67,14 @@ const reportFileName = document.getElementById('report-file-name');
 const reportPreviewBox = document.getElementById('report-preview-box');
 const reportPreviewImg = document.getElementById('report-preview');
 const reportDateLabel = document.getElementById('report-date-label');
+const reportEmpName = document.getElementById('report-emp-name');
+const reportEmpPosition = document.getElementById('report-emp-position');
+const reportDivision = document.getElementById('report-division');
+const reportSection = document.getElementById('report-section');
+const reportLogDate = document.getElementById('report-log-date');
+const reportLogTimes = document.getElementById('report-log-times');
+const reportSubmittedName = document.getElementById('report-submitted-name');
+const reportSubmittedPosition = document.getElementById('report-submitted-position');
 const loginStatus = document.getElementById('login-status');
 const rememberLogin = document.getElementById('remember-login');
 
@@ -436,6 +444,7 @@ async function api(path, options = {}, attempt = 0) {
 async function loadAttendance() {
   const data = await api(`/api/attendance?employeeId=${currentUser.id}`);
   attendanceCache = data.attendance;
+  updateReportContext();
 }
 
 function computeStats() {
@@ -457,6 +466,39 @@ function computeStats() {
   statDays.textContent = totalDays;
   statLate.textContent = lateCount;
   statAbsent.textContent = absent;
+}
+
+function getTodayAttendance() {
+  const today = isoToday();
+  return attendanceCache.find((item) => item.date === today) || null;
+}
+
+function updateReportContext() {
+  if (!currentUser) return;
+  if (reportEmpName) reportEmpName.textContent = currentUser.name || '--';
+  if (reportEmpPosition) reportEmpPosition.textContent = currentUser.position || 'Staff';
+  if (reportSection) reportSection.textContent = currentUser.office || '--';
+  if (reportDivision) reportDivision.textContent = 'Office of the Schools Division Superintendent';
+  if (reportSubmittedName) reportSubmittedName.textContent = currentUser.name || '--';
+  if (reportSubmittedPosition) reportSubmittedPosition.textContent = currentUser.position || 'Staff';
+
+  const record = getTodayAttendance();
+  const inAm = record ? (record.timeInAM || record.timeIn || '--') : '--';
+  const outAm = record ? (record.timeOutAM || '--') : '--';
+  const inPm = record ? (record.timeInPM || '--') : '--';
+  const outPm = record ? (record.timeOutPM || record.timeOut || '--') : '--';
+  if (reportLogDate) {
+    const now = new Date();
+    reportLogDate.textContent = formatDate(now);
+  }
+  if (reportLogTimes) {
+    reportLogTimes.innerHTML = `
+      <div>AM In: ${inAm}</div>
+      <div>AM Out: ${outAm}</div>
+      <div>PM In: ${inPm}</div>
+      <div>PM Out: ${outPm}</div>
+    `;
+  }
 }
 
 function renderRecords(list) {
@@ -583,6 +625,7 @@ async function startEmployeeSession(user) {
   await loadAttendance();
   computeStats();
   filterRecordsByMonth();
+  updateReportContext();
   const latestWithPhoto = attendanceCache.slice().reverse().find((item) => pickPhoto(item));
   if (latestWithPhoto) {
     photoData = pickPhoto(latestWithPhoto);
@@ -858,6 +901,20 @@ async function handleDailyReport(event) {
     alert('Please write your daily report first.');
     return;
   }
+  const record = getTodayAttendance();
+  const timeLogs = record
+    ? {
+        timeInAM: record.timeInAM || record.timeIn || '',
+        timeOutAM: record.timeOutAM || '',
+        timeInPM: record.timeInPM || '',
+        timeOutPM: record.timeOutPM || record.timeOut || ''
+      }
+    : {
+        timeInAM: '',
+        timeOutAM: '',
+        timeInPM: '',
+        timeOutPM: ''
+      };
   try {
     const result = await api('/api/reports', {
       method: 'POST',
@@ -867,6 +924,7 @@ async function handleDailyReport(event) {
         office: currentUser.office,
         reportDate: isoToday(),
         summary,
+        timeLogs,
         attachmentName: reportAttachmentName,
         attachment: reportAttachmentData
       })

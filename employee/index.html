@@ -223,14 +223,63 @@
 
           <div class="card report-card">
             <div class="card-header">
-              <h3>Daily Report</h3>
+              <h3>Individual Daily Log &amp; Accomplishment Report</h3>
               <span class="muted small" id="report-date-label">Date: --</span>
             </div>
             <form id="daily-report-form">
-              <label class="input-field">
-                <span>What did you accomplish today?</span>
-                <textarea name="summary" rows="4" placeholder="Write your daily report..." required></textarea>
-              </label>
+              <div class="report-meta-grid">
+                <div>
+                  <span class="meta-label">Name</span>
+                  <strong id="report-emp-name">--</strong>
+                </div>
+                <div>
+                  <span class="meta-label">Position</span>
+                  <strong id="report-emp-position">--</strong>
+                </div>
+                <div>
+                  <span class="meta-label">Division</span>
+                  <strong id="report-division">Office of the Schools Division Superintendent</strong>
+                </div>
+                <div>
+                  <span class="meta-label">Section</span>
+                  <strong id="report-section">--</strong>
+                </div>
+              </div>
+
+              <div class="report-table">
+                <div class="report-table-head">
+                  <div>Date and Actual Time Logs</div>
+                  <div>Actual Accomplishments</div>
+                </div>
+                <div class="report-table-body">
+                  <div class="report-log">
+                    <div id="report-log-date" class="report-log-date">--</div>
+                    <div id="report-log-times" class="report-log-times">
+                      <div>AM In: --</div>
+                      <div>AM Out: --</div>
+                      <div>PM In: --</div>
+                      <div>PM Out: --</div>
+                    </div>
+                  </div>
+                  <div class="report-accomplishments">
+                    <textarea name="summary" rows="6" placeholder="Type your accomplishments for today..." required></textarea>
+                  </div>
+                </div>
+              </div>
+
+              <div class="report-signatures">
+                <div class="report-sign-block">
+                  <span class="meta-label">Submitted by</span>
+                  <strong id="report-submitted-name">--</strong>
+                  <span id="report-submitted-position" class="muted small">--</span>
+                </div>
+                <div class="report-sign-block">
+                  <span class="meta-label">Attested by</span>
+                  <strong>MAY BERNADETH O. DE LA ROSA</strong>
+                  <span class="muted small">Administrative Officer V</span>
+                </div>
+              </div>
+
               <div class="report-attachment">
                 <input id="report-file" type="file" accept="image/*,.pdf,.doc,.docx,.xlsx" />
                 <label class="ghost-btn" for="report-file">Attach File</label>

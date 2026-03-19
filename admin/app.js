@@ -150,11 +150,27 @@ function shorten(text, max = 90) {
   return `${value.slice(0, max)}…`;
 }
 
+function escapeHtml(value) {
+  return String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 function isImageAttachment(data) {
   return typeof data === 'string' && data.startsWith('data:image');
 }
 
-function openReportPrint(report) {
+async function fetchAttendanceForReport(employeeId, reportDate) {
+  if (!employeeId || !reportDate) return null;
+  const query = new URLSearchParams({ employeeId, from: reportDate, to: reportDate }).toString();
+  const data = await api(`/api/attendance?${query}`);
+  return (data.attendance || [])[0] || null;
+}
+
+async function openReportPrint(report) {
   if (!report) return;
   const attachmentName = report.attachmentName || 'attachment';
   const attachmentHtml = report.attachmentData
@@ -163,26 +179,87 @@ function openReportPrint(report) {
       : `<a href="${report.attachmentData}" download="${attachmentName}">Download attachment</a>`)
     : '<em>No attachment</em>';
 
+  let attendanceRecord = null;
+  try {
+    attendanceRecord = await fetchAttendanceForReport(report.employeeId, report.reportDate);
+  } catch (err) {
+    attendanceRecord = null;
+  }
+
+  const emp = employeesCache.find((item) => item.id === report.employeeId) || {};
+  const employeeName = emp.name || report.employeeName || 'Employee';
+  const employeePosition = emp.position || 'Staff';
+  const employeeOffice = emp.office || report.office || '';
+  const reportDate = report.reportDate || '--';
+  const timeInAM = attendanceRecord ? (attendanceRecord.timeInAM || attendanceRecord.timeIn || '--') : '--';
+  const timeOutAM = attendanceRecord ? (attendanceRecord.timeOutAM || '--') : '--';
+  const timeInPM = attendanceRecord ? (attendanceRecord.timeInPM || '--') : '--';
+  const timeOutPM = attendanceRecord ? (attendanceRecord.timeOutPM || attendanceRecord.timeOut || '--') : '--';
+  const summaryHtml = escapeHtml(report.summary || '').replace(/\n/g, '<br>');
+
   const printWindow = window.open('', '', 'width=900,height=700');
   printWindow.document.write(`
     <html>
       <head>
-        <title>Employee Daily Report</title>
+        <title>Individual Daily Log and Accomplishment Report</title>
         <style>
           body { font-family: "Trebuchet MS", sans-serif; padding: 24px; color: #1f2b45; }
-          h1 { color: #0d2d6a; margin-bottom: 6px; }
-          .meta { margin-bottom: 16px; color: #3b4a6b; }
-          .summary { background: #f4f7ff; padding: 14px; border-radius: 12px; }
+          h1 { text-align: center; color: #0d2d6a; margin: 0 0 8px; font-size: 20px; letter-spacing: 0.02em; }
+          .meta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 24px; margin-bottom: 16px; font-size: 13px; }
+          .meta-grid div { border-bottom: 1px solid #cfd7ea; padding-bottom: 4px; }
+          .meta-label { color: #5b6b91; font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; }
+          .report-table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+          .report-table th, .report-table td { border: 1px solid #3b4a6b; padding: 8px; vertical-align: top; font-size: 13px; }
+          .report-table th { background: #f1f4fb; text-align: center; }
+          .logs { line-height: 1.6; }
+          .signature { margin-top: 18px; display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+          .sign-block { border-top: 1px solid #1f2b45; padding-top: 6px; text-align: center; font-size: 12px; }
+          .sign-name { font-weight: 700; }
         </style>
       </head>
       <body>
-        <h1>SDO Marinduque Daily Report</h1>
-        <div class="meta">
-          <div><strong>Employee:</strong> ${report.employeeName || 'Employee'}</div>
-          <div><strong>Office:</strong> ${report.office || '--'}</div>
-          <div><strong>Date:</strong> ${report.reportDate || '--'}</div>
+        <h1>INDIVIDUAL DAILY LOG AND ACCOMPLISHMENT REPORT</h1>
+        <div class="meta-grid">
+          <div><span class="meta-label">Name</span><br><strong>${escapeHtml(employeeName)}</strong></div>
+          <div><span class="meta-label">Position</span><br><strong>${escapeHtml(employeePosition)}</strong></div>
+          <div><span class="meta-label">Division</span><br><strong>Office of the Schools Division Superintendent</strong></div>
+          <div><span class="meta-label">Section</span><br><strong>${escapeHtml(employeeOffice || '--')}</strong></div>
         </div>
-        <div class="summary">${report.summary || ''}</div>
+
+        <table class="report-table">
+          <thead>
+            <tr>
+              <th>Date and Actual Time Logs</th>
+              <th>Actual Accomplishments</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="logs">
+                <strong>${escapeHtml(reportDate)}</strong><br>
+                AM In: ${escapeHtml(timeInAM)}<br>
+                AM Out: ${escapeHtml(timeOutAM)}<br>
+                PM In: ${escapeHtml(timeInPM)}<br>
+                PM Out: ${escapeHtml(timeOutPM)}
+              </td>
+              <td>${summaryHtml || '--'}</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="signature">
+          <div class="sign-block">
+            <div class="meta-label">Submitted by</div>
+            <div class="sign-name">${escapeHtml(employeeName)}</div>
+            <div>${escapeHtml(employeePosition)}</div>
+          </div>
+          <div class="sign-block">
+            <div class="meta-label">Attested by</div>
+            <div class="sign-name">MAY BERNADETH O. DE LA ROSA</div>
+            <div>Administrative Officer V</div>
+          </div>
+        </div>
+
         <div style="margin-top: 16px;">
           <strong>Attachment:</strong><br />
           ${attachmentHtml}
@@ -727,7 +804,7 @@ async function handleReportPrintClick(event) {
     alert('No report found for this date.');
     return;
   }
-  openReportPrint(report);
+  await openReportPrint(report);
 }
 
 function openAdminRegister() {
