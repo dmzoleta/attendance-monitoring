@@ -225,7 +225,7 @@ function mapAdminRow(row) {
 }
 
 function mapAttendanceRow(row) {
-  return {
+  const record = {
     id: row.id,
     employeeId: row.employee_id,
     date: formatDbDate(row.date),
@@ -260,6 +260,7 @@ function mapAttendanceRow(row) {
     office: row.office || undefined,
     position: row.position || undefined
   };
+  return normalizeAttendanceRecord(record);
 }
 
 function mapReportRow(row) {
@@ -496,6 +497,53 @@ function computeDailyStatus(record) {
   return late ? 'Late' : 'Present';
 }
 
+function normalizeAttendanceRecord(record) {
+  if (!record) return record;
+  const normalized = { ...record };
+  const hasAmIn = !!normalized.timeInAM;
+  const hasPmIn = !!normalized.timeInPM;
+  if (normalized.timeIn && !hasAmIn && !hasPmIn) {
+    const minutes = timeToMinutes(normalized.timeIn);
+    if (minutes !== null && minutes >= PM_IN_START) {
+      normalized.timeInPM = normalized.timeIn;
+    } else {
+      normalized.timeInAM = normalized.timeIn;
+    }
+  }
+
+  const hasAmOut = !!normalized.timeOutAM;
+  const hasPmOut = !!normalized.timeOutPM;
+  if (normalized.timeOut && !hasAmOut && !hasPmOut) {
+    const minutes = timeToMinutes(normalized.timeOut);
+    if (minutes !== null && minutes >= PM_OUT_START) {
+      normalized.timeOutPM = normalized.timeOut;
+    } else if (minutes !== null && minutes >= AM_OUT_START && minutes <= AM_OUT_END) {
+      normalized.timeOutAM = normalized.timeOut;
+    } else if (minutes !== null && minutes < PM_OUT_START) {
+      normalized.timeOutAM = normalized.timeOut;
+    }
+  }
+
+  const amInMinutes = timeToMinutes(normalized.timeInAM);
+  if (amInMinutes !== null && amInMinutes >= PM_IN_START) {
+    normalized.timeInPM = normalized.timeInAM;
+    normalized.timeInAM = '';
+  }
+
+  const pmInMinutes = timeToMinutes(normalized.timeInPM);
+  if (pmInMinutes !== null && pmInMinutes < PM_IN_START && !normalized.timeInAM) {
+    normalized.timeInAM = normalized.timeInPM;
+    normalized.timeInPM = '';
+  }
+
+  const amOutMinutes = timeToMinutes(normalized.timeOutAM);
+  if (amOutMinutes !== null && amOutMinutes >= PM_IN_START) {
+    normalized.timeOutPM = normalized.timeOutAM;
+    normalized.timeOutAM = '';
+  }
+
+  return normalized;
+}
 
 function findEmployeeByLogin(db, value) {
   const lookup = String(value || '').trim().toLowerCase();
@@ -783,9 +831,10 @@ function attendanceForDate(db, date) {
 function enrichAttendance(db, list) {
   return list.map((att) => {
     const emp = db.employees.find((e) => e.id === att.employeeId);
-    const status = computeDailyStatus(att);
+    const normalized = normalizeAttendanceRecord(att);
+    const status = computeDailyStatus(normalized);
     return {
-      ...att,
+      ...normalized,
       employeeName: emp ? emp.name : 'Unknown',
       office: emp ? emp.office : 'Unknown',
       position: emp ? emp.position : 'Unknown',
@@ -1629,7 +1678,7 @@ async function handleApiPg(req, res, pathname) {
         existing.latInPM = latitude || existing.latInPM;
         existing.lngInPM = longitude || existing.lngInPM;
       }
-      if (!existing.timeIn) existing.timeIn = timeIn;
+      if (session === 'AM' && !existing.timeIn) existing.timeIn = timeIn;
       existing.photo = pickLatestValue(photo, existing.photo);
       existing.location = pickLatestValue(location, existing.location);
       existing.latitude = pickLatestValue(latitude, existing.latitude);
@@ -1715,7 +1764,7 @@ async function handleApiPg(req, res, pathname) {
         employeeId,
         date,
         timeIn: '',
-        timeOut,
+        timeOut: session === 'PM' ? timeOut : '',
         timeInAM: '',
         timeOutAM: session === 'AM' ? timeOut : '',
         timeInPM: '',
@@ -1741,7 +1790,7 @@ async function handleApiPg(req, res, pathname) {
           timeOutAM: session === 'AM' ? timeOut : '',
           timeInPM: '',
           timeOutPM: session === 'PM' ? timeOut : '',
-          timeOut
+          timeOut: session === 'PM' ? timeOut : ''
         }),
         latitude,
         longitude,
@@ -1779,7 +1828,7 @@ async function handleApiPg(req, res, pathname) {
       existing.latOutPM = latitude || existing.latOutPM;
       existing.lngOutPM = longitude || existing.lngOutPM;
     }
-    if (!existing.timeOut) existing.timeOut = timeOut;
+    if (session === 'PM' && !existing.timeOut) existing.timeOut = timeOut;
     existing.photo = pickLatestValue(photo, existing.photo);
     existing.location = pickLatestValue(location, existing.location);
     existing.latitude = pickLatestValue(latitude, existing.latitude);
@@ -2407,7 +2456,7 @@ async function handleApi(req, res, pathname) {
           existing.latInPM = latitude || existing.latInPM;
           existing.lngInPM = longitude || existing.lngInPM;
         }
-        if (!existing.timeIn) existing.timeIn = timeIn;
+        if (session === 'AM' && !existing.timeIn) existing.timeIn = timeIn;
         existing.photo = pickLatestValue(photo, existing.photo);
         existing.location = pickLatestValue(location, existing.location);
         existing.latitude = pickLatestValue(latitude, existing.latitude);
@@ -2420,7 +2469,7 @@ async function handleApi(req, res, pathname) {
         id: `ATT-${date}-${employeeId}`,
         employeeId,
         date,
-        timeIn,
+        timeIn: session === 'AM' ? timeIn : '',
         timeOut: '',
         timeInAM: session === 'AM' ? timeIn : '',
         timeOutAM: '',
@@ -2494,7 +2543,7 @@ async function handleApi(req, res, pathname) {
           employeeId,
           date,
           timeIn: '',
-          timeOut,
+          timeOut: session === 'PM' ? timeOut : '',
           timeInAM: '',
           timeOutAM: session === 'AM' ? timeOut : '',
           timeInPM: '',
@@ -2520,7 +2569,7 @@ async function handleApi(req, res, pathname) {
             timeOutAM: session === 'AM' ? timeOut : '',
             timeInPM: '',
             timeOutPM: session === 'PM' ? timeOut : '',
-            timeOut
+            timeOut: session === 'PM' ? timeOut : ''
           }),
           latitude,
           longitude,
@@ -2559,7 +2608,7 @@ async function handleApi(req, res, pathname) {
         existing.latOutPM = latitude || existing.latOutPM;
         existing.lngOutPM = longitude || existing.lngOutPM;
       }
-      if (!existing.timeOut) existing.timeOut = timeOut;
+      if (session === 'PM' && !existing.timeOut) existing.timeOut = timeOut;
       existing.photo = pickLatestValue(photo, existing.photo);
       existing.location = pickLatestValue(location, existing.location);
       existing.latitude = pickLatestValue(latitude, existing.latitude);

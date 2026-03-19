@@ -509,10 +509,10 @@ function renderRecords(list) {
     const row = document.createElement('tr');
     row.innerHTML = `
       <td>${item.date}</td>
-      <td>${item.timeInAM || item.timeIn || '--'}</td>
+      <td>${item.timeInAM || '--'}</td>
       <td>${item.timeOutAM || '--'}</td>
       <td>${item.timeInPM || '--'}</td>
-      <td>${item.timeOutPM || item.timeOut || '--'}</td>
+      <td>${item.timeOutPM || '--'}</td>
       <td class="status-cell">${item.status || '--'}</td>
       <td>${photo ? `<img class="table-photo" src="${photo}" alt="Photo" />` : '--'}</td>
       <td class="table-location">${location || '--'}</td>

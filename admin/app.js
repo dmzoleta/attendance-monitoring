@@ -348,10 +348,10 @@ async function loadAttendanceToday() {
       <td>${item.employeeId}</td>
       <td>${item.employeeName}</td>
       <td>${item.office}</td>
-      <td>${item.timeInAM || item.timeIn || '--'}</td>
+      <td>${item.timeInAM || '--'}</td>
       <td>${item.timeOutAM || '--'}</td>
       <td>${item.timeInPM || '--'}</td>
-      <td>${item.timeOutPM || item.timeOut || '--'}</td>
+      <td>${item.timeOutPM || '--'}</td>
       <td class="status-cell">${item.status || '--'}</td>
       <td>${photo ? `<img class="table-photo" src="${photo}" alt="Photo" />` : '--'}</td>
       <td>
@@ -404,10 +404,10 @@ async function loadAttendanceHistory(from, to) {
       <td>${item.date}</td>
       <td>${item.employeeName}</td>
       <td>${item.office}</td>
-      <td>${item.timeInAM || item.timeIn || '--'}</td>
+      <td>${item.timeInAM || '--'}</td>
       <td>${item.timeOutAM || '--'}</td>
       <td>${item.timeInPM || '--'}</td>
-      <td>${item.timeOutPM || item.timeOut || '--'}</td>
+      <td>${item.timeOutPM || '--'}</td>
       <td class="status-cell">${item.status || '--'}</td>
       <td>${photo ? `<img class="table-photo" src="${photo}" alt="Photo" />` : '--'}</td>
       <td>
