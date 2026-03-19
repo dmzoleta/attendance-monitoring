@@ -197,7 +197,10 @@ async function openReportPrint(report) {
   const timeInPM = attendanceRecord ? (attendanceRecord.timeInPM || '--') : '--';
   const timeOutPM = attendanceRecord ? (attendanceRecord.timeOutPM || attendanceRecord.timeOut || '--') : '--';
   const summaryHtml = escapeHtml(report.summary || '').replace(/\n/g, '<br>');
-  const logoUrl = `${window.location.origin}/admin/assets/logo.jpg`;
+  const sealUrl = `${window.location.origin}/admin/assets/logo.jpg`;
+  const depedLogo = `${window.location.origin}/admin/assets/deped-logo.png`;
+  const bagongLogo = `${window.location.origin}/admin/assets/bagong-pilipinas.png`;
+  const sdoLogo = `${window.location.origin}/admin/assets/logo.jpg`;
 
   const printWindow = window.open('', '', 'width=900,height=700');
   printWindow.document.write(`
@@ -205,15 +208,21 @@ async function openReportPrint(report) {
       <head>
         <title>Individual Daily Log and Accomplishment Report</title>
         <style>
-          @page { size: A4; margin: 20mm; }
-          body { font-family: "Times New Roman", serif; color: #111; }
-          .header { text-align: center; margin-top: 6px; }
-          .seal { width: 62px; height: 62px; object-fit: contain; margin: 0 auto 6px; display: block; }
-          .dept { font-weight: 700; font-size: 18px; }
-          .division { font-weight: 700; font-size: 12px; letter-spacing: 0.04em; }
-          .office-line { margin-top: 6px; border-bottom: 1px solid #000; padding-bottom: 4px; font-size: 12px; text-align: left; }
-          .title { margin: 16px 0 8px; font-weight: 700; font-size: 14px; text-align: center; }
-          .meta { font-size: 12px; margin-top: 6px; }
+          @page { size: A4; margin: 18mm; }
+          body { font-family: "Times New Roman", serif; color: #111; margin: 0; }
+          .report-header { text-align: center; }
+          .seal { width: 76px; height: 76px; object-fit: contain; margin: 0 auto 4px; display: block; }
+          .header-text { line-height: 1.1; }
+          .rep { font-size: 12px; letter-spacing: 0.02em; font-family: "Old English Text MT", "Garamond", "Times New Roman", serif; }
+          .dept { font-weight: 700; font-size: 20px; letter-spacing: 0.04em; text-transform: uppercase; font-family: "Old English Text MT", "Garamond", "Times New Roman", serif; }
+          .division { font-weight: 700; font-size: 11px; letter-spacing: 0.14em; }
+          .header-lines { margin: 6px 0 2px; }
+          .header-line { border-top: 2px solid #000; }
+          .header-line.thin { border-top: 1px solid #000; margin-top: 2px; }
+          .office-line { font-size: 12px; font-weight: 700; text-align: left; margin: 4px 0 2px; }
+          .title { margin: 10px 0 2px; font-weight: 700; font-size: 13px; text-align: center; }
+          .subtitle { margin: 0 0 10px; font-weight: 700; font-size: 12px; text-align: center; }
+          .meta { font-size: 12px; margin-top: 2px; }
           .meta-row { display: flex; gap: 10px; margin: 4px 0; align-items: flex-end; }
           .meta-label { width: 90px; font-weight: 700; }
           .meta-line { flex: 1; border-bottom: 1px solid #000; min-height: 14px; }
@@ -224,18 +233,30 @@ async function openReportPrint(report) {
           .signatures { display: flex; justify-content: space-between; margin-top: 18px; font-size: 12px; }
           .sig { width: 44%; text-align: center; }
           .sig-line { border-top: 1px solid #000; margin-top: 22px; }
-          .footer { position: fixed; left: 20mm; right: 20mm; bottom: 16mm; display: flex; gap: 12px; align-items: center; font-size: 10px; }
-          .footer img { width: 26px; height: 26px; object-fit: contain; }
+          .footer { position: fixed; left: 18mm; right: 18mm; bottom: 12mm; font-size: 10px; }
+          .footer-line { border-top: 1.5px solid #000; margin-bottom: 6px; }
+          .footer-content { display: flex; gap: 18px; align-items: center; }
+          .footer-logos { display: flex; gap: 10px; align-items: center; }
+          .footer-logos img { width: 46px; height: 46px; object-fit: contain; }
+          .footer-text { line-height: 1.3; }
         </style>
       </head>
       <body>
-        <div class="header">
-          <img class="seal" src="${logoUrl}" alt="Seal" />
-          <div>Republic of the Philippines</div>
-          <div class="dept">Department of Education</div>
-          <div class="division">SCHOOLS DIVISION OF MARINDUQUE</div>
+        <div class="report-header">
+          <img class="seal" src="${sealUrl}" alt="Seal" />
+          <div class="header-text">
+            <div class="rep">Republic of the Philippines</div>
+            <div class="dept">Department of Education</div>
+            <div class="division">SCHOOLS DIVISION OF MARINDUQUE</div>
+          </div>
+          <div class="header-lines">
+            <div class="header-line"></div>
+            <div class="header-line thin"></div>
+          </div>
           <div class="office-line">Office of the Schools Division Superintendent</div>
-          <div class="title">INDIVIDUAL DAILY LOG AND ACCOMPLISHMENT REPORT<br/>(WORK FROM HOME)</div>
+          <div class="header-line thin"></div>
+          <div class="title">INDIVIDUAL DAILY LOG AND ACCOMPLISHMENT REPORT</div>
+          <div class="subtitle">(WORK FROM HOME)</div>
         </div>
 
         <div class="meta">
@@ -282,15 +303,19 @@ async function openReportPrint(report) {
         </div>
 
         <div class="footer">
-          <div>
-            <img src="${logoUrl}" alt="Logo" />
-            <img src="${logoUrl}" alt="Logo" />
-            <img src="${logoUrl}" alt="Logo" />
-          </div>
-          <div>
-            Address: T. Roque St., Malusak, Boac, Marinduque<br/>
-            Tel. No.: (042) 754-0247 · Fax No.: (042) 332-1611<br/>
-            Email: marinduque@deped.gov.ph
+          <div class="footer-line"></div>
+          <div class="footer-content">
+            <div class="footer-logos">
+              <img src="${depedLogo}" alt="DepEd" onerror="this.style.display='none'" />
+              <img src="${bagongLogo}" alt="Bagong Pilipinas" onerror="this.style.display='none'" />
+              <img src="${sdoLogo}" alt="SDO Marinduque" onerror="this.style.display='none'" />
+            </div>
+            <div class="footer-text">
+              Address: T. Roque St., Malusak, Boac, Marinduque<br/>
+              Tel. No.: (042) 754-0247 ● Fax No.: (042) 332-1611<br/>
+              Email: marinduque@deped.gov.ph<br/>
+              Website: https://depedmarinduque.com
+            </div>
           </div>
         </div>
       </body>
