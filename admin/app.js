@@ -173,9 +173,10 @@ async function fetchAttendanceForReport(employeeId, reportDate) {
 async function openReportPrint(report) {
   if (!report) return;
   const attachmentName = report.attachmentName || 'attachment';
+  const attachmentLabel = report.attachmentData ? attachmentName : 'No attachment';
   const attachmentHtml = report.attachmentData
     ? (isImageAttachment(report.attachmentData)
-      ? `<img src="${report.attachmentData}" alt="Attachment" style="max-width:100%; margin-top:12px; border-radius:10px;" />`
+      ? `<img src="${report.attachmentData}" alt="Attachment" style="max-width:100%; margin-top:12px; border-radius:6px;" />`
       : `<a href="${report.attachmentData}" download="${attachmentName}">Download attachment</a>`)
     : '<em>No attachment</em>';
 
@@ -196,6 +197,7 @@ async function openReportPrint(report) {
   const timeInPM = attendanceRecord ? (attendanceRecord.timeInPM || '--') : '--';
   const timeOutPM = attendanceRecord ? (attendanceRecord.timeOutPM || attendanceRecord.timeOut || '--') : '--';
   const summaryHtml = escapeHtml(report.summary || '').replace(/\n/g, '<br>');
+  const logoUrl = `${window.location.origin}/admin/assets/logo.jpg`;
 
   const printWindow = window.open('', '', 'width=900,height=700');
   printWindow.document.write(`
@@ -203,30 +205,48 @@ async function openReportPrint(report) {
       <head>
         <title>Individual Daily Log and Accomplishment Report</title>
         <style>
-          body { font-family: "Trebuchet MS", sans-serif; padding: 24px; color: #1f2b45; }
-          h1 { text-align: center; color: #0d2d6a; margin: 0 0 8px; font-size: 20px; letter-spacing: 0.02em; }
-          .meta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 24px; margin-bottom: 16px; font-size: 13px; }
-          .meta-grid div { border-bottom: 1px solid #cfd7ea; padding-bottom: 4px; }
-          .meta-label { color: #5b6b91; font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; }
-          .report-table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-          .report-table th, .report-table td { border: 1px solid #3b4a6b; padding: 8px; vertical-align: top; font-size: 13px; }
-          .report-table th { background: #f1f4fb; text-align: center; }
-          .logs { line-height: 1.6; }
-          .signature { margin-top: 18px; display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
-          .sign-block { border-top: 1px solid #1f2b45; padding-top: 6px; text-align: center; font-size: 12px; }
-          .sign-name { font-weight: 700; }
+          @page { size: A4; margin: 20mm; }
+          body { font-family: "Times New Roman", serif; color: #111; }
+          .header { text-align: center; margin-top: 6px; }
+          .seal { width: 62px; height: 62px; object-fit: contain; margin: 0 auto 6px; display: block; }
+          .dept { font-weight: 700; font-size: 18px; }
+          .division { font-weight: 700; font-size: 12px; letter-spacing: 0.04em; }
+          .office-line { margin-top: 6px; border-bottom: 1px solid #000; padding-bottom: 4px; font-size: 12px; text-align: left; }
+          .title { margin: 16px 0 8px; font-weight: 700; font-size: 14px; text-align: center; }
+          .meta { font-size: 12px; margin-top: 6px; }
+          .meta-row { display: flex; gap: 10px; margin: 4px 0; align-items: flex-end; }
+          .meta-label { width: 90px; font-weight: 700; }
+          .meta-line { flex: 1; border-bottom: 1px solid #000; min-height: 14px; }
+          table.report { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 12px; }
+          table.report th, table.report td { border: 1px solid #000; padding: 6px; vertical-align: top; }
+          table.report th { text-align: center; font-weight: 700; }
+          .logs { line-height: 1.5; white-space: pre-line; }
+          .signatures { display: flex; justify-content: space-between; margin-top: 18px; font-size: 12px; }
+          .sig { width: 44%; text-align: center; }
+          .sig-line { border-top: 1px solid #000; margin-top: 22px; }
+          .footer { position: fixed; left: 20mm; right: 20mm; bottom: 16mm; display: flex; gap: 12px; align-items: center; font-size: 10px; }
+          .footer img { width: 26px; height: 26px; object-fit: contain; }
         </style>
       </head>
       <body>
-        <h1>INDIVIDUAL DAILY LOG AND ACCOMPLISHMENT REPORT</h1>
-        <div class="meta-grid">
-          <div><span class="meta-label">Name</span><br><strong>${escapeHtml(employeeName)}</strong></div>
-          <div><span class="meta-label">Position</span><br><strong>${escapeHtml(employeePosition)}</strong></div>
-          <div><span class="meta-label">Division</span><br><strong>Office of the Schools Division Superintendent</strong></div>
-          <div><span class="meta-label">Section</span><br><strong>${escapeHtml(employeeOffice || '--')}</strong></div>
+        <div class="header">
+          <img class="seal" src="${logoUrl}" alt="Seal" />
+          <div>Republic of the Philippines</div>
+          <div class="dept">Department of Education</div>
+          <div class="division">SCHOOLS DIVISION OF MARINDUQUE</div>
+          <div class="office-line">Office of the Schools Division Superintendent</div>
+          <div class="title">INDIVIDUAL DAILY LOG AND ACCOMPLISHMENT REPORT<br/>(WORK FROM HOME)</div>
         </div>
 
-        <table class="report-table">
+        <div class="meta">
+          <div class="meta-row"><span class="meta-label">NAME:</span><span class="meta-line">${escapeHtml(employeeName)}</span></div>
+          <div class="meta-row"><span class="meta-label">POSITION:</span><span class="meta-line">${escapeHtml(employeePosition)}</span></div>
+          <div class="meta-row"><span class="meta-label">DIVISION:</span><span class="meta-line">Office of the Schools Division Superintendent</span></div>
+          <div class="meta-row"><span class="meta-label">SECTION:</span><span class="meta-line">${escapeHtml(employeeOffice || '--')}</span></div>
+          <div class="meta-row"><span class="meta-label">Date/s Covered:</span><span class="meta-line">${escapeHtml(reportDate)}</span></div>
+        </div>
+
+        <table class="report">
           <thead>
             <tr>
               <th>Date and Actual Time Logs</th>
@@ -235,34 +255,43 @@ async function openReportPrint(report) {
           </thead>
           <tbody>
             <tr>
-              <td class="logs">
-                <strong>${escapeHtml(reportDate)}</strong><br>
-                AM In: ${escapeHtml(timeInAM)}<br>
-                AM Out: ${escapeHtml(timeOutAM)}<br>
-                PM In: ${escapeHtml(timeInPM)}<br>
-                PM Out: ${escapeHtml(timeOutPM)}
-              </td>
-              <td>${summaryHtml || '--'}</td>
+              <td class="logs">${escapeHtml(reportDate)}\nAM In: ${escapeHtml(timeInAM)}\nAM Out: ${escapeHtml(timeOutAM)}\nPM In: ${escapeHtml(timeInPM)}\nPM Out: ${escapeHtml(timeOutPM)}</td>
+              <td>${summaryHtml || '&nbsp;'}</td>
             </tr>
           </tbody>
         </table>
 
-        <div class="signature">
-          <div class="sign-block">
-            <div class="meta-label">Submitted by</div>
-            <div class="sign-name">${escapeHtml(employeeName)}</div>
+        <div class="signatures">
+          <div class="sig">
+            <div>Submitted by:</div>
+            <div class="sig-line"></div>
+            <div><strong>${escapeHtml(employeeName)}</strong></div>
             <div>${escapeHtml(employeePosition)}</div>
           </div>
-          <div class="sign-block">
-            <div class="meta-label">Attested by</div>
-            <div class="sign-name">MAY BERNADETH O. DE LA ROSA</div>
+          <div class="sig">
+            <div>Attested by:</div>
+            <div class="sig-line"></div>
+            <div><strong>MAY BERNADETH O. DE LA ROSA</strong></div>
             <div>Administrative Officer V</div>
           </div>
         </div>
 
-        <div style="margin-top: 16px;">
-          <strong>Attachment:</strong><br />
-          ${attachmentHtml}
+        <div style="margin-top: 10px; font-size: 11px;">
+          <strong>Attachment:</strong> <em>${escapeHtml(attachmentLabel)}</em><br/>
+          ${report.attachmentData ? attachmentHtml : ''}
+        </div>
+
+        <div class="footer">
+          <div>
+            <img src="${logoUrl}" alt="Logo" />
+            <img src="${logoUrl}" alt="Logo" />
+            <img src="${logoUrl}" alt="Logo" />
+          </div>
+          <div>
+            Address: T. Roque St., Malusak, Boac, Marinduque<br/>
+            Tel. No.: (042) 754-0247 · Fax No.: (042) 332-1611<br/>
+            Email: marinduque@deped.gov.ph
+          </div>
         </div>
       </body>
     </html>
