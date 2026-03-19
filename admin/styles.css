@@ -159,8 +159,7 @@ body::before {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 10px 20px;
-  min-height: 56px;
+  padding: 16px 24px;
   background: linear-gradient(120deg, var(--navy), var(--blue));
   color: white;
   box-shadow: var(--shadow);
@@ -176,17 +175,17 @@ body::before {
 }
 
 .brand img {
-  width: 36px;
-  height: 36px;
+  width: 44px;
+  height: 44px;
 }
 
 .brand strong {
   display: block;
-  font-size: 15px;
+  font-size: 16px;
 }
 
 .brand span {
-  font-size: 11px;
+  font-size: 12px;
   opacity: 0.85;
 }
 
@@ -204,7 +203,7 @@ body::before {
   border: none;
   background: rgba(255, 255, 255, 0.15);
   color: white;
-  padding: 6px 8px;
+  padding: 8px 10px;
   border-radius: 8px;
   cursor: pointer;
   position: relative;
