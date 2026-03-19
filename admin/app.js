@@ -197,10 +197,11 @@ async function openReportPrint(report) {
   const timeInPM = attendanceRecord ? (attendanceRecord.timeInPM || '--') : '--';
   const timeOutPM = attendanceRecord ? (attendanceRecord.timeOutPM || attendanceRecord.timeOut || '--') : '--';
   const summaryHtml = escapeHtml(report.summary || '').replace(/\n/g, '<br>');
-  const sealUrl = `${window.location.origin}/admin/assets/deped-seal.png`;
-  const depedLogo = `${window.location.origin}/admin/assets/deped-wordmark.png`;
-  const bagongLogo = `${window.location.origin}/admin/assets/bagong-pilipinas.png`;
-  const sdoLogo = `${window.location.origin}/admin/assets/logo.jpg`;
+  const assetVersion = Date.now();
+  const sealUrl = `${window.location.origin}/admin/assets/deped-seal.png?v=${assetVersion}`;
+  const depedLogo = `${window.location.origin}/admin/assets/deped-wordmark.png?v=${assetVersion}`;
+  const bagongLogo = `${window.location.origin}/admin/assets/bagong-pilipinas.png?v=${assetVersion}`;
+  const sdoLogo = `${window.location.origin}/admin/assets/logo.jpg?v=${assetVersion}`;
 
   const printWindow = window.open('', '', 'width=900,height=700');
   printWindow.document.write(`
