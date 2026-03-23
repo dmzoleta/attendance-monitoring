@@ -372,6 +372,16 @@ body::before {
   margin-top: 8px;
 }
 
+#stat-modal .modal-card {
+  width: min(420px, 96vw);
+}
+
+#stat-modal .table-wrap {
+  max-height: 55vh;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
 .map-box {
   margin-top: 10px;
 }
@@ -679,6 +689,19 @@ body::before {
   border-radius: 12px;
   -webkit-overflow-scrolling: touch;
   border: 1px solid #e8ecf7;
+}
+
+#stat-modal-table {
+  min-width: 0;
+  table-layout: fixed;
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+#stat-modal-table th,
+#stat-modal-table td {
+  padding: 6px 6px;
+  word-break: break-word;
 }
 
 .data-table td.status-present { color: #2f8f48; font-weight: 700; }
