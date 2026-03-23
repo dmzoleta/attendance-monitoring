@@ -299,6 +299,16 @@ body::before {
   overflow: hidden;
 }
 
+.stat-card.clickable {
+  cursor: pointer;
+  transition: transform 0.15s ease, filter 0.15s ease;
+}
+
+.stat-card.clickable:hover {
+  transform: translateY(-2px);
+  filter: brightness(1.03);
+}
+
 .stat-card::after {
   content: "";
   position: absolute;
@@ -356,6 +366,10 @@ body::before {
   border-radius: 16px;
   padding: 16px;
   box-shadow: var(--shadow);
+}
+
+.modal-card .table-wrap {
+  margin-top: 8px;
 }
 
 .map-box {

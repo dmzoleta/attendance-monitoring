@@ -382,6 +382,16 @@ body::before {
   overflow: hidden;
 }
 
+.stat-card.clickable {
+  cursor: pointer;
+  transition: transform 0.15s ease, filter 0.15s ease;
+}
+
+.stat-card.clickable:hover {
+  transform: translateY(-2px);
+  filter: brightness(1.03);
+}
+
 .stat-card::after {
   content: "";
   position: absolute;
@@ -448,6 +458,12 @@ body::before {
 
 .data-table th {
   color: #2d3f6f;
+}
+
+.table-wrap {
+  overflow-x: auto;
+  border-radius: 12px;
+  border: 1px solid #e8ecf7;
 }
 
 .data-table td.status-present { color: #2f8f48; font-weight: 700; }
@@ -663,6 +679,24 @@ body::before {
   border-radius: 16px;
   padding: 18px;
   box-shadow: var(--shadow);
+}
+
+.modal-card.large {
+  width: min(900px, 96vw);
+  max-height: 82vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.modal-body {
+  overflow: auto;
+  max-height: 62vh;
+}
+
+.modal-subtitle {
+  margin: 0 0 10px;
+  font-size: 12px;
+  color: #6673a0;
 }
 
 .modal-actions {

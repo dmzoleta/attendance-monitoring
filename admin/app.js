@@ -8,6 +8,13 @@ const statTotal = document.getElementById('stat-total');
 const statPresent = document.getElementById('stat-present');
 const statLate = document.getElementById('stat-late');
 const statAbsent = document.getElementById('stat-absent');
+const statCards = document.querySelectorAll('.stat-card[data-stat]');
+const statModal = document.getElementById('stat-modal');
+const statModalTitle = document.getElementById('stat-modal-title');
+const statModalSubtitle = document.getElementById('stat-modal-subtitle');
+const statModalTable = document.getElementById('stat-modal-table');
+const statModalEmpty = document.getElementById('stat-modal-empty');
+const closeStatModalBtn = document.getElementById('close-stat-modal');
 const currentTime = document.getElementById('current-time');
 const currentDate = document.getElementById('current-date');
 
@@ -76,6 +83,24 @@ function isoToday() {
   return `${y}-${m}-${d}`;
 }
 
+function getMonthRange() {
+  const now = new Date();
+  const from = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+  const to = isoToday();
+  return { from, to };
+}
+
+function buildDateList(from, to) {
+  const dates = [];
+  const start = new Date(`${from}T00:00:00`);
+  const end = new Date(`${to}T00:00:00`);
+  for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+    const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    dates.push(dateStr);
+  }
+  return dates;
+}
+
 function formatDateTimeStamp(value) {
   if (!value) return '';
   const date = new Date(value);
@@ -131,6 +156,97 @@ function hasAnyAttendanceLocal(item) {
     item.timeIn ||
     item.timeOut
   );
+}
+
+async function ensureEmployeesLoaded() {
+  if (employeesCache.length) return;
+  const data = await api('/api/employees');
+  employeesCache = data.employees || [];
+}
+
+function normalizeStatus(value) {
+  return String(value || '').toLowerCase();
+}
+
+async function buildStatusList(status, from, to) {
+  const query = new URLSearchParams({ from, to }).toString();
+  const data = await api(`/api/attendance?${query}`);
+  const raw = data.attendance || [];
+  const unique = new Map();
+  raw.forEach((item) => {
+    const key = `${item.date}|${item.employeeId}`;
+    if (!unique.has(key)) unique.set(key, item);
+  });
+  const records = Array.from(unique.values());
+
+  if (status === 'present' || status === 'late') {
+    return records
+      .filter((item) => normalizeStatus(item.status) === status)
+      .map((item) => ({
+        date: item.date,
+        employeeName: item.employeeName,
+        office: item.office,
+        status: item.status || status
+      }))
+      .sort((a, b) => a.date.localeCompare(b.date) || a.employeeName.localeCompare(b.employeeName));
+  }
+
+  await ensureEmployeesLoaded();
+  if (!employeesCache.length) return [];
+  const seen = new Set(records.map((item) => `${item.date}|${item.employeeId}`));
+  const dates = buildDateList(from, to);
+  const list = [];
+  dates.forEach((date) => {
+    employeesCache.forEach((emp) => {
+      if (!seen.has(`${date}|${emp.id}`)) {
+        list.push({
+          date,
+          employeeName: emp.name,
+          office: emp.office,
+          status: 'Absent'
+        });
+      }
+    });
+  });
+  return list.sort((a, b) => a.date.localeCompare(b.date) || a.employeeName.localeCompare(b.employeeName));
+}
+
+function renderStatModalRows(list, status) {
+  if (!statModalTable) return;
+  const tbody = statModalTable.querySelector('tbody');
+  if (!tbody) return;
+  tbody.innerHTML = '';
+  if (!list.length) {
+    if (statModalEmpty) statModalEmpty.classList.remove('hidden');
+    return;
+  }
+  if (statModalEmpty) statModalEmpty.classList.add('hidden');
+  list.forEach((item) => {
+    const row = document.createElement('tr');
+    row.innerHTML = `
+      <td>${item.date || '--'}</td>
+      <td>${item.employeeName || '--'}</td>
+      <td>${item.office || '--'}</td>
+      <td class="status-cell">${item.status || status}</td>
+    `;
+    setStatusCell(row.querySelector('.status-cell'), item.status || status);
+    tbody.appendChild(row);
+  });
+}
+
+async function openStatModal(status) {
+  if (!statModal) return;
+  const labelMap = { present: 'Present', late: 'Late', absent: 'Absent' };
+  const { from, to } = getMonthRange();
+  if (statModalTitle) statModalTitle.textContent = `${labelMap[status] || 'Status'} Details`;
+  if (statModalSubtitle) statModalSubtitle.textContent = `Coverage: ${from} to ${to}`;
+  const list = await buildStatusList(status, from, to);
+  renderStatModalRows(list, status);
+  statModal.classList.remove('hidden');
+}
+
+function closeStatModal() {
+  if (statModal) statModal.classList.add('hidden');
 }
 
 function buildReportKey(employeeId, date) {
@@ -1138,6 +1254,26 @@ if (markMsgReadBtn) {
     } catch (err) {
       alert(err.message || 'Unable to mark messages.');
     }
+  });
+}
+
+if (statCards && statCards.length) {
+  statCards.forEach((card) => {
+    const open = () => openStatModal(card.dataset.stat);
+    card.addEventListener('click', open);
+    card.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        open();
+      }
+    });
+  });
+}
+
+if (closeStatModalBtn) closeStatModalBtn.addEventListener('click', closeStatModal);
+if (statModal) {
+  statModal.addEventListener('click', (event) => {
+    if (event.target === statModal) closeStatModal();
   });
 }
 

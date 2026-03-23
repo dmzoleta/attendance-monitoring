@@ -14,6 +14,13 @@ const empRole = document.getElementById('emp-role');
 const statDays = document.getElementById('stat-days');
 const statLate = document.getElementById('stat-late');
 const statAbsent = document.getElementById('stat-absent');
+const statCards = document.querySelectorAll('.stat-card[data-stat]');
+const statModal = document.getElementById('stat-modal');
+const statModalTitle = document.getElementById('stat-modal-title');
+const statModalSubtitle = document.getElementById('stat-modal-subtitle');
+const statModalTable = document.getElementById('stat-modal-table');
+const statModalEmpty = document.getElementById('stat-modal-empty');
+const closeStatModalBtn = document.getElementById('close-stat-modal');
 
 const empTime = document.getElementById('emp-time');
 const empDate = document.getElementById('emp-date');
@@ -466,6 +473,89 @@ function computeStats() {
   statDays.textContent = totalDays;
   statLate.textContent = lateCount;
   statAbsent.textContent = absent;
+}
+
+function buildMonthDates() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = now.getMonth();
+  const days = now.getDate();
+  const dates = [];
+  for (let day = 1; day <= days; day += 1) {
+    const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    dates.push(dateStr);
+  }
+  return dates;
+}
+
+function buildEmployeeStatusList(type) {
+  const now = new Date();
+  const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const monthRecords = attendanceCache.filter((item) => item.date && item.date.startsWith(monthKey));
+  const byDate = new Map();
+  monthRecords.forEach((item) => {
+    if (!byDate.has(item.date)) byDate.set(item.date, item);
+  });
+  const records = Array.from(byDate.values()).filter(hasAttendance);
+  const lateRecords = records.filter((rec) => isLateMorning(rec) || isLateAfternoon(rec));
+  const allDates = buildMonthDates();
+
+  if (type === 'late') return lateRecords;
+  if (type === 'present') return records;
+
+  return allDates
+    .filter((date) => !byDate.has(date) || !hasAttendance(byDate.get(date)))
+    .map((date) => ({ date, status: 'Absent' }));
+}
+
+function renderStatModalRows(list, type) {
+  if (!statModalTable) return;
+  const tbody = statModalTable.querySelector('tbody');
+  if (!tbody) return;
+  tbody.innerHTML = '';
+  if (!list.length) {
+    if (statModalEmpty) statModalEmpty.classList.remove('hidden');
+    return;
+  }
+  if (statModalEmpty) statModalEmpty.classList.add('hidden');
+
+  list
+    .slice()
+    .sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')))
+    .forEach((item) => {
+      const row = document.createElement('tr');
+      const statusLabel = item.status || (type === 'late' ? 'Late' : type === 'present' ? 'Present' : 'Absent');
+      const amIn = item.timeInAM || item.timeIn || '--';
+      const pmIn = item.timeInPM || '--';
+      row.innerHTML = `
+        <td>${item.date || '--'}</td>
+        <td class="status-cell">${statusLabel}</td>
+        <td>${amIn}</td>
+        <td>${pmIn}</td>
+      `;
+      setStatusCell(row.querySelector('.status-cell'), statusLabel);
+      tbody.appendChild(row);
+    });
+}
+
+function openStatModal(type) {
+  if (!statModal) return;
+  const labelMap = {
+    present: 'Present Days',
+    late: 'Late Days',
+    absent: 'Absent Days'
+  };
+  const now = new Date();
+  const monthLabel = now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  if (statModalTitle) statModalTitle.textContent = labelMap[type] || 'Status Details';
+  if (statModalSubtitle) statModalSubtitle.textContent = `Coverage: ${monthLabel}`;
+  const list = buildEmployeeStatusList(type);
+  renderStatModalRows(list, type);
+  statModal.classList.remove('hidden');
+}
+
+function closeStatModal() {
+  if (statModal) statModal.classList.add('hidden');
 }
 
 function getTodayAttendance() {
@@ -1025,6 +1115,26 @@ if (closeConcernBtn) closeConcernBtn.addEventListener('click', closeConcernModal
 if (cancelConcernBtn) cancelConcernBtn.addEventListener('click', closeConcernModal);
 if (concernForm) concernForm.addEventListener('submit', handleConcern);
 if (reportForm) reportForm.addEventListener('submit', handleDailyReport);
+
+if (statCards && statCards.length) {
+  statCards.forEach((card) => {
+    const open = () => openStatModal(card.dataset.stat);
+    card.addEventListener('click', open);
+    card.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        open();
+      }
+    });
+  });
+}
+
+if (closeStatModalBtn) closeStatModalBtn.addEventListener('click', closeStatModal);
+if (statModal) {
+  statModal.addEventListener('click', (event) => {
+    if (event.target === statModal) closeStatModal();
+  });
+}
 
 setInterval(tickClock, 1000);
 

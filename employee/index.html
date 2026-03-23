@@ -157,6 +157,30 @@
       </div>
     </div>
 
+    <div id="stat-modal" class="modal hidden">
+      <div class="modal-card">
+        <div class="card-header">
+          <h3 id="stat-modal-title">Status Details</h3>
+          <button class="icon-btn" id="close-stat-modal">✖</button>
+        </div>
+        <p class="helper-text" id="stat-modal-subtitle"></p>
+        <div class="table-wrap">
+          <table class="data-table" id="stat-modal-table">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Status</th>
+                <th>AM In</th>
+                <th>PM In</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <p class="helper-text hidden" id="stat-modal-empty">No records found.</p>
+      </div>
+    </div>
+
     <section id="employee-app" class="app-screen hidden">
       <header class="topbar">
         <div class="brand">
@@ -180,15 +204,15 @@
           </div>
 
           <div class="stat-grid">
-            <div class="stat-card green">
+            <div class="stat-card green clickable" data-stat="present" role="button" tabindex="0">
               <span>Total Days</span>
               <strong id="stat-days">0</strong>
             </div>
-            <div class="stat-card yellow">
+            <div class="stat-card yellow clickable" data-stat="late" role="button" tabindex="0">
               <span>Late Count</span>
               <strong id="stat-late">0</strong>
             </div>
-            <div class="stat-card red">
+            <div class="stat-card red clickable" data-stat="absent" role="button" tabindex="0">
               <span>Absent</span>
               <strong id="stat-absent">0</strong>
             </div>
