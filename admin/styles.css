@@ -469,6 +469,12 @@ body::before {
 .data-table td.status-present { color: #2f8f48; font-weight: 700; }
 .data-table td.status-late { color: #d32f2f; font-weight: 700; }
 .data-table td.status-absent { color: #f06b3f; font-weight: 700; }
+.stat-loading td {
+  text-align: center;
+  color: #6673a0;
+  font-style: italic;
+  padding: 18px 12px;
+}
 
 .table-photo {
   width: 42px;

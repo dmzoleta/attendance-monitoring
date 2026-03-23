@@ -66,6 +66,13 @@ let messagesCache = [];
 let reportsCache = [];
 let reportMap = new Map();
 let refreshTimer = null;
+const STAT_CACHE_TTL = 45000;
+const statCache = {
+  key: '',
+  time: 0,
+  attendance: [],
+  employees: []
+};
 
 function formatDate(date) {
   return date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
@@ -211,6 +218,83 @@ async function buildStatusList(status, from, to) {
   return list.sort((a, b) => a.date.localeCompare(b.date) || a.employeeName.localeCompare(b.employeeName));
 }
 
+function setStatModalLoading(message = 'Loading…') {
+  if (!statModalTable) return;
+  const tbody = statModalTable.querySelector('tbody');
+  if (!tbody) return;
+  tbody.innerHTML = `
+    <tr class="stat-loading">
+      <td colspan="4">${message}</td>
+    </tr>
+  `;
+  if (statModalEmpty) statModalEmpty.classList.add('hidden');
+}
+
+async function loadStatBase(from, to, needsEmployees = false) {
+  const key = `${from}|${to}`;
+  const now = Date.now();
+  if (statCache.key === key && (now - statCache.time) < STAT_CACHE_TTL) {
+    return { attendance: statCache.attendance, employees: statCache.employees };
+  }
+  const query = new URLSearchParams({ from, to }).toString();
+  const tasks = [api(`/api/attendance?${query}`)];
+  if (needsEmployees || !employeesCache.length) {
+    tasks.push(api('/api/employees'));
+  }
+  const results = await Promise.all(tasks);
+  const attendance = (results[0] && results[0].attendance) || [];
+  let employees = employeesCache;
+  if (results[1] && results[1].employees) {
+    employees = results[1].employees;
+    employeesCache = employees;
+  }
+  statCache.key = key;
+  statCache.time = now;
+  statCache.attendance = attendance;
+  statCache.employees = employees;
+  return { attendance, employees };
+}
+
+function buildStatusListFromBase(status, from, to, attendance, employees) {
+  const raw = attendance || [];
+  const unique = new Map();
+  raw.forEach((item) => {
+    const key = `${item.date}|${item.employeeId}`;
+    if (!unique.has(key)) unique.set(key, item);
+  });
+  const records = Array.from(unique.values());
+
+  if (status === 'present' || status === 'late') {
+    return records
+      .filter((item) => normalizeStatus(item.status) === status)
+      .map((item) => ({
+        date: item.date,
+        employeeName: item.employeeName,
+        office: item.office,
+        status: item.status || status
+      }))
+      .sort((a, b) => a.date.localeCompare(b.date) || a.employeeName.localeCompare(b.employeeName));
+  }
+
+  if (!employees || !employees.length) return [];
+  const seen = new Set(records.map((item) => `${item.date}|${item.employeeId}`));
+  const dates = buildDateList(from, to);
+  const list = [];
+  dates.forEach((date) => {
+    employees.forEach((emp) => {
+      if (!seen.has(`${date}|${emp.id}`)) {
+        list.push({
+          date,
+          employeeName: emp.name,
+          office: emp.office,
+          status: 'Absent'
+        });
+      }
+    });
+  });
+  return list.sort((a, b) => a.date.localeCompare(b.date) || a.employeeName.localeCompare(b.employeeName));
+}
+
 function renderStatModalRows(list, status) {
   if (!statModalTable) return;
   const tbody = statModalTable.querySelector('tbody');
@@ -240,9 +324,16 @@ async function openStatModal(status) {
   const { from, to } = getMonthRange();
   if (statModalTitle) statModalTitle.textContent = `${labelMap[status] || 'Status'} Details`;
   if (statModalSubtitle) statModalSubtitle.textContent = `Coverage: ${from} to ${to}`;
-  const list = await buildStatusList(status, from, to);
-  renderStatModalRows(list, status);
   statModal.classList.remove('hidden');
+  setStatModalLoading();
+  try {
+    const needsEmployees = status === 'absent';
+    const base = await loadStatBase(from, to, needsEmployees);
+    const list = buildStatusListFromBase(status, from, to, base.attendance, base.employees);
+    renderStatModalRows(list, status);
+  } catch (err) {
+    setStatModalLoading('Unable to load data. Please try again.');
+  }
 }
 
 function closeStatModal() {
@@ -1090,6 +1181,8 @@ loginForm.addEventListener('submit', async (event) => {
     loginScreen.classList.add('hidden');
     adminApp.classList.remove('hidden');
     await Promise.all([loadSummary(), loadAttendanceToday(), loadEmployees(), loadNotifications(), loadMessages()]);
+    const statRange = getMonthRange();
+    loadStatBase(statRange.from, statRange.to, false).catch(() => {});
     tickClock();
     startAutoRefresh();
   } catch (err) {
