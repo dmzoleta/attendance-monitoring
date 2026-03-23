@@ -677,6 +677,7 @@ body::before {
   display: grid;
   place-items: center;
   padding: 20px;
+  z-index: 120;
 }
 
 .modal-card {
