@@ -284,12 +284,34 @@ function setGpsStatus(message) {
 }
 
 let gpsWatchId = null;
+let nativeWatchId = null;
 let lastCoords = null;
 let lastMapAt = 0;
 let lastAddressAt = 0;
-const ADDRESS_ACCURACY_THRESHOLD = 20;
-const ADDRESS_STABLE_HITS = 2;
+const ADDRESS_ACCURACY_THRESHOLD = 10;
+const ADDRESS_STABLE_HITS = 3;
+const BEST_SAMPLE_WINDOW_MS = 12000;
 let accuracyStreak = 0;
+
+function getCapacitorGeo() {
+  if (typeof window === 'undefined') return null;
+  if (!window.Capacitor || !window.Capacitor.Plugins) return null;
+  return window.Capacitor.Plugins.Geolocation || null;
+}
+
+async function ensureNativePermission() {
+  const geo = getCapacitorGeo();
+  if (!geo) return false;
+  try {
+    const current = await geo.checkPermissions();
+    if (current && (current.location === 'granted' || current.coarseLocation === 'granted')) return true;
+    const requested = await geo.requestPermissions();
+    const status = requested ? (requested.location || requested.coarseLocation) : null;
+    return status === 'granted';
+  } catch (err) {
+    return false;
+  }
+}
 
 function toRadians(value) {
   return (value * Math.PI) / 180;
@@ -308,10 +330,65 @@ function distanceMeters(a, b) {
   return 2 * R * Math.asin(Math.sqrt(h));
 }
 
+function chooseBetterPosition(best, candidate) {
+  if (!candidate) return best;
+  if (!best) return candidate;
+  const bestAcc = best.coords ? best.coords.accuracy : best.accuracy || 9999;
+  const candAcc = candidate.coords ? candidate.coords.accuracy : candidate.accuracy || 9999;
+  if (candAcc + 0.1 < bestAcc) return candidate;
+  return best;
+}
+
+function collectBestWebPosition() {
+  return new Promise((resolve) => {
+    if (!navigator.geolocation) return resolve(null);
+    let best = null;
+    const id = navigator.geolocation.watchPosition(
+      (pos) => {
+        best = chooseBetterPosition(best, pos);
+      },
+      () => {},
+      { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 }
+    );
+    setTimeout(() => {
+      navigator.geolocation.clearWatch(id);
+      resolve(best);
+    }, BEST_SAMPLE_WINDOW_MS);
+  });
+}
+
+async function collectBestNativePosition() {
+  const geo = getCapacitorGeo();
+  if (!geo) return null;
+  let best = null;
+  let watchId = null;
+  try {
+    const idResult = await geo.watchPosition(
+      { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 },
+      (pos, err) => {
+        if (err) return;
+        best = chooseBetterPosition(best, pos);
+      }
+    );
+    watchId = idResult && typeof idResult === 'object' && 'id' in idResult ? idResult.id : idResult;
+  } catch (err) {
+    return null;
+  }
+  await new Promise((resolve) => setTimeout(resolve, BEST_SAMPLE_WINDOW_MS));
+  if (watchId !== null) {
+    try {
+      geo.clearWatch({ id: watchId });
+    } catch (err) {
+      // ignore
+    }
+  }
+  return best;
+}
+
 async function applyLocationUpdate(pos) {
   const { latitude, longitude, accuracy } = pos.coords;
-  const latValue = latitude.toFixed(4);
-  const lngValue = longitude.toFixed(4);
+  const latValue = latitude.toFixed(5);
+  const lngValue = longitude.toFixed(5);
   locationLat.textContent = latValue;
   locationLng.textContent = lngValue;
   if (locationAccuracy) locationAccuracy.textContent = `${Math.round(accuracy)} m`;
@@ -338,7 +415,7 @@ async function applyLocationUpdate(pos) {
       locationName.textContent = fallback;
       empLocation.textContent = fallback;
     }
-    setGpsStatus(`Improving GPS accuracy · ±${Math.round(accuracy)}m`);
+    setGpsStatus(`Improving GPS accuracy · ±${Math.round(accuracy)}m (move outdoors)`);
     lastCoords = { lat: latitude, lng: longitude };
     return;
   }
@@ -385,7 +462,33 @@ async function applyLocationUpdate(pos) {
   lastCoords = { lat: latitude, lng: longitude };
 }
 
-function startGpsWatch() {
+async function startGpsWatch() {
+  const capGeo = getCapacitorGeo();
+  if (capGeo) {
+    if (nativeWatchId !== null) return;
+    const ok = await ensureNativePermission();
+    if (!ok) {
+      setGpsStatus('Location denied. Tap Update to allow.');
+      return;
+    }
+    setGpsStatus('Live GPS started. Waiting for signal…');
+    try {
+      const idResult = await capGeo.watchPosition(
+        { enableHighAccuracy: true, timeout: 30000, maximumAge: 0 },
+        (pos, err) => {
+          if (err) {
+            setGpsStatus('Unable to get GPS. Tap Update to retry.');
+            return;
+          }
+          applyLocationUpdate(pos);
+        }
+      );
+      nativeWatchId = idResult && typeof idResult === 'object' && 'id' in idResult ? idResult.id : idResult;
+    } catch (err) {
+      setGpsStatus('Unable to get GPS. Tap Update to retry.');
+    }
+    return;
+  }
   if (!navigator.geolocation) {
     setGpsStatus('Geolocation not supported on this device.');
     return;
@@ -408,6 +511,15 @@ function startGpsWatch() {
 }
 
 function stopGpsWatch() {
+  const capGeo = getCapacitorGeo();
+  if (capGeo && nativeWatchId !== null) {
+    try {
+      capGeo.clearWatch({ id: nativeWatchId });
+    } catch (err) {
+      // ignore clear errors
+    }
+    nativeWatchId = null;
+  }
   if (gpsWatchId === null) return;
   navigator.geolocation.clearWatch(gpsWatchId);
   gpsWatchId = null;
@@ -623,7 +735,31 @@ function filterRecordsByMonth() {
   renderRecords(filtered);
 }
 
-function updateLocation() {
+async function updateLocation() {
+  const capGeo = getCapacitorGeo();
+  if (capGeo) {
+    setGpsStatus('Requesting location permission…');
+    const ok = await ensureNativePermission();
+    if (!ok) {
+      setGpsStatus('Location denied or unavailable. Tap Update to allow.');
+      alert('Please allow location access (Allow While Using) for accurate GPS.');
+      return;
+    }
+    try {
+      setGpsStatus('Improving GPS accuracy…');
+      const best = await collectBestNativePosition();
+      if (best) {
+        applyLocationUpdate(best);
+      } else {
+        const pos = await capGeo.getCurrentPosition({ enableHighAccuracy: true, timeout: 30000, maximumAge: 0 });
+        applyLocationUpdate(pos);
+      }
+      startGpsWatch();
+    } catch (err) {
+      setGpsStatus('Unable to get GPS. Tap Update to retry.');
+    }
+    return;
+  }
   if (!navigator.geolocation) {
     locationName.textContent = lastAddress || 'Address unavailable';
     setGpsStatus('Geolocation not supported on this device.');
@@ -631,8 +767,10 @@ function updateLocation() {
   }
   setGpsStatus('Requesting location permission…');
   navigator.geolocation.getCurrentPosition(
-    (pos) => {
-      applyLocationUpdate(pos);
+    async (pos) => {
+      setGpsStatus('Improving GPS accuracy…');
+      const best = await collectBestWebPosition();
+      applyLocationUpdate(best || pos);
       startGpsWatch();
     },
     (err) => {
