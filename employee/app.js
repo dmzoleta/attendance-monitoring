@@ -23,6 +23,7 @@ const statModalEmpty = document.getElementById('stat-modal-empty');
 const closeStatModalBtn = document.getElementById('close-stat-modal');
 const barangayModal = document.getElementById('barangay-modal');
 const openBarangayBtn = document.getElementById('open-barangay');
+const openBarangayDashboardBtn = document.getElementById('open-barangay-dashboard');
 const closeBarangayBtn = document.getElementById('close-barangay-modal');
 const cancelBarangayBtn = document.getElementById('cancel-barangay');
 const saveBarangayBtn = document.getElementById('save-barangay');
@@ -103,6 +104,7 @@ let pendingOtpEmail = '';
 let autoRestoreAttempted = false;
 let lastAddress = '';
 let confirmedBarangay = null;
+let barangayPrompted = false;
 const BARANGAY_STORAGE_KEY = 'confirmedBarangay';
 const BARANGAY_DATA = {
   Marinduque: {
@@ -599,6 +601,10 @@ async function applyLocationUpdate(pos) {
         lastAddress = finalAddress;
         localStorage.setItem('lastAddress', finalAddress);
         setGpsStatus(`Live GPS · ±${Math.round(accuracy)}m`);
+        if (!confirmedBarangay && !barangayPrompted) {
+          barangayPrompted = true;
+          openBarangayModal();
+        }
       } else {
         const fallback = lastAddress || localStorage.getItem('lastAddress') || '';
         if (fallback && moved < 80) {
@@ -1505,6 +1511,7 @@ if (statModal) {
 }
 
 if (openBarangayBtn) openBarangayBtn.addEventListener('click', openBarangayModal);
+if (openBarangayDashboardBtn) openBarangayDashboardBtn.addEventListener('click', openBarangayModal);
 if (closeBarangayBtn) closeBarangayBtn.addEventListener('click', closeBarangayModal);
 if (cancelBarangayBtn) cancelBarangayBtn.addEventListener('click', closeBarangayModal);
 if (saveBarangayBtn) saveBarangayBtn.addEventListener('click', handleBarangaySave);
