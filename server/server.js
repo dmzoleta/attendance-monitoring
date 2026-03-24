@@ -685,6 +685,34 @@ function formatPhotonFeature(feature) {
   return { address, score: scoreAddressParts(parts) };
 }
 
+function formatBigDataCloud(data) {
+  if (!data) return { address: '', score: 0 };
+  const admin = Array.isArray(data.localityInfo && data.localityInfo.administrative)
+    ? data.localityInfo.administrative
+    : [];
+  const filteredAdmin = admin.filter((entry) => entry && entry.name && !/philippines/i.test(entry.name));
+  filteredAdmin.sort((a, b) => {
+    const aLevel = Number(a.adminLevel || a.adminLevelCode || 0);
+    const bLevel = Number(b.adminLevel || b.adminLevelCode || 0);
+    return bLevel - aLevel;
+  });
+  const mostSpecific = filteredAdmin[0] ? filteredAdmin[0].name : '';
+  const roadLine = [data.streetNumber, data.street].filter(Boolean).join(' ');
+  const place = data.locality || data.city || mostSpecific || '';
+  const municipality = data.city || data.locality || data.principalSubdivision || '';
+  const province = data.principalSubdivision || '';
+  const parts = {
+    roadLine,
+    place,
+    municipality,
+    province,
+    postcode: data.postcode || '',
+    country: data.countryName || data.countryCode || ''
+  };
+  const address = formatAddressParts(parts);
+  return { address, score: scoreAddressParts(parts) };
+}
+
 function canSeed() {
   return String(process.env.ALLOW_SEED || '').toLowerCase() === 'true';
 }
@@ -1901,6 +1929,16 @@ async function handleApi(req, res, pathname) {
             best = formatted;
           }
         });
+      }
+
+      const bdcUrl = `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lng}&localityLanguage=en`;
+      const bdcRes = await fetch(bdcUrl);
+      if (bdcRes.ok) {
+        const bdcData = await bdcRes.json();
+        const formatted = formatBigDataCloud(bdcData);
+        if (formatted.address && formatted.score > best.score) {
+          best = formatted;
+        }
       }
 
       if (best.address) {
