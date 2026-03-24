@@ -606,6 +606,45 @@ function pickGoogleResult(results) {
   return results[0];
 }
 
+function pickGoogleComponent(components, types) {
+  if (!Array.isArray(components)) return '';
+  const match = components.find((comp) => types.every((type) => comp.types && comp.types.includes(type)));
+  return match ? match.long_name : '';
+}
+
+function formatGoogleAddress(result) {
+  if (!result || !Array.isArray(result.address_components)) return { address: '', score: 0 };
+  const comps = result.address_components;
+  const streetNumber = pickGoogleComponent(comps, ['street_number']);
+  const route = pickGoogleComponent(comps, ['route']);
+  const roadLine = [streetNumber, route].filter(Boolean).join(' ');
+  const place =
+    pickGoogleComponent(comps, ['neighborhood']) ||
+    pickGoogleComponent(comps, ['sublocality_level_2']) ||
+    pickGoogleComponent(comps, ['sublocality_level_1']) ||
+    pickGoogleComponent(comps, ['sublocality']) ||
+    pickGoogleComponent(comps, ['administrative_area_level_4']) ||
+    pickGoogleComponent(comps, ['administrative_area_level_3']) ||
+    pickGoogleComponent(comps, ['locality']);
+  const municipality =
+    pickGoogleComponent(comps, ['locality']) ||
+    pickGoogleComponent(comps, ['administrative_area_level_3']) ||
+    pickGoogleComponent(comps, ['administrative_area_level_2']);
+  const province =
+    pickGoogleComponent(comps, ['administrative_area_level_2']) ||
+    pickGoogleComponent(comps, ['administrative_area_level_1']);
+  const parts = {
+    roadLine,
+    place,
+    municipality,
+    province,
+    postcode: pickGoogleComponent(comps, ['postal_code']),
+    country: pickGoogleComponent(comps, ['country'])
+  };
+  const address = formatAddressParts(parts);
+  return { address, score: scoreAddressParts(parts) };
+}
+
 function scoreAddressParts(parts) {
   if (!parts) return 0;
   let score = 0;
@@ -1901,8 +1940,14 @@ async function handleApi(req, res, pathname) {
           const gData = await gRes.json();
           if (gData.results && gData.results.length) {
             const picked = pickGoogleResult(gData.results);
-            if (picked && picked.formatted_address) {
-              return sendJson(res, 200, { ok: true, address: picked.formatted_address });
+            if (picked) {
+              const formatted = formatGoogleAddress(picked);
+              if (formatted.address) {
+                return sendJson(res, 200, { ok: true, address: formatted.address });
+              }
+              if (picked.formatted_address) {
+                return sendJson(res, 200, { ok: true, address: picked.formatted_address });
+              }
             }
           }
         }
