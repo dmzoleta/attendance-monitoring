@@ -381,6 +381,10 @@ body::before {
   width: min(420px, 96vw);
 }
 
+#barangay-modal .modal-card {
+  width: min(420px, 94vw);
+}
+
 #stat-modal .table-wrap {
   max-height: 55vh;
   overflow: auto;

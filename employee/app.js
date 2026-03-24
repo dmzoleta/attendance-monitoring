@@ -21,6 +21,15 @@ const statModalSubtitle = document.getElementById('stat-modal-subtitle');
 const statModalTable = document.getElementById('stat-modal-table');
 const statModalEmpty = document.getElementById('stat-modal-empty');
 const closeStatModalBtn = document.getElementById('close-stat-modal');
+const barangayModal = document.getElementById('barangay-modal');
+const openBarangayBtn = document.getElementById('open-barangay');
+const closeBarangayBtn = document.getElementById('close-barangay-modal');
+const cancelBarangayBtn = document.getElementById('cancel-barangay');
+const saveBarangayBtn = document.getElementById('save-barangay');
+const barangayMunicipality = document.getElementById('barangay-municipality');
+const barangaySelect = document.getElementById('barangay-select');
+const barangayOtherWrap = document.getElementById('barangay-other-wrap');
+const barangayOtherInput = document.getElementById('barangay-other');
 
 const empTime = document.getElementById('emp-time');
 const empDate = document.getElementById('emp-date');
@@ -93,12 +102,78 @@ let reportAttachmentName = '';
 let pendingOtpEmail = '';
 let autoRestoreAttempted = false;
 let lastAddress = '';
+let confirmedBarangay = null;
+const BARANGAY_STORAGE_KEY = 'confirmedBarangay';
+const BARANGAY_DATA = {
+  Marinduque: {
+    Boac: [
+      'Agot',
+      'Agumaymayan',
+      'Apitong',
+      'Balagasan',
+      'Balaring',
+      'Balimbing',
+      'Bamban',
+      'Bangbangalon',
+      'Boi',
+      'Boton',
+      'Buliasnin',
+      'Bunganay',
+      'Caganhao',
+      'Canat',
+      'Catubugan',
+      'Cawit',
+      'Daig',
+      'Daypay',
+      'Duyay',
+      'Hinapulan',
+      'Ihatub',
+      'Isok I',
+      'Isok II',
+      'Laylay',
+      'Lupac',
+      'Mahinhin',
+      'Mainit',
+      'Malbog',
+      'Maligaya',
+      'Malusak',
+      'Mansiwat',
+      'Mataas na Bayan',
+      'Maybo',
+      'Mercado',
+      'Murallon',
+      'Pawa',
+      'Pili',
+      'Poctoy',
+      'Poras',
+      'Puting Buhangin',
+      'San Miguel',
+      'Santol',
+      'Sawi',
+      'Tabigue',
+      'Tabi',
+      'Tagwak',
+      'Tambunan',
+      'Tampus',
+      'Tanza',
+      'Tugos',
+      'Tumagabok',
+      'Tumapon'
+    ],
+    Gasan: [],
+    Mogpog: [],
+    'Santa Cruz': [],
+    Buenavista: [],
+    Torrijos: []
+  }
+};
 const appConfig = typeof window !== 'undefined' && window.APP_CONFIG ? window.APP_CONFIG : {};
 const isCapacitor = typeof window !== 'undefined' && !!window.Capacitor;
 const defaultApiBase = appConfig.apiBase || '';
 const storedApiBase = localStorage.getItem('apiBase') || '';
 const storedOverride = localStorage.getItem('apiBaseOverride') === 'true';
 lastAddress = localStorage.getItem('lastAddress') || '';
+loadConfirmedBarangay();
 
 let apiBase = '';
 if (isCapacitor) {
@@ -119,6 +194,96 @@ function formatDate(date) {
 
 function formatTime(date) {
   return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+}
+
+function normalizeText(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function loadConfirmedBarangay() {
+  try {
+    const stored = localStorage.getItem(BARANGAY_STORAGE_KEY);
+    confirmedBarangay = stored ? JSON.parse(stored) : null;
+  } catch (err) {
+    confirmedBarangay = null;
+  }
+}
+
+function formatBarangayLabel(value) {
+  if (!value) return '';
+  return value.replace(/^brgy\.?\s+/i, 'Barangay ');
+}
+
+function formatConfirmedLocation(data) {
+  if (!data || !data.barangay) return '';
+  const barangay = formatBarangayLabel(data.barangay);
+  const municipality = data.municipality || 'Boac';
+  const province = data.province || 'Marinduque';
+  return `${barangay}, ${municipality}, ${province}, Philippines`;
+}
+
+function applyConfirmedLocation() {
+  if (!confirmedBarangay) return;
+  const label = formatConfirmedLocation(confirmedBarangay);
+  if (!label) return;
+  locationName.textContent = label;
+  empLocation.textContent = label;
+  lastAddress = label;
+  localStorage.setItem('lastAddress', label);
+}
+
+function addressContainsBarangay(address, barangay) {
+  if (!address || !barangay) return false;
+  const normalized = normalizeText(address);
+  const target = normalizeText(barangay);
+  return normalized.includes(target);
+}
+
+function applyConfirmedOverride(address) {
+  if (!confirmedBarangay) return address;
+  if (addressContainsBarangay(address, confirmedBarangay.barangay)) return address;
+  return formatConfirmedLocation(confirmedBarangay) || address;
+}
+
+function inferMunicipality(address) {
+  const normalized = normalizeText(address);
+  const options = Object.keys(BARANGAY_DATA.Marinduque || {});
+  const hit = options.find((name) => normalizeText(name) && normalized.includes(normalizeText(name)));
+  return hit || 'Boac';
+}
+
+function getBarangayList(municipality) {
+  const provinceData = BARANGAY_DATA.Marinduque || {};
+  return provinceData[municipality] || [];
+}
+
+function populateBarangaySelect(municipality) {
+  const list = getBarangayList(municipality);
+  barangaySelect.innerHTML = '';
+  const placeholder = document.createElement('option');
+  placeholder.value = '';
+  placeholder.textContent = list.length ? 'Select barangay' : 'Other (type below)';
+  barangaySelect.appendChild(placeholder);
+  list.forEach((name) => {
+    const opt = document.createElement('option');
+    opt.value = name;
+    opt.textContent = name;
+    barangaySelect.appendChild(opt);
+  });
+  const otherOpt = document.createElement('option');
+  otherOpt.value = '__other__';
+  otherOpt.textContent = 'Other (type below)';
+  barangaySelect.appendChild(otherOpt);
+  toggleBarangayOther();
+}
+
+function toggleBarangayOther() {
+  const selected = barangaySelect.value;
+  if (selected === '__other__' || !selected) {
+    barangayOtherWrap.classList.remove('hidden');
+  } else {
+    barangayOtherWrap.classList.add('hidden');
+  }
 }
 
 function isoToday() {
@@ -288,9 +453,9 @@ let nativeWatchId = null;
 let lastCoords = null;
 let lastMapAt = 0;
 let lastAddressAt = 0;
-const ADDRESS_ACCURACY_THRESHOLD = 10;
-const ADDRESS_STABLE_HITS = 3;
-const BEST_SAMPLE_WINDOW_MS = 12000;
+const ADDRESS_ACCURACY_THRESHOLD = 6;
+const ADDRESS_STABLE_HITS = 4;
+const BEST_SAMPLE_WINDOW_MS = 20000;
 let accuracyStreak = 0;
 
 function getCapacitorGeo() {
@@ -348,7 +513,7 @@ function collectBestWebPosition() {
         best = chooseBetterPosition(best, pos);
       },
       () => {},
-      { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 }
+      { enableHighAccuracy: true, timeout: 30000, maximumAge: 0 }
     );
     setTimeout(() => {
       navigator.geolocation.clearWatch(id);
@@ -364,7 +529,7 @@ async function collectBestNativePosition() {
   let watchId = null;
   try {
     const idResult = await geo.watchPosition(
-      { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 },
+      { enableHighAccuracy: true, timeout: 30000, maximumAge: 0, distanceFilter: 1 },
       (pos, err) => {
         if (err) return;
         best = chooseBetterPosition(best, pos);
@@ -392,6 +557,9 @@ async function applyLocationUpdate(pos) {
   locationLat.textContent = latValue;
   locationLng.textContent = lngValue;
   if (locationAccuracy) locationAccuracy.textContent = `${Math.round(accuracy)} m`;
+  if (confirmedBarangay) {
+    applyConfirmedLocation();
+  }
 
   const now = Date.now();
   const moved = lastCoords ? distanceMeters(lastCoords, { lat: latitude, lng: longitude }) : 9999;
@@ -425,10 +593,11 @@ async function applyLocationUpdate(pos) {
     try {
       const address = await reverseGeocode(latitude, longitude);
       if (address) {
-        locationName.textContent = address;
-        empLocation.textContent = address;
-        lastAddress = address;
-        localStorage.setItem('lastAddress', address);
+        const finalAddress = applyConfirmedOverride(address);
+        locationName.textContent = finalAddress;
+        empLocation.textContent = finalAddress;
+        lastAddress = finalAddress;
+        localStorage.setItem('lastAddress', finalAddress);
         setGpsStatus(`Live GPS · ±${Math.round(accuracy)}m`);
       } else {
         const fallback = lastAddress || localStorage.getItem('lastAddress') || '';
@@ -474,7 +643,7 @@ async function startGpsWatch() {
     setGpsStatus('Live GPS started. Waiting for signal…');
     try {
       const idResult = await capGeo.watchPosition(
-        { enableHighAccuracy: true, timeout: 30000, maximumAge: 0 },
+        { enableHighAccuracy: true, timeout: 30000, maximumAge: 0, distanceFilter: 1, minimumUpdateInterval: 1000 },
         (pos, err) => {
           if (err) {
             setGpsStatus('Unable to get GPS. Tap Update to retry.');
@@ -506,7 +675,7 @@ async function startGpsWatch() {
         setGpsStatus('Unable to get GPS. Tap Update to retry.');
       }
     },
-    { enableHighAccuracy: true, timeout: 30000, maximumAge: 0 }
+    { enableHighAccuracy: true, timeout: 60000, maximumAge: 0 }
   );
 }
 
@@ -670,6 +839,67 @@ function closeStatModal() {
   if (statModal) statModal.classList.add('hidden');
 }
 
+function openBarangayModal() {
+  if (!barangayModal) return;
+  const currentAddress = locationName.textContent || empLocation.textContent || '';
+  const municipality = confirmedBarangay && confirmedBarangay.municipality
+    ? confirmedBarangay.municipality
+    : inferMunicipality(currentAddress);
+  if (barangayMunicipality) {
+    barangayMunicipality.innerHTML = '';
+    const options = Object.keys(BARANGAY_DATA.Marinduque || {});
+    const extras = ['Other'];
+    const merged = [...new Set([...options, ...extras])];
+    merged.forEach((name) => {
+      const opt = document.createElement('option');
+      opt.value = name;
+      opt.textContent = name;
+      barangayMunicipality.appendChild(opt);
+    });
+    barangayMunicipality.value = municipality || 'Boac';
+  }
+  populateBarangaySelect(barangayMunicipality ? barangayMunicipality.value : 'Boac');
+  if (confirmedBarangay && confirmedBarangay.barangay) {
+    const match = Array.from(barangaySelect.options).find((opt) => opt.value === confirmedBarangay.barangay);
+    if (match) {
+      barangaySelect.value = confirmedBarangay.barangay;
+    } else {
+      barangaySelect.value = '__other__';
+      if (barangayOtherInput) barangayOtherInput.value = confirmedBarangay.barangay;
+    }
+    toggleBarangayOther();
+  }
+  barangayModal.classList.remove('hidden');
+}
+
+function closeBarangayModal() {
+  if (barangayModal) barangayModal.classList.add('hidden');
+}
+
+function handleBarangaySave() {
+  const municipality = barangayMunicipality ? barangayMunicipality.value : 'Boac';
+  let barangay = '';
+  if (barangaySelect && barangaySelect.value && barangaySelect.value !== '__other__') {
+    barangay = barangaySelect.value;
+  } else if (barangayOtherInput) {
+    barangay = barangayOtherInput.value.trim();
+  }
+  if (!barangay) {
+    alert('Please select or type your barangay.');
+    return;
+  }
+  confirmedBarangay = {
+    barangay,
+    municipality: municipality === 'Other' ? 'Boac' : municipality,
+    province: 'Marinduque',
+    confirmedAt: Date.now()
+  };
+  localStorage.setItem(BARANGAY_STORAGE_KEY, JSON.stringify(confirmedBarangay));
+  applyConfirmedLocation();
+  setGpsStatus('Barangay confirmed. Location saved.');
+  closeBarangayModal();
+}
+
 function getTodayAttendance() {
   const today = isoToday();
   return attendanceCache.find((item) => item.date === today) || null;
@@ -751,7 +981,7 @@ async function updateLocation() {
       if (best) {
         applyLocationUpdate(best);
       } else {
-        const pos = await capGeo.getCurrentPosition({ enableHighAccuracy: true, timeout: 30000, maximumAge: 0 });
+        const pos = await capGeo.getCurrentPosition({ enableHighAccuracy: true, timeout: 60000, maximumAge: 0 });
         applyLocationUpdate(pos);
       }
       startGpsWatch();
@@ -779,7 +1009,7 @@ async function updateLocation() {
         alert('Please allow location access (Allow While Using) for accurate GPS.');
       }
     },
-    { enableHighAccuracy: true, timeout: 30000, maximumAge: 0 }
+    { enableHighAccuracy: true, timeout: 60000, maximumAge: 0 }
   );
 }
 
@@ -1273,6 +1503,24 @@ if (statModal) {
     if (event.target === statModal) closeStatModal();
   });
 }
+
+if (openBarangayBtn) openBarangayBtn.addEventListener('click', openBarangayModal);
+if (closeBarangayBtn) closeBarangayBtn.addEventListener('click', closeBarangayModal);
+if (cancelBarangayBtn) cancelBarangayBtn.addEventListener('click', closeBarangayModal);
+if (saveBarangayBtn) saveBarangayBtn.addEventListener('click', handleBarangaySave);
+if (barangayMunicipality) {
+  barangayMunicipality.addEventListener('change', () => {
+    populateBarangaySelect(barangayMunicipality.value);
+  });
+}
+if (barangaySelect) barangaySelect.addEventListener('change', toggleBarangayOther);
+if (barangayModal) {
+  barangayModal.addEventListener('click', (event) => {
+    if (event.target === barangayModal) closeBarangayModal();
+  });
+}
+
+applyConfirmedLocation();
 
 setInterval(tickClock, 1000);
 
