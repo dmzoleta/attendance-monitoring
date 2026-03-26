@@ -108,6 +108,8 @@ let barangayPrompted = false;
 let attendanceAudioContext = null;
 let attendanceAudioPrimed = false;
 let attendanceRequestInFlight = false;
+let attendanceHtmlAudioPrimed = false;
+const attendanceHtmlAudio = { timein: null, timeout: null, error: null };
 const BARANGAY_STORAGE_KEY = 'confirmedBarangay';
 const BARANGAY_DATA = {
   Marinduque: {
@@ -180,26 +182,94 @@ function getAttendanceAudioContext() {
   return attendanceAudioContext;
 }
 
-async function primeAttendanceAudio() {
-  const ctx = getAttendanceAudioContext();
-  if (!ctx) return false;
+function writeAscii(view, offset, text) {
+  for (let i = 0; i < text.length; i += 1) {
+    view.setUint8(offset + i, text.charCodeAt(i));
+  }
+}
 
+function buildBiometricWavDataUri(sequence, noteMs = 90, gapMs = 28) {
+  if (typeof btoa !== 'function' || !Array.isArray(sequence) || !sequence.length) return '';
+
+  const sampleRate = 44100;
+  const noteSamples = Math.floor((noteMs / 1000) * sampleRate);
+  const gapSamples = Math.floor((gapMs / 1000) * sampleRate);
+  const frameCount = (noteSamples + gapSamples) * sequence.length;
+  const dataSize = frameCount * 2;
+  const buffer = new ArrayBuffer(44 + dataSize);
+  const view = new DataView(buffer);
+
+  writeAscii(view, 0, 'RIFF');
+  view.setUint32(4, 36 + dataSize, true);
+  writeAscii(view, 8, 'WAVE');
+  writeAscii(view, 12, 'fmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, 1, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * 2, true);
+  view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true);
+  writeAscii(view, 36, 'data');
+  view.setUint32(40, dataSize, true);
+
+  let offset = 44;
+  sequence.forEach((frequency) => {
+    for (let i = 0; i < noteSamples; i += 1) {
+      const t = i / sampleRate;
+      const envelope = Math.sin((Math.PI * i) / noteSamples);
+      const sample = Math.sin(2 * Math.PI * frequency * t) * 0.38 * envelope;
+      const value = Math.max(-1, Math.min(1, sample));
+      view.setInt16(offset, value * 32767, true);
+      offset += 2;
+    }
+    for (let i = 0; i < gapSamples; i += 1) {
+      view.setInt16(offset, 0, true);
+      offset += 2;
+    }
+  });
+
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  const chunkSize = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    const chunk = bytes.subarray(i, i + chunkSize);
+    binary += String.fromCharCode.apply(null, chunk);
+  }
+  return `data:audio/wav;base64,${btoa(binary)}`;
+}
+
+function getBiometricToneSet(kind) {
+  if (kind === 'timein') return [880, 1046.5, 1318.51];
+  if (kind === 'timeout') return [1318.51, 1046.5, 880];
+  if (kind === 'error') return [440, 329.63, 261.63];
+  return null;
+}
+
+function getHtmlAttendanceSound(kind) {
+  if (attendanceHtmlAudio[kind]) return attendanceHtmlAudio[kind];
+  if (typeof Audio === 'undefined') return null;
+  const tones = getBiometricToneSet(kind);
+  if (!tones) return null;
+  const src = buildBiometricWavDataUri(tones);
+  if (!src) return null;
+
+  const audio = new Audio(src);
+  audio.preload = 'auto';
+  audio.volume = 1;
+  attendanceHtmlAudio[kind] = audio;
+  return audio;
+}
+
+function playHtmlAttendanceSound(kind) {
+  const base = getHtmlAttendanceSound(kind);
+  if (!base) return false;
   try {
-    if (ctx.state !== 'running') await ctx.resume();
-    if (!attendanceAudioPrimed) {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      const at = ctx.currentTime + 0.01;
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(440, at);
-      gain.gain.setValueAtTime(0.0001, at);
-      gain.gain.linearRampToValueAtTime(0.0002, at + 0.01);
-      gain.gain.linearRampToValueAtTime(0.0001, at + 0.02);
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.start(at);
-      osc.stop(at + 0.025);
-      attendanceAudioPrimed = true;
+    const audio = base.cloneNode ? base.cloneNode(true) : new Audio(base.src);
+    audio.volume = 1;
+    const playResult = audio.play();
+    if (playResult && typeof playResult.catch === 'function') {
+      playResult.catch(() => {});
     }
     return true;
   } catch (err) {
@@ -207,9 +277,72 @@ async function primeAttendanceAudio() {
   }
 }
 
-function playToneSequence(sequence) {
+async function primeHtmlAttendanceAudio() {
+  const sounds = ['timein', 'timeout', 'error'].map((kind) => getHtmlAttendanceSound(kind)).filter(Boolean);
+  if (!sounds.length) return false;
+
+  let unlocked = false;
+  for (const audio of sounds) {
+    try {
+      audio.muted = true;
+      audio.currentTime = 0;
+      await audio.play();
+      unlocked = true;
+    } catch (err) {
+      // Ignore; some platforms still block until a direct gesture.
+    } finally {
+      audio.pause();
+      audio.currentTime = 0;
+      audio.muted = false;
+    }
+  }
+  if (unlocked) attendanceHtmlAudioPrimed = true;
+  return unlocked;
+}
+
+async function primeAttendanceAudio() {
   const ctx = getAttendanceAudioContext();
-  if (!ctx || ctx.state !== 'running') return false;
+  let webReady = false;
+
+  if (ctx) {
+    try {
+      if (ctx.state !== 'running') await ctx.resume();
+      if (ctx.state === 'running') {
+        webReady = true;
+      }
+      if (webReady && !attendanceAudioPrimed) {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        const at = ctx.currentTime + 0.01;
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(440, at);
+        gain.gain.setValueAtTime(0.0001, at);
+        gain.gain.linearRampToValueAtTime(0.0002, at + 0.01);
+        gain.gain.linearRampToValueAtTime(0.0001, at + 0.02);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(at);
+        osc.stop(at + 0.025);
+        attendanceAudioPrimed = true;
+      }
+    } catch (err) {
+      webReady = false;
+    }
+  }
+
+  const htmlReady = attendanceHtmlAudioPrimed || (await primeHtmlAttendanceAudio());
+  return webReady || htmlReady;
+}
+
+async function playToneSequence(sequence) {
+  const ctx = getAttendanceAudioContext();
+  if (!ctx) return false;
+  try {
+    if (ctx.state !== 'running') await ctx.resume();
+  } catch (err) {
+    return false;
+  }
+  if (ctx.state !== 'running') return false;
 
   const startAt = ctx.currentTime + 0.02;
   sequence.forEach((frequency, index) => {
@@ -249,21 +382,18 @@ function vibrateAttendance(kind) {
   }
 }
 
-function playAttendanceSound(kind) {
-  if (kind === 'timein') {
-    playToneSequence([880, 1046.5, 1318.51]);
-    vibrateAttendance('timein');
-    return;
+async function playAttendanceSound(kind) {
+  const tones = getBiometricToneSet(kind);
+  if (!tones) return false;
+
+  let played = await playToneSequence(tones);
+  if (!played) played = playHtmlAttendanceSound(kind);
+  if (!played && !attendanceHtmlAudioPrimed) {
+    await primeHtmlAttendanceAudio();
+    played = playHtmlAttendanceSound(kind);
   }
-  if (kind === 'timeout') {
-    playToneSequence([1318.51, 1046.5, 880]);
-    vibrateAttendance('timeout');
-    return;
-  }
-  if (kind === 'error') {
-    playToneSequence([440, 329.63, 261.63]);
-    vibrateAttendance('error');
-  }
+  vibrateAttendance(kind);
+  return played;
 }
 const appConfig = typeof window !== 'undefined' && window.APP_CONFIG ? window.APP_CONFIG : {};
 const isCapacitor = typeof window !== 'undefined' && !!window.Capacitor;
@@ -1127,6 +1257,10 @@ function setAttendanceButtonsLocked(locked) {
   if (timeOutBtn) timeOutBtn.disabled = locked;
 }
 
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 function pickRecordedTime(result, action) {
   const attendance = result && result.attendance ? result.attendance : null;
   if (!attendance) return '';
@@ -1167,12 +1301,14 @@ async function markTimeIn() {
     await loadAttendance();
     computeStats();
     filterRecordsByMonth();
-    playAttendanceSound('timein');
+    await playAttendanceSound('timein');
     const slotLabel = result.slot === 'PM' ? 'Afternoon' : 'Morning';
     const recordedAt = pickRecordedTime(result, 'timein');
+    await delay(220);
     alert(`Time in recorded (${slotLabel}${recordedAt ? ` · ${recordedAt}` : ''}).`);
   } catch (err) {
-    playAttendanceSound('error');
+    await playAttendanceSound('error');
+    await delay(180);
     alert(err.message || 'Time in failed.');
   } finally {
     attendanceRequestInFlight = false;
@@ -1206,12 +1342,14 @@ async function markTimeOut() {
     await loadAttendance();
     computeStats();
     filterRecordsByMonth();
-    playAttendanceSound('timeout');
+    await playAttendanceSound('timeout');
     const slotLabel = result.slot === 'PM' ? 'Afternoon' : 'Morning';
     const recordedAt = pickRecordedTime(result, 'timeout');
+    await delay(220);
     alert(`Time out recorded (${slotLabel}${recordedAt ? ` · ${recordedAt}` : ''}).`);
   } catch (err) {
-    playAttendanceSound('error');
+    await playAttendanceSound('error');
+    await delay(180);
     alert(err.message || 'Time out failed.');
   } finally {
     attendanceRequestInFlight = false;
@@ -1563,6 +1701,17 @@ recordsMonth.addEventListener('change', filterRecordsByMonth);
 
 document.getElementById('refresh-location').addEventListener('click', updateLocation);
 if (gpsRefreshBtn) gpsRefreshBtn.addEventListener('click', updateLocation);
+
+if (timeInBtn) {
+  timeInBtn.addEventListener('pointerdown', () => {
+    primeAttendanceAudio();
+  }, { passive: true });
+}
+if (timeOutBtn) {
+  timeOutBtn.addEventListener('pointerdown', () => {
+    primeAttendanceAudio();
+  }, { passive: true });
+}
 
 timeInBtn.addEventListener('click', markTimeIn);
 timeOutBtn.addEventListener('click', markTimeOut);
