@@ -437,20 +437,33 @@ async function playAttendanceSound(kind) {
 }
 const appConfig = typeof window !== 'undefined' && window.APP_CONFIG ? window.APP_CONFIG : {};
 const isCapacitor = typeof window !== 'undefined' && !!window.Capacitor;
-const defaultApiBase = appConfig.apiBase || '';
-const storedApiBase = localStorage.getItem('apiBase') || '';
+
+function normalizeApiBaseUrl(value) {
+  return String(value || '').trim().replace(/\/+$/, '');
+}
+
+const defaultApiBase = normalizeApiBaseUrl(appConfig.apiBase || '');
+const hostingerApiBase = normalizeApiBaseUrl(appConfig.hostingerApiBase || '');
+const storedApiBase = normalizeApiBaseUrl(localStorage.getItem('apiBase') || '');
 const storedOverride = localStorage.getItem('apiBaseOverride') === 'true';
+
+function getConfiguredApiBase() {
+  return defaultApiBase || hostingerApiBase;
+}
+
+function getRuntimeDefaultApiBase() {
+  const configured = getConfiguredApiBase();
+  if (configured) return configured;
+  if (isCapacitor) return storedApiBase || 'http://10.0.2.2:5173';
+  return normalizeApiBaseUrl(window.location.origin);
+}
+
 lastAddress = localStorage.getItem('lastAddress') || '';
 loadConfirmedBarangay();
 
-let apiBase = '';
-if (isCapacitor) {
-  apiBase = storedOverride ? storedApiBase : (defaultApiBase || storedApiBase || 'http://10.0.2.2:5173');
-} else {
-  apiBase = defaultApiBase || window.location.origin;
-}
+let apiBase = storedOverride && storedApiBase ? storedApiBase : getRuntimeDefaultApiBase();
 
-serverUrlInput.value = storedOverride ? storedApiBase : apiBase;
+serverUrlInput.value = apiBase;
 if (rememberLogin) {
   const rememberFlag = localStorage.getItem('rememberLogin');
   rememberLogin.checked = rememberFlag !== 'false';
@@ -987,8 +1000,9 @@ async function api(path, options = {}, attempt = 0) {
     }
     return data;
   } catch (err) {
-    if (defaultApiBase && apiBase !== defaultApiBase) {
-      apiBase = defaultApiBase;
+    const fallbackBase = getConfiguredApiBase();
+    if (fallbackBase && apiBase !== fallbackBase) {
+      apiBase = fallbackBase;
       localStorage.setItem('apiBase', apiBase);
       localStorage.setItem('apiBaseOverride', 'false');
       return api(path, options, attempt + 1);
@@ -1493,16 +1507,17 @@ function closeServerModal() {
 }
 
 function saveServerSettings() {
-  const value = serverUrlInput.value.trim();
+  const value = normalizeApiBaseUrl(serverUrlInput.value);
   if (value) {
     apiBase = value;
     localStorage.setItem('apiBase', apiBase);
     localStorage.setItem('apiBaseOverride', 'true');
   } else {
-    apiBase = defaultApiBase || (isCapacitor ? 'http://10.0.2.2:5173' : window.location.origin);
+    apiBase = getRuntimeDefaultApiBase();
     localStorage.setItem('apiBase', apiBase);
     localStorage.setItem('apiBaseOverride', 'false');
   }
+  serverUrlInput.value = apiBase;
   closeServerModal();
   alert('Server URL saved.');
 }

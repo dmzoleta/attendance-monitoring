@@ -46,7 +46,7 @@ Employees
 ## Notes
 
 - All buttons are functional (login, add employee, attendance actions, report generation).
-- Employee time-in/out updates are saved in `data/db.json` and immediately visible in the admin dashboard.
+- Employee time-in/out updates are saved in PostgreSQL when configured, or `data/db.json` as fallback.
 - The **Download PDF** button uses the browser print dialog to save as PDF.
 
 ## APK Option
@@ -90,27 +90,44 @@ You need a Mac with Xcode to build the iOS app.
 3. Use the same Server URL inside the app:
    - `http://<YOUR-PC-IP>:5173`
 
-## Deploy To Render (Public Website)
+## Deploy To Hostinger (Website + App API)
 
-This makes the admin website and employee web app work from any network (Wi‑Fi or mobile data).
+Recommended for stability: **Hostinger VPS**.
 
-1. Create a new GitHub repo and push this project.
-2. On Render, create a **Web Service** from that GitHub repo.
-3. Render auto‑detects `render.yaml` and will use:
-   - Build: `npm install`
-   - Start: `node server/server.js`
-4. After deploy, Render gives you a public URL, for example:
-   - `https://your-app.onrender.com`
+1. Provision a VPS and point your domain (example: `https://attendance.yourdomain.com`).
+2. Install Node.js 18+ and Git on VPS.
+3. Clone this repository on VPS.
+4. Create `.env` using `.env.example` and configure PostgreSQL (recommended for production).
+5. Install dependencies and run:
+   - `npm install`
+   - `node server/server.js`
+6. Put Nginx (or Apache reverse proxy) in front of Node app and enable SSL (HTTPS).
+7. Open:
+   - Admin: `https://attendance.yourdomain.com/admin/`
+   - Employee web: `https://attendance.yourdomain.com/employee/`
 
-Use these URLs:
-- Admin: `https://your-app.onrender.com/admin/`
-- Employee web: `https://your-app.onrender.com/employee/`
+For Android/iOS app:
+- Open app menu (☰) → Server Settings
+- Set Server URL to: `https://attendance.yourdomain.com`
 
-For the APK, set the Server URL to your Render URL:
-- `https://your-app.onrender.com`
+## Database For Hostinger
 
-### Important
-Render’s free plan sleeps on inactivity. First load can be slow (cold start).
+### Production (Recommended)
+Use **PostgreSQL on Hostinger VPS** and set any one of:
+- `DATABASE_URL=postgres://...`
+- or `PGHOST`, `PGPORT`, `PGUSER`, `PGPASSWORD`, `PGDATABASE`
+
+When PostgreSQL vars exist, server automatically uses PostgreSQL mode.
+
+### Fallback / Small Testing
+If PostgreSQL is not configured, server uses local JSON file:
+- `data/db.json`
+- optional path override: `DB_PATH=...`
+
+### Quick Check
+Verify database mode:
+- `GET /api/db-health`
+- returns `mode: "postgres"` or `mode: "json"`
 
 ## Employee Registration
 
