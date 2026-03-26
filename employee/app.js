@@ -382,7 +382,47 @@ function vibrateAttendance(kind) {
   }
 }
 
+function speakAttendanceLabel(kind) {
+  if (typeof window === 'undefined' || typeof window.speechSynthesis === 'undefined' || typeof SpeechSynthesisUtterance === 'undefined') {
+    return false;
+  }
+
+  let text = '';
+  if (kind === 'timein') text = 'time in';
+  if (kind === 'timeout') text = 'time out';
+  if (!text) return false;
+
+  try {
+    const synth = window.speechSynthesis;
+    if (synth.speaking || synth.pending) synth.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = 'en-US';
+    utterance.rate = 0.95;
+    utterance.pitch = 1;
+    utterance.volume = 1;
+
+    const voices = synth.getVoices ? synth.getVoices() : [];
+    const preferredVoice =
+      voices.find((voice) => String(voice.lang || '').toLowerCase().startsWith('en-us')) ||
+      voices.find((voice) => String(voice.lang || '').toLowerCase().startsWith('en'));
+    if (preferredVoice) utterance.voice = preferredVoice;
+
+    synth.speak(utterance);
+    return true;
+  } catch (err) {
+    return false;
+  }
+}
+
 async function playAttendanceSound(kind) {
+  if (kind === 'timein' || kind === 'timeout') {
+    const spoken = speakAttendanceLabel(kind);
+    if (spoken) {
+      vibrateAttendance(kind);
+      return true;
+    }
+  }
+
   const tones = getBiometricToneSet(kind);
   if (!tones) return false;
 
