@@ -5,8 +5,8 @@ It includes:
 
 - Admin web app (`/admin`)
 - Employee mobile web app (`/employee`)
-- Shared local JSON database (`/data/db.json`)
-- Node.js server (no external dependencies)
+- Dual database mode: JSON file or PostgreSQL
+- Node.js server (Express-compatible startup)
 
 ## Run
 
@@ -62,7 +62,8 @@ Capacitor wrapper is already added.
 4. In the app, open the menu (☰) and set the Server URL.
    - Emulator: `http://10.0.2.2:5173`
    - Real device: `http://<YOUR-PC-IP>:5173`
-5. Build APK from Android Studio: **Build > Build Bundle(s) / APK(s) > Build APK(s)**.
+5. Optional: set **Website URL** in the same menu so users can open the admin website directly from the app.
+6. Build APK from Android Studio: **Build > Build Bundle(s) / APK(s) > Build APK(s)**.
 
 ### Release Keystore
 A release keystore has been generated and wired into Gradle:
@@ -111,6 +112,32 @@ For the APK, set the Server URL to your Render URL:
 
 ### Important
 Render’s free plan sleeps on inactivity. First load can be slow (cold start).
+
+## Deploy To Hostinger (No VPS Compatible Setup)
+
+If you want Hostinger compatibility without VPS, use the built-in JSON database mode.
+
+1. Push this repo to GitHub.
+2. In Hostinger Web App hosting, connect the GitHub repo.
+3. Set startup command:
+   - `npm start`
+4. Set environment variables in Hostinger:
+   - `DB_MODE=json`
+   - `DB_PATH=./data/db.json`
+   - `ALLOW_SEED=false` (recommended in production)
+5. Point your domain/subdomain to the deployed app URL.
+
+App setup after deploy:
+- In employee app menu (☰), set:
+  - **Server URL**: `https://your-domain.com`
+  - **Website URL**: `https://your-domain.com/admin/`
+
+### Hostinger Database Notes
+
+- `DB_MODE=json` works on Hostinger Web/Cloud plans and requires no SQL migration.
+- If you want PostgreSQL, use:
+  - Hostinger VPS, or
+  - external PostgreSQL (`DATABASE_URL`) and set `DB_MODE=postgres`.
 
 ## Employee Registration
 

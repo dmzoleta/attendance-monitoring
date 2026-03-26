@@ -1,4 +1,4 @@
-﻿const http = require('http');
+const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const url = require('url');
@@ -35,7 +35,9 @@ const DEFAULT_DB = {
   reports: []
 };
 
-const USE_PG = !!(process.env.DATABASE_URL || process.env.PGHOST || process.env.PGUSER || process.env.PGDATABASE);
+const DB_MODE = String(process.env.DB_MODE || '').trim().toLowerCase();
+const HAS_DATABASE_URL = !!process.env.DATABASE_URL;
+const USE_PG = DB_MODE === 'postgres' || (!DB_MODE && HAS_DATABASE_URL);
 const pool = USE_PG
   ? new Pool(
       process.env.DATABASE_URL
@@ -2716,7 +2718,7 @@ async function handleApi(req, res, pathname) {
   sendJson(res, 404, { message: 'Not found' });
 }
 
-const server = http.createServer((req, res) => {
+function routeRequest(req, res) {
   const parsed = url.parse(req.url);
   const pathname = parsed.pathname;
 
@@ -2742,6 +2744,12 @@ const server = http.createServer((req, res) => {
   }
 
   return sendFile(res, path.join(ROOT, pathname));
+}
+
+const app = express();
+app.disable('x-powered-by');
+app.use((req, res) => {
+  routeRequest(req, res);
 });
 
 const PORT = process.env.PORT || 5173;
@@ -2751,7 +2759,7 @@ const PORT = process.env.PORT || 5173;
   } catch (err) {
     console.error('Database initialization failed:', err.message || err);
   }
-  server.listen(PORT, '0.0.0.0', () => {
+  app.listen(PORT, '0.0.0.0', () => {
     console.log(`Server running on http://localhost:${PORT}`);
   });
 })();

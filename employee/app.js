@@ -54,10 +54,12 @@ const photoInput = document.getElementById('photo-input');
 const photoPreview = document.getElementById('photo-preview');
 const serverModal = document.getElementById('server-modal');
 const serverUrlInput = document.getElementById('server-url');
+const websiteUrlInput = document.getElementById('website-url');
 const openServerBtn = document.getElementById('open-server-settings');
 const closeServerBtn = document.getElementById('close-server-settings');
 const cancelServerBtn = document.getElementById('cancel-server-settings');
 const saveServerBtn = document.getElementById('save-server-settings');
+const openWebsiteLinkBtn = document.getElementById('open-website-link');
 const logoutBtn = document.getElementById('logout-btn');
 const registerModal = document.getElementById('register-modal');
 const openRegisterBtn = document.getElementById('open-register');
@@ -438,10 +440,34 @@ async function playAttendanceSound(kind) {
 const appConfig = typeof window !== 'undefined' && window.APP_CONFIG ? window.APP_CONFIG : {};
 const isCapacitor = typeof window !== 'undefined' && !!window.Capacitor;
 const defaultApiBase = appConfig.apiBase || '';
+const defaultWebsiteUrl = appConfig.websiteUrl || '';
 const storedApiBase = localStorage.getItem('apiBase') || '';
+const storedWebsiteUrl = localStorage.getItem('websiteUrl') || '';
 const storedOverride = localStorage.getItem('apiBaseOverride') === 'true';
 lastAddress = localStorage.getItem('lastAddress') || '';
 loadConfirmedBarangay();
+
+function normalizeApiUrl(value) {
+  const trimmed = String(value || '').trim();
+  if (!trimmed) return '';
+  if (/^https?:\/\//i.test(trimmed)) return trimmed.replace(/\/+$/, '');
+  if (/^(localhost|\d{1,3}(?:\.\d{1,3}){3})(:\d+)?(\/.*)?$/i.test(trimmed)) {
+    return `http://${trimmed}`.replace(/\/+$/, '');
+  }
+  if (/^[a-z0-9.-]+\.[a-z]{2,}(?::\d+)?(\/.*)?$/i.test(trimmed)) {
+    return `https://${trimmed}`.replace(/\/+$/, '');
+  }
+  return '';
+}
+
+function buildWebsiteUrl(baseUrl) {
+  const normalized = normalizeApiUrl(baseUrl);
+  if (normalized) return `${normalized}/admin/`;
+  if (typeof window !== 'undefined' && window.location && /^https?:\/\//i.test(window.location.origin || '')) {
+    return `${window.location.origin.replace(/\/+$/, '')}/admin/`;
+  }
+  return '';
+}
 
 let apiBase = '';
 if (isCapacitor) {
@@ -451,6 +477,8 @@ if (isCapacitor) {
 }
 
 serverUrlInput.value = storedOverride ? storedApiBase : apiBase;
+let websiteUrl = storedWebsiteUrl || defaultWebsiteUrl || buildWebsiteUrl(apiBase);
+if (websiteUrlInput) websiteUrlInput.value = websiteUrl;
 if (rememberLogin) {
   const rememberFlag = localStorage.getItem('rememberLogin');
   rememberLogin.checked = rememberFlag !== 'false';
@@ -1494,8 +1522,21 @@ function closeServerModal() {
 
 function saveServerSettings() {
   const value = serverUrlInput.value.trim();
+  const normalizedServer = normalizeApiUrl(value);
+  const websiteValue = websiteUrlInput ? websiteUrlInput.value.trim() : '';
+  const normalizedWebsite = normalizeApiUrl(websiteValue);
+
+  if (value && !normalizedServer) {
+    alert('Invalid Server URL. Use a valid http/https URL, IP, or domain.');
+    return;
+  }
+  if (websiteValue && !normalizedWebsite) {
+    alert('Invalid Website URL. Use a valid http/https URL or domain.');
+    return;
+  }
+
   if (value) {
-    apiBase = value;
+    apiBase = normalizedServer;
     localStorage.setItem('apiBase', apiBase);
     localStorage.setItem('apiBaseOverride', 'true');
   } else {
@@ -1503,8 +1544,48 @@ function saveServerSettings() {
     localStorage.setItem('apiBase', apiBase);
     localStorage.setItem('apiBaseOverride', 'false');
   }
+  serverUrlInput.value = apiBase;
+
+  websiteUrl = normalizedWebsite || buildWebsiteUrl(apiBase);
+  localStorage.setItem('websiteUrl', websiteUrl);
+  if (websiteUrlInput) websiteUrlInput.value = websiteUrl;
+
   closeServerModal();
-  alert('Server URL saved.');
+  alert('Server settings saved.');
+}
+
+async function openWebsiteLink() {
+  const websiteValue = websiteUrlInput ? websiteUrlInput.value.trim() : '';
+  const normalizedWebsite = normalizeApiUrl(websiteValue || websiteUrl || buildWebsiteUrl(apiBase));
+  if (!normalizedWebsite) {
+    alert('Please set a valid Website URL first.');
+    return;
+  }
+
+  websiteUrl = normalizedWebsite;
+  localStorage.setItem('websiteUrl', websiteUrl);
+  if (websiteUrlInput) websiteUrlInput.value = websiteUrl;
+
+  const capBrowser =
+    typeof window !== 'undefined' &&
+    window.Capacitor &&
+    window.Capacitor.Plugins &&
+    window.Capacitor.Plugins.Browser &&
+    typeof window.Capacitor.Plugins.Browser.open === 'function'
+      ? window.Capacitor.Plugins.Browser
+      : null;
+
+  if (capBrowser) {
+    try {
+      await capBrowser.open({ url: websiteUrl });
+      return;
+    } catch (err) {
+      // fallback to browser open below
+    }
+  }
+
+  const opened = window.open(websiteUrl, '_blank', 'noopener,noreferrer');
+  if (!opened) window.location.href = websiteUrl;
 }
 
 function openRegisterModal() {
@@ -1813,6 +1894,7 @@ openServerBtn.addEventListener('click', openServerModal);
 closeServerBtn.addEventListener('click', closeServerModal);
 cancelServerBtn.addEventListener('click', closeServerModal);
 saveServerBtn.addEventListener('click', saveServerSettings);
+if (openWebsiteLinkBtn) openWebsiteLinkBtn.addEventListener('click', openWebsiteLink);
 if (logoutBtn) logoutBtn.addEventListener('click', logoutEmployee);
 
 openRegisterBtn.addEventListener('click', openRegisterModal);
