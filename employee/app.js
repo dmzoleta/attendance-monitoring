@@ -106,6 +106,8 @@ let lastAddress = '';
 let confirmedBarangay = null;
 let barangayPrompted = false;
 let attendanceAudioContext = null;
+let attendanceAudioPrimed = false;
+let attendanceRequestInFlight = false;
 const BARANGAY_STORAGE_KEY = 'confirmedBarangay';
 const BARANGAY_DATA = {
   Marinduque: {
@@ -175,28 +177,52 @@ function getAttendanceAudioContext() {
   const AudioCtx = window.AudioContext || window.webkitAudioContext;
   if (!AudioCtx) return null;
   if (!attendanceAudioContext) attendanceAudioContext = new AudioCtx();
-  if (attendanceAudioContext.state === 'suspended') {
-    attendanceAudioContext.resume().catch(() => {});
-  }
   return attendanceAudioContext;
+}
+
+async function primeAttendanceAudio() {
+  const ctx = getAttendanceAudioContext();
+  if (!ctx) return false;
+
+  try {
+    if (ctx.state !== 'running') await ctx.resume();
+    if (!attendanceAudioPrimed) {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      const at = ctx.currentTime + 0.01;
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(440, at);
+      gain.gain.setValueAtTime(0.0001, at);
+      gain.gain.linearRampToValueAtTime(0.0002, at + 0.01);
+      gain.gain.linearRampToValueAtTime(0.0001, at + 0.02);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(at);
+      osc.stop(at + 0.025);
+      attendanceAudioPrimed = true;
+    }
+    return true;
+  } catch (err) {
+    return false;
+  }
 }
 
 function playToneSequence(sequence) {
   const ctx = getAttendanceAudioContext();
-  if (!ctx) return;
+  if (!ctx || ctx.state !== 'running') return false;
 
   const startAt = ctx.currentTime + 0.02;
   sequence.forEach((frequency, index) => {
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
-    const noteStart = startAt + index * 0.16;
-    const noteEnd = noteStart + 0.12;
+    const noteStart = startAt + index * 0.12;
+    const noteEnd = noteStart + 0.1;
 
-    osc.type = 'sine';
+    osc.type = 'triangle';
     osc.frequency.setValueAtTime(frequency, noteStart);
 
     gain.gain.setValueAtTime(0.0001, noteStart);
-    gain.gain.exponentialRampToValueAtTime(0.16, noteStart + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.2, noteStart + 0.015);
     gain.gain.exponentialRampToValueAtTime(0.0001, noteEnd);
 
     osc.connect(gain);
@@ -205,15 +231,38 @@ function playToneSequence(sequence) {
     osc.start(noteStart);
     osc.stop(noteEnd + 0.02);
   });
+  return true;
+}
+
+function vibrateAttendance(kind) {
+  if (typeof navigator === 'undefined' || typeof navigator.vibrate !== 'function') return;
+  if (kind === 'timein') {
+    navigator.vibrate([25, 35, 25]);
+    return;
+  }
+  if (kind === 'timeout') {
+    navigator.vibrate([35, 50, 35]);
+    return;
+  }
+  if (kind === 'error') {
+    navigator.vibrate([50, 40, 50]);
+  }
 }
 
 function playAttendanceSound(kind) {
   if (kind === 'timein') {
-    playToneSequence([523.25, 659.25, 783.99]);
+    playToneSequence([880, 1046.5, 1318.51]);
+    vibrateAttendance('timein');
     return;
   }
   if (kind === 'timeout') {
-    playToneSequence([783.99, 659.25, 523.25]);
+    playToneSequence([1318.51, 1046.5, 880]);
+    vibrateAttendance('timeout');
+    return;
+  }
+  if (kind === 'error') {
+    playToneSequence([440, 329.63, 261.63]);
+    vibrateAttendance('error');
   }
 }
 const appConfig = typeof window !== 'undefined' && window.APP_CONFIG ? window.APP_CONFIG : {};
@@ -1073,8 +1122,36 @@ function requirePhoto() {
   return false;
 }
 
+function setAttendanceButtonsLocked(locked) {
+  if (timeInBtn) timeInBtn.disabled = locked;
+  if (timeOutBtn) timeOutBtn.disabled = locked;
+}
+
+function pickRecordedTime(result, action) {
+  const attendance = result && result.attendance ? result.attendance : null;
+  if (!attendance) return '';
+  const slot = result.slot === 'PM' ? 'PM' : 'AM';
+  if (action === 'timein') {
+    return slot === 'PM'
+      ? (attendance.timeInPM || attendance.timeIn || '')
+      : (attendance.timeInAM || attendance.timeIn || '');
+  }
+  return slot === 'PM'
+    ? (attendance.timeOutPM || attendance.timeOut || '')
+    : (attendance.timeOutAM || attendance.timeOut || '');
+}
+
 async function markTimeIn() {
+  if (attendanceRequestInFlight) return;
+  await primeAttendanceAudio();
   if (!requirePhoto()) return;
+  if (!currentUser || !currentUser.id) {
+    alert('Please log in first.');
+    return;
+  }
+
+  attendanceRequestInFlight = true;
+  setAttendanceButtonsLocked(true);
   const payload = {
     employeeId: currentUser.id,
     timeIn: timeNow(),
@@ -1092,14 +1169,28 @@ async function markTimeIn() {
     filterRecordsByMonth();
     playAttendanceSound('timein');
     const slotLabel = result.slot === 'PM' ? 'Afternoon' : 'Morning';
-    alert(`Time in recorded (${slotLabel}).`);
+    const recordedAt = pickRecordedTime(result, 'timein');
+    alert(`Time in recorded (${slotLabel}${recordedAt ? ` · ${recordedAt}` : ''}).`);
   } catch (err) {
+    playAttendanceSound('error');
     alert(err.message || 'Time in failed.');
+  } finally {
+    attendanceRequestInFlight = false;
+    setAttendanceButtonsLocked(false);
   }
 }
 
 async function markTimeOut() {
+  if (attendanceRequestInFlight) return;
+  await primeAttendanceAudio();
   if (!requirePhoto()) return;
+  if (!currentUser || !currentUser.id) {
+    alert('Please log in first.');
+    return;
+  }
+
+  attendanceRequestInFlight = true;
+  setAttendanceButtonsLocked(true);
   const payload = {
     employeeId: currentUser.id,
     timeOut: timeNow(),
@@ -1117,9 +1208,14 @@ async function markTimeOut() {
     filterRecordsByMonth();
     playAttendanceSound('timeout');
     const slotLabel = result.slot === 'PM' ? 'Afternoon' : 'Morning';
-    alert(`Time out recorded (${slotLabel}).`);
+    const recordedAt = pickRecordedTime(result, 'timeout');
+    alert(`Time out recorded (${slotLabel}${recordedAt ? ` · ${recordedAt}` : ''}).`);
   } catch (err) {
+    playAttendanceSound('error');
     alert(err.message || 'Time out failed.');
+  } finally {
+    attendanceRequestInFlight = false;
+    setAttendanceButtonsLocked(false);
   }
 }
 
@@ -1154,6 +1250,8 @@ function logoutEmployee() {
   currentUser = null;
   attendanceCache = [];
   photoData = '';
+  attendanceRequestInFlight = false;
+  setAttendanceButtonsLocked(false);
   if (photoPreview) photoPreview.src = 'assets/photo-placeholder.svg';
   resetReportForm();
   loginForm.reset();
