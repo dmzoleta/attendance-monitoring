@@ -105,6 +105,7 @@ let autoRestoreAttempted = false;
 let lastAddress = '';
 let confirmedBarangay = null;
 let barangayPrompted = false;
+let attendanceAudioContext = null;
 const BARANGAY_STORAGE_KEY = 'confirmedBarangay';
 const BARANGAY_DATA = {
   Marinduque: {
@@ -169,6 +170,52 @@ const BARANGAY_DATA = {
     Torrijos: []
   }
 };
+
+function getAttendanceAudioContext() {
+  const AudioCtx = window.AudioContext || window.webkitAudioContext;
+  if (!AudioCtx) return null;
+  if (!attendanceAudioContext) attendanceAudioContext = new AudioCtx();
+  if (attendanceAudioContext.state === 'suspended') {
+    attendanceAudioContext.resume().catch(() => {});
+  }
+  return attendanceAudioContext;
+}
+
+function playToneSequence(sequence) {
+  const ctx = getAttendanceAudioContext();
+  if (!ctx) return;
+
+  const startAt = ctx.currentTime + 0.02;
+  sequence.forEach((frequency, index) => {
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    const noteStart = startAt + index * 0.16;
+    const noteEnd = noteStart + 0.12;
+
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(frequency, noteStart);
+
+    gain.gain.setValueAtTime(0.0001, noteStart);
+    gain.gain.exponentialRampToValueAtTime(0.16, noteStart + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, noteEnd);
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    osc.start(noteStart);
+    osc.stop(noteEnd + 0.02);
+  });
+}
+
+function playAttendanceSound(kind) {
+  if (kind === 'timein') {
+    playToneSequence([523.25, 659.25, 783.99]);
+    return;
+  }
+  if (kind === 'timeout') {
+    playToneSequence([783.99, 659.25, 523.25]);
+  }
+}
 const appConfig = typeof window !== 'undefined' && window.APP_CONFIG ? window.APP_CONFIG : {};
 const isCapacitor = typeof window !== 'undefined' && !!window.Capacitor;
 const defaultApiBase = appConfig.apiBase || '';
@@ -1043,6 +1090,7 @@ async function markTimeIn() {
     await loadAttendance();
     computeStats();
     filterRecordsByMonth();
+    playAttendanceSound('timein');
     const slotLabel = result.slot === 'PM' ? 'Afternoon' : 'Morning';
     alert(`Time in recorded (${slotLabel}).`);
   } catch (err) {
@@ -1067,6 +1115,7 @@ async function markTimeOut() {
     await loadAttendance();
     computeStats();
     filterRecordsByMonth();
+    playAttendanceSound('timeout');
     const slotLabel = result.slot === 'PM' ? 'Afternoon' : 'Morning';
     alert(`Time out recorded (${slotLabel}).`);
   } catch (err) {
