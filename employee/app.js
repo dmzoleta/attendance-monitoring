@@ -348,14 +348,14 @@ async function playToneSequence(sequence) {
   sequence.forEach((frequency, index) => {
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
-    const noteStart = startAt + index * 0.12;
-    const noteEnd = noteStart + 0.1;
+    const noteStart = startAt + index * 0.14;
+    const noteEnd = noteStart + 0.12;
 
     osc.type = 'triangle';
     osc.frequency.setValueAtTime(frequency, noteStart);
 
     gain.gain.setValueAtTime(0.0001, noteStart);
-    gain.gain.exponentialRampToValueAtTime(0.2, noteStart + 0.015);
+    gain.gain.exponentialRampToValueAtTime(0.35, noteStart + 0.015);
     gain.gain.exponentialRampToValueAtTime(0.0001, noteEnd);
 
     osc.connect(gain);
@@ -1278,8 +1278,11 @@ function pickRecordedTime(result, action) {
 async function markTimeIn() {
   if (attendanceRequestInFlight) return;
   await primeAttendanceAudio();
+  await playAttendanceSound('timein');
   if (!requirePhoto()) return;
   if (!currentUser || !currentUser.id) {
+    await playAttendanceSound('error');
+    await delay(120);
     alert('Please log in first.');
     return;
   }
@@ -1301,14 +1304,13 @@ async function markTimeIn() {
     await loadAttendance();
     computeStats();
     filterRecordsByMonth();
-    await playAttendanceSound('timein');
     const slotLabel = result.slot === 'PM' ? 'Afternoon' : 'Morning';
     const recordedAt = pickRecordedTime(result, 'timein');
-    await delay(220);
+    await delay(150);
     alert(`Time in recorded (${slotLabel}${recordedAt ? ` · ${recordedAt}` : ''}).`);
   } catch (err) {
     await playAttendanceSound('error');
-    await delay(180);
+    await delay(140);
     alert(err.message || 'Time in failed.');
   } finally {
     attendanceRequestInFlight = false;
@@ -1319,8 +1321,11 @@ async function markTimeIn() {
 async function markTimeOut() {
   if (attendanceRequestInFlight) return;
   await primeAttendanceAudio();
+  await playAttendanceSound('timeout');
   if (!requirePhoto()) return;
   if (!currentUser || !currentUser.id) {
+    await playAttendanceSound('error');
+    await delay(120);
     alert('Please log in first.');
     return;
   }
@@ -1342,14 +1347,13 @@ async function markTimeOut() {
     await loadAttendance();
     computeStats();
     filterRecordsByMonth();
-    await playAttendanceSound('timeout');
     const slotLabel = result.slot === 'PM' ? 'Afternoon' : 'Morning';
     const recordedAt = pickRecordedTime(result, 'timeout');
-    await delay(220);
+    await delay(150);
     alert(`Time out recorded (${slotLabel}${recordedAt ? ` · ${recordedAt}` : ''}).`);
   } catch (err) {
     await playAttendanceSound('error');
-    await delay(180);
+    await delay(140);
     alert(err.message || 'Time out failed.');
   } finally {
     attendanceRequestInFlight = false;
@@ -1702,16 +1706,21 @@ recordsMonth.addEventListener('change', filterRecordsByMonth);
 document.getElementById('refresh-location').addEventListener('click', updateLocation);
 if (gpsRefreshBtn) gpsRefreshBtn.addEventListener('click', updateLocation);
 
-if (timeInBtn) {
-  timeInBtn.addEventListener('pointerdown', () => {
+function bindAttendanceAudioWarmup(button) {
+  if (!button) return;
+  const warm = () => {
     primeAttendanceAudio();
-  }, { passive: true });
+  };
+  button.addEventListener('pointerdown', warm, { passive: true });
+  button.addEventListener('touchstart', warm, { passive: true });
+  button.addEventListener('mousedown', warm, { passive: true });
+  button.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter' || event.key === ' ') warm();
+  });
 }
-if (timeOutBtn) {
-  timeOutBtn.addEventListener('pointerdown', () => {
-    primeAttendanceAudio();
-  }, { passive: true });
-}
+
+bindAttendanceAudioWarmup(timeInBtn);
+bindAttendanceAudioWarmup(timeOutBtn);
 
 timeInBtn.addEventListener('click', markTimeIn);
 timeOutBtn.addEventListener('click', markTimeOut);
