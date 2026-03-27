@@ -13,7 +13,7 @@ const DEFAULT_ROOT = path.join(__dirname, '..');
 const ROOT = fs.existsSync(path.join(DEFAULT_ROOT, 'admin')) ? DEFAULT_ROOT : process.cwd();
 const ENV_DB_PATH = process.env.DB_PATH || process.env.RENDER_DB_PATH || '';
 const DATA_PATH = ENV_DB_PATH
-  ? path.resolve(ENV_DB_PATH)
+  ? (path.isAbsolute(ENV_DB_PATH) ? path.normalize(ENV_DB_PATH) : path.join(ROOT, ENV_DB_PATH))
   : path.join(ROOT, 'data', 'db.json');
 const BACKUP_PATH = `${DATA_PATH}.bak`;
 const DATA_DIR = path.dirname(DATA_PATH);
@@ -282,6 +282,9 @@ function mapReportRow(row) {
 }
 
 let memoryDb = null;
+let lastDbWriteError = '';
+let lastDbWriteAttemptAt = 0;
+let lastDbWriteOkAt = 0;
 
 function normalizeDb(db) {
   const safe = db && typeof db === 'object' ? db : {};
@@ -330,6 +333,7 @@ function readDb() {
 
 function writeDb(db) {
   memoryDb = normalizeDb(db);
+  lastDbWriteAttemptAt = Date.now();
   try {
     if (!fs.existsSync(DATA_DIR)) {
       fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -342,9 +346,57 @@ function writeDb(db) {
       }
     }
     fs.writeFileSync(DATA_PATH, JSON.stringify(db, null, 2), 'utf8');
+    lastDbWriteError = '';
+    lastDbWriteOkAt = Date.now();
   } catch (err) {
-    // If filesystem is read-only (Render), keep in-memory only.
+    // Track write failures so API can return an accurate error.
+    lastDbWriteError = err && err.message ? err.message : 'Unknown DB write error';
   }
+}
+
+function persistJsonDbOrFail(res, db) {
+  writeDb(db);
+  if (lastDbWriteError) {
+    sendJson(res, 500, {
+      ok: false,
+      message: 'Database write failed. Check DB_PATH and directory permissions.',
+      error: lastDbWriteError,
+      dataPath: DATA_PATH
+    });
+    return false;
+  }
+  return true;
+}
+
+function getJsonDbDiagnostics(db) {
+  let dataDirWritable = false;
+  try {
+    if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+    fs.accessSync(DATA_DIR, fs.constants.W_OK);
+    dataDirWritable = true;
+  } catch (err) {
+    dataDirWritable = false;
+  }
+  return {
+    envDbPath: ENV_DB_PATH || '',
+    dataPath: DATA_PATH,
+    dataDir: DATA_DIR,
+    dataDirWritable,
+    dataFileExists: fs.existsSync(DATA_PATH),
+    cwd: process.cwd(),
+    root: ROOT,
+    lastDbWriteError,
+    lastDbWriteAttemptAt,
+    lastDbWriteOkAt,
+    counts: {
+      admins: (db.admins || []).length,
+      employees: (db.employees || []).length,
+      attendance: (db.attendance || []).length,
+      notifications: (db.notifications || []).length,
+      messages: (db.messages || []).length,
+      reports: (db.reports || []).length
+    }
+  };
 }
 
 function sendJson(res, status, payload) {
@@ -2061,16 +2113,22 @@ async function handleApi(req, res, pathname) {
 
   if (req.method === 'GET' && pathname === '/api/db-health') {
     const db = readDb();
+    const diag = getJsonDbDiagnostics(db);
     return sendJson(res, 200, {
       ok: true,
       mode: 'json',
-      counts: {
-        admins: db.admins.length,
-        employees: db.employees.length,
-        attendance: db.attendance.length,
-        notifications: (db.notifications || []).length,
-        messages: (db.messages || []).length,
-        reports: (db.reports || []).length
+      counts: diag.counts,
+      storage: {
+        envDbPath: diag.envDbPath,
+        dataPath: diag.dataPath,
+        dataDir: diag.dataDir,
+        dataDirWritable: diag.dataDirWritable,
+        dataFileExists: diag.dataFileExists,
+        cwd: diag.cwd,
+        root: diag.root,
+        lastDbWriteError: diag.lastDbWriteError,
+        lastDbWriteAttemptAt: diag.lastDbWriteAttemptAt,
+        lastDbWriteOkAt: diag.lastDbWriteOkAt
       },
       time: Date.now()
     });
@@ -2215,7 +2273,7 @@ async function handleApi(req, res, pathname) {
         message: `${report.employeeName || 'Employee'} submitted a report for ${reportDate}.`,
         employeeId
       });
-      writeDb(db);
+      if (!persistJsonDbOrFail(res, db)) return;
       return sendJson(res, 201, { ok: true, report });
     });
   }
@@ -2558,7 +2616,7 @@ async function handleApi(req, res, pathname) {
         existing.latitude = pickLatestValue(latitude, existing.latitude);
         existing.longitude = pickLatestValue(longitude, existing.longitude);
         existing.status = computeDailyStatus(existing);
-        writeDb(db);
+        if (!persistJsonDbOrFail(res, db)) return;
         return sendJson(res, 200, { attendance: existing, slot: session });
       }
       const record = {
@@ -2609,7 +2667,7 @@ async function handleApi(req, res, pathname) {
         title: 'New Time In',
         message: `${empName} (${office}) timed in at ${timeIn}.`
       });
-      writeDb(db);
+      if (!persistJsonDbOrFail(res, db)) return;
       return sendJson(res, 201, { attendance: record, slot: session });
     });
   }
@@ -2684,7 +2742,7 @@ async function handleApi(req, res, pathname) {
             message: `${empName} (${office}) timed out at ${timeOut}.`
           });
         }
-        writeDb(db);
+        if (!persistJsonDbOrFail(res, db)) return;
         return sendJson(res, 201, { attendance: record, slot: session });
       }
       if (existing.timeIn && !existing.timeInAM) existing.timeInAM = existing.timeIn;
@@ -2721,7 +2779,7 @@ async function handleApi(req, res, pathname) {
           message: `${empName} (${office}) timed out at ${timeOut}.`
         });
       }
-      writeDb(db);
+      if (!persistJsonDbOrFail(res, db)) return;
       return sendJson(res, 200, { attendance: existing, slot: session });
     });
   }
