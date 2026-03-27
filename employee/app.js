@@ -444,6 +444,13 @@ const defaultWebsiteUrl = appConfig.websiteUrl || '';
 const storedApiBase = localStorage.getItem('apiBase') || '';
 const storedWebsiteUrl = localStorage.getItem('websiteUrl') || '';
 const storedOverride = localStorage.getItem('apiBaseOverride') === 'true';
+const legacyApiBases = new Set(['https://sdo-attendance.onrender.com']);
+const runtimeOrigin =
+  typeof window !== 'undefined' &&
+  window.location &&
+  /^https?:\/\//i.test(window.location.origin || '')
+    ? window.location.origin.replace(/\/+$/, '')
+    : '';
 lastAddress = localStorage.getItem('lastAddress') || '';
 loadConfirmedBarangay();
 
@@ -471,13 +478,33 @@ function buildWebsiteUrl(baseUrl) {
 
 let apiBase = '';
 if (isCapacitor) {
-  apiBase = storedOverride ? storedApiBase : (defaultApiBase || storedApiBase || 'http://10.0.2.2:5173');
+  apiBase = storedOverride
+    ? (storedApiBase || defaultApiBase || 'http://10.0.2.2:5173')
+    : (defaultApiBase || storedApiBase || 'http://10.0.2.2:5173');
 } else {
-  apiBase = defaultApiBase || window.location.origin;
+  // For web/PWA installs, always stay on the same origin unless user explicitly overrides.
+  apiBase = storedOverride
+    ? (storedApiBase || runtimeOrigin || defaultApiBase)
+    : (runtimeOrigin || defaultApiBase || storedApiBase);
 }
 
-serverUrlInput.value = storedOverride ? storedApiBase : apiBase;
 let websiteUrl = storedWebsiteUrl || defaultWebsiteUrl || buildWebsiteUrl(apiBase);
+const normalizedStoredApiBase = normalizeApiUrl(storedApiBase);
+const normalizedRuntimeOrigin = normalizeApiUrl(runtimeOrigin);
+if (
+  !isCapacitor &&
+  storedOverride &&
+  normalizedRuntimeOrigin &&
+  legacyApiBases.has(normalizedStoredApiBase) &&
+  normalizedStoredApiBase !== normalizedRuntimeOrigin
+) {
+  apiBase = normalizedRuntimeOrigin;
+  localStorage.setItem('apiBase', apiBase);
+  localStorage.setItem('apiBaseOverride', 'false');
+  websiteUrl = buildWebsiteUrl(apiBase);
+  localStorage.setItem('websiteUrl', websiteUrl);
+}
+serverUrlInput.value = apiBase;
 if (websiteUrlInput) websiteUrlInput.value = websiteUrl;
 if (rememberLogin) {
   const rememberFlag = localStorage.getItem('rememberLogin');
@@ -1015,7 +1042,8 @@ async function api(path, options = {}, attempt = 0) {
     }
     return data;
   } catch (err) {
-    if (defaultApiBase && apiBase !== defaultApiBase) {
+    const manualOverride = localStorage.getItem('apiBaseOverride') === 'true';
+    if (!manualOverride && defaultApiBase && apiBase !== defaultApiBase) {
       apiBase = defaultApiBase;
       localStorage.setItem('apiBase', apiBase);
       localStorage.setItem('apiBaseOverride', 'false');
@@ -1540,7 +1568,9 @@ function saveServerSettings() {
     localStorage.setItem('apiBase', apiBase);
     localStorage.setItem('apiBaseOverride', 'true');
   } else {
-    apiBase = defaultApiBase || (isCapacitor ? 'http://10.0.2.2:5173' : window.location.origin);
+    apiBase = isCapacitor
+      ? (defaultApiBase || 'http://10.0.2.2:5173')
+      : (runtimeOrigin || defaultApiBase || window.location.origin);
     localStorage.setItem('apiBase', apiBase);
     localStorage.setItem('apiBaseOverride', 'false');
   }
