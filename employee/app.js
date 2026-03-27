@@ -444,7 +444,6 @@ const defaultWebsiteUrl = appConfig.websiteUrl || '';
 const storedApiBase = localStorage.getItem('apiBase') || '';
 const storedWebsiteUrl = localStorage.getItem('websiteUrl') || '';
 const storedOverride = localStorage.getItem('apiBaseOverride') === 'true';
-const legacyApiBases = new Set(['https://sdo-attendance.onrender.com']);
 const runtimeOrigin =
   typeof window !== 'undefined' &&
   window.location &&
@@ -482,27 +481,19 @@ if (isCapacitor) {
     ? (storedApiBase || defaultApiBase || 'http://10.0.2.2:5173')
     : (defaultApiBase || storedApiBase || 'http://10.0.2.2:5173');
 } else {
-  // For web/PWA installs, always stay on the same origin unless user explicitly overrides.
-  apiBase = storedOverride
-    ? (storedApiBase || runtimeOrigin || defaultApiBase)
-    : (runtimeOrigin || defaultApiBase || storedApiBase);
+  // Web/iPhone/Android browser mode must stay on same origin as the loaded site.
+  apiBase = runtimeOrigin || defaultApiBase || storedApiBase;
 }
 
 let websiteUrl = storedWebsiteUrl || defaultWebsiteUrl || buildWebsiteUrl(apiBase);
-const normalizedStoredApiBase = normalizeApiUrl(storedApiBase);
-const normalizedRuntimeOrigin = normalizeApiUrl(runtimeOrigin);
-if (
-  !isCapacitor &&
-  storedOverride &&
-  normalizedRuntimeOrigin &&
-  legacyApiBases.has(normalizedStoredApiBase) &&
-  normalizedStoredApiBase !== normalizedRuntimeOrigin
-) {
-  apiBase = normalizedRuntimeOrigin;
+if (!isCapacitor) {
+  // Force browser/PWA clients to a single backend to avoid split data.
+  if (!apiBase && runtimeOrigin) apiBase = runtimeOrigin;
   localStorage.setItem('apiBase', apiBase);
   localStorage.setItem('apiBaseOverride', 'false');
   websiteUrl = buildWebsiteUrl(apiBase);
   localStorage.setItem('websiteUrl', websiteUrl);
+  if (serverUrlInput) serverUrlInput.readOnly = true;
 }
 serverUrlInput.value = apiBase;
 if (websiteUrlInput) websiteUrlInput.value = websiteUrl;
@@ -1564,9 +1555,15 @@ function saveServerSettings() {
   }
 
   if (value) {
-    apiBase = normalizedServer;
-    localStorage.setItem('apiBase', apiBase);
-    localStorage.setItem('apiBaseOverride', 'true');
+    if (isCapacitor) {
+      apiBase = normalizedServer;
+      localStorage.setItem('apiBase', apiBase);
+      localStorage.setItem('apiBaseOverride', 'true');
+    } else {
+      apiBase = runtimeOrigin || defaultApiBase || window.location.origin;
+      localStorage.setItem('apiBase', apiBase);
+      localStorage.setItem('apiBaseOverride', 'false');
+    }
   } else {
     apiBase = isCapacitor
       ? (defaultApiBase || 'http://10.0.2.2:5173')
@@ -1581,7 +1578,11 @@ function saveServerSettings() {
   if (websiteUrlInput) websiteUrlInput.value = websiteUrl;
 
   closeServerModal();
-  alert('Server settings saved.');
+  if (isCapacitor) {
+    alert('Server settings saved.');
+  } else {
+    alert('Web mode uses the current website domain automatically.');
+  }
 }
 
 async function openWebsiteLink() {
