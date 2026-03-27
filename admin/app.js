@@ -21,6 +21,8 @@ const currentDate = document.getElementById('current-date');
 const attendanceTable = document.getElementById('attendance-table').querySelector('tbody');
 const employeesTable = document.getElementById('employees-table').querySelector('tbody');
 const attendanceHistory = document.getElementById('attendance-history').querySelector('tbody');
+const attendanceFromInput = document.getElementById('attendance-from');
+const attendanceToInput = document.getElementById('attendance-to');
 const reportsTable = document.getElementById('reports-table').querySelector('tbody');
 const reportsFrom = document.getElementById('reports-from');
 const reportsTo = document.getElementById('reports-to');
@@ -569,7 +571,13 @@ async function openReportPrint(report) {
 }
 
 async function api(path, options = {}) {
-  const res = await fetch(path, {
+  const method = String(options.method || 'GET').toUpperCase();
+  const cacheBustedPath =
+    method === 'GET'
+      ? `${path}${path.includes('?') ? '&' : '?'}_ts=${Date.now()}`
+      : path;
+  const res = await fetch(cacheBustedPath, {
+    cache: 'no-store',
     headers: { 'Content-Type': 'application/json' },
     ...options
   });
@@ -598,10 +606,13 @@ async function loadSummary() {
 
 async function loadAttendanceToday() {
   const today = isoToday();
-  const [data, reportData] = await Promise.all([
+  const [attendanceResult, reportsResult] = await Promise.allSettled([
     api(`/api/attendance/today?date=${today}`),
     api(`/api/reports?from=${today}&to=${today}`)
   ]);
+  if (attendanceResult.status !== 'fulfilled') throw attendanceResult.reason;
+  const data = attendanceResult.value;
+  const reportData = reportsResult.status === 'fulfilled' ? reportsResult.value : { reports: [] };
   attendanceCache = data.attendance;
   reportsCache = reportData.reports || [];
   updateReportMap(reportsCache);
@@ -655,10 +666,13 @@ function renderEmployees(list) {
 
 async function loadAttendanceHistory(from, to) {
   const query = new URLSearchParams({ from, to }).toString();
-  const [data, reportData] = await Promise.all([
+  const [attendanceResult, reportsResult] = await Promise.allSettled([
     api(`/api/attendance?${query}`),
     api(`/api/reports?${query}`)
   ]);
+  if (attendanceResult.status !== 'fulfilled') throw attendanceResult.reason;
+  const data = attendanceResult.value;
+  const reportData = reportsResult.status === 'fulfilled' ? reportsResult.value : { reports: [] };
   reportsCache = reportData.reports || [];
   updateReportMap(reportsCache);
   attendanceHistory.innerHTML = '';
@@ -1164,6 +1178,22 @@ function startAutoRefresh() {
     if (active && active.dataset.view === 'dashboard-view') {
       loadAttendanceToday();
     }
+    if (active && active.dataset.view === 'attendance-view') {
+      const range = getMonthRange();
+      const from = (attendanceFromInput && attendanceFromInput.value) || range.from;
+      const to = (attendanceToInput && attendanceToInput.value) || range.to;
+      if (attendanceFromInput && !attendanceFromInput.value) attendanceFromInput.value = from;
+      if (attendanceToInput && !attendanceToInput.value) attendanceToInput.value = to;
+      loadAttendanceHistory(from, to).catch(() => {});
+    }
+    if (active && active.dataset.view === 'reports-view') {
+      const range = getMonthRange();
+      const from = (reportsFrom && reportsFrom.value) || range.from;
+      const to = (reportsTo && reportsTo.value) || range.to;
+      if (reportsFrom && !reportsFrom.value) reportsFrom.value = from;
+      if (reportsTo && !reportsTo.value) reportsTo.value = to;
+      loadReportsTable(from, to).catch(() => {});
+    }
   }, 10000);
 }
 
@@ -1180,7 +1210,20 @@ loginForm.addEventListener('submit', async (event) => {
     });
     loginScreen.classList.add('hidden');
     adminApp.classList.remove('hidden');
-    await Promise.all([loadSummary(), loadAttendanceToday(), loadEmployees(), loadNotifications(), loadMessages()]);
+    const monthRange = getMonthRange();
+    if (attendanceFromInput) attendanceFromInput.value = monthRange.from;
+    if (attendanceToInput) attendanceToInput.value = monthRange.to;
+    if (reportsFrom) reportsFrom.value = monthRange.from;
+    if (reportsTo) reportsTo.value = monthRange.to;
+    await Promise.all([
+      loadSummary(),
+      loadAttendanceToday(),
+      loadEmployees(),
+      loadNotifications(),
+      loadMessages(),
+      loadAttendanceHistory(monthRange.from, monthRange.to),
+      loadReportsTable(monthRange.from, monthRange.to)
+    ]);
     const statRange = getMonthRange();
     loadStatBase(statRange.from, statRange.to, false).catch(() => {});
     tickClock();
@@ -1210,6 +1253,8 @@ tabButtons.forEach((btn) => {
       const today = new Date();
       const from = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`;
       const to = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+      if (attendanceFromInput) attendanceFromInput.value = from;
+      if (attendanceToInput) attendanceToInput.value = to;
       loadAttendanceHistory(from, to);
     }
     if (btn.dataset.view === 'reports-view') {
