@@ -1628,6 +1628,30 @@ function closeRegisterModal() {
   registerForm.reset();
 }
 
+function notifyOtpDelivery(result, options = {}) {
+  const successMessage = options.successMessage || 'OTP sent to your email.';
+  const contextPrefix = options.contextPrefix || '';
+  const otp = result && result.devOtp ? String(result.devOtp).trim() : '';
+  const emailError = result && result.emailError ? String(result.emailError).trim() : '';
+  const prefixText = contextPrefix ? `${contextPrefix} ` : '';
+
+  if (otp) {
+    if (emailError) {
+      alert(`${prefixText}Email service is currently unavailable.\n\nUse this OTP code: ${otp}`);
+    } else {
+      alert(`${prefixText}Use this OTP code: ${otp}`);
+    }
+    return;
+  }
+
+  if (emailError) {
+    alert(`${prefixText}OTP was generated, but email delivery is unavailable right now. Please tap Resend OTP or contact your admin.`);
+    return;
+  }
+
+  alert(successMessage);
+}
+
 async function handleRegister(event) {
   event.preventDefault();
   const formData = new FormData(registerForm);
@@ -1645,14 +1669,10 @@ async function handleRegister(event) {
     pendingOtpEmail = payload.email || result.employee.email;
     closeRegisterModal();
     openOtpModal();
-    if (result.emailError) {
-      alert(`Email not sent: ${result.emailError}`);
-    }
-    if (result.devOtp) {
-      alert(`OTP (dev): ${result.devOtp}`);
-    } else {
-      alert('OTP sent to your email. Please enter the code to verify.');
-    }
+    notifyOtpDelivery(result, {
+      successMessage: 'OTP sent to your email. Please enter the code to verify.',
+      contextPrefix: 'Registration successful.'
+    });
   } catch (err) {
     if (err.name === 'TypeError') {
       alert('Server not reachable. Try again after the server wakes up.');
@@ -1732,14 +1752,10 @@ async function handleOtpResend() {
       method: 'POST',
       body: JSON.stringify({ email: pendingOtpEmail })
     });
-    if (result.emailError) {
-      alert(`Email not sent: ${result.emailError}`);
-    }
-    if (result.devOtp) {
-      alert(`OTP resent (dev): ${result.devOtp}`);
-    } else {
-      alert('OTP resent. Please check your email.');
-    }
+    notifyOtpDelivery(result, {
+      successMessage: 'OTP resent. Please check your email.',
+      contextPrefix: 'OTP resent.'
+    });
   } catch (err) {
     alert(err.message || 'Unable to resend OTP.');
   }
@@ -2030,13 +2046,10 @@ async function attemptAutoLogin() {
         });
         pendingOtpEmail = profile.email;
         openOtpModal();
-        if (restore.emailError) {
-          alert(`Account restored, but email not sent: ${restore.emailError}`);
-        } else if (restore.devOtp) {
-          alert(`Account restored. OTP (dev): ${restore.devOtp}`);
-        } else {
-          alert('Account restored. OTP sent to your email.');
-        }
+        notifyOtpDelivery(restore, {
+          successMessage: 'Account restored. OTP sent to your email.',
+          contextPrefix: 'Account restored.'
+        });
       } catch (restoreErr) {
         // ignore restore errors
       }
