@@ -155,6 +155,46 @@ function pickLocation(item) {
   return item.locationInAM || item.locationInPM || item.locationOutAM || item.locationOutPM || item.location || '';
 }
 
+function inferLegacyAttendanceSlot(item) {
+  if (!item) return 'amIn';
+  if (item.timeOutPM || item.timeOut) return 'pmOut';
+  if (item.timeInPM) return 'pmIn';
+  if (item.timeOutAM) return 'amOut';
+  return 'amIn';
+}
+
+function buildAttendanceSlotTimes(item) {
+  const values = {
+    amIn: item.timeInAM || '',
+    amOut: item.timeOutAM || '',
+    pmIn: item.timeInPM || '',
+    pmOut: item.timeOutPM || ''
+  };
+  if (!values.amIn && item.timeIn && !values.pmIn) values.amIn = item.timeIn;
+  if (!values.pmOut && item.timeOut) values.pmOut = item.timeOut;
+  return values;
+}
+
+function buildAttendanceSlotDetails(item) {
+  const details = {
+    amIn: { photo: item.photoInAM || '', location: item.locationInAM || '' },
+    amOut: { photo: item.photoOutAM || '', location: item.locationOutAM || '' },
+    pmIn: { photo: item.photoInPM || '', location: item.locationInPM || '' },
+    pmOut: { photo: item.photoOutPM || '', location: item.locationOutPM || '' }
+  };
+  const hasSlotPhoto = Object.values(details).some((slot) => !!slot.photo);
+  const hasSlotLocation = Object.values(details).some((slot) => !!slot.location);
+  const legacySlot = inferLegacyAttendanceSlot(item);
+  if (!hasSlotPhoto && item.photo) details[legacySlot].photo = item.photo;
+  if (!hasSlotLocation && item.location) details[legacySlot].location = item.location;
+  return details;
+}
+
+function renderSlotPhoto(photo, altText) {
+  if (!photo) return '--';
+  return `<img class="table-photo" src="${photo}" alt="${altText}" />`;
+}
+
 function hasAnyAttendanceLocal(item) {
   if (!item) return false;
   return !!(
@@ -642,24 +682,30 @@ async function loadAttendanceToday() {
   updateReportMap(reportsCache);
   attendanceTable.innerHTML = '';
   data.attendance.forEach((item) => {
-    const photo = pickPhoto(item);
-    const location = pickLocation(item);
+    const times = buildAttendanceSlotTimes(item);
+    const slots = buildAttendanceSlotDetails(item);
     const report = reportMap.get(buildReportKey(item.employeeId, item.date));
     const row = document.createElement('tr');
     row.innerHTML = `
       <td>${item.employeeId}</td>
       <td>${item.employeeName}</td>
       <td>${item.office}</td>
-      <td>${item.timeInAM || '--'}</td>
-      <td>${item.timeOutAM || '--'}</td>
-      <td>${item.timeInPM || '--'}</td>
-      <td>${item.timeOutPM || '--'}</td>
+      <td>${times.amIn || '--'}</td>
+      <td>${renderSlotPhoto(slots.amIn.photo, 'AM Time In Photo')}</td>
+      <td class="table-location">${slots.amIn.location || '--'}</td>
+      <td>${times.amOut || '--'}</td>
+      <td>${renderSlotPhoto(slots.amOut.photo, 'AM Time Out Photo')}</td>
+      <td class="table-location">${slots.amOut.location || '--'}</td>
+      <td>${times.pmIn || '--'}</td>
+      <td>${renderSlotPhoto(slots.pmIn.photo, 'PM Time In Photo')}</td>
+      <td class="table-location">${slots.pmIn.location || '--'}</td>
+      <td>${times.pmOut || '--'}</td>
+      <td>${renderSlotPhoto(slots.pmOut.photo, 'PM Time Out Photo')}</td>
+      <td class="table-location">${slots.pmOut.location || '--'}</td>
       <td class="status-cell">${item.status || '--'}</td>
-      <td>${photo ? `<img class="table-photo" src="${photo}" alt="Photo" />` : '--'}</td>
       <td>
         ${report ? `<button class="table-action-btn" data-report="${report.id}" data-employee="${item.employeeId}" data-date="${item.date}">Print Report</button>` : '--'}
       </td>
-      <td class="table-location">${location || '--'}</td>
     `;
     setStatusCell(row.querySelector('.status-cell'), item.status || '');
     attendanceTable.appendChild(row);
@@ -703,24 +749,30 @@ async function loadAttendanceHistory(from, to) {
   updateReportMap(reportsCache);
   attendanceHistory.innerHTML = '';
   data.attendance.forEach((item) => {
-    const photo = pickPhoto(item);
-    const location = pickLocation(item);
+    const times = buildAttendanceSlotTimes(item);
+    const slots = buildAttendanceSlotDetails(item);
     const report = reportMap.get(buildReportKey(item.employeeId, item.date));
     const row = document.createElement('tr');
     row.innerHTML = `
       <td>${item.date}</td>
       <td>${item.employeeName}</td>
       <td>${item.office}</td>
-      <td>${item.timeInAM || '--'}</td>
-      <td>${item.timeOutAM || '--'}</td>
-      <td>${item.timeInPM || '--'}</td>
-      <td>${item.timeOutPM || '--'}</td>
+      <td>${times.amIn || '--'}</td>
+      <td>${renderSlotPhoto(slots.amIn.photo, 'AM Time In Photo')}</td>
+      <td class="table-location">${slots.amIn.location || '--'}</td>
+      <td>${times.amOut || '--'}</td>
+      <td>${renderSlotPhoto(slots.amOut.photo, 'AM Time Out Photo')}</td>
+      <td class="table-location">${slots.amOut.location || '--'}</td>
+      <td>${times.pmIn || '--'}</td>
+      <td>${renderSlotPhoto(slots.pmIn.photo, 'PM Time In Photo')}</td>
+      <td class="table-location">${slots.pmIn.location || '--'}</td>
+      <td>${times.pmOut || '--'}</td>
+      <td>${renderSlotPhoto(slots.pmOut.photo, 'PM Time Out Photo')}</td>
+      <td class="table-location">${slots.pmOut.location || '--'}</td>
       <td class="status-cell">${item.status || '--'}</td>
-      <td>${photo ? `<img class="table-photo" src="${photo}" alt="Photo" />` : '--'}</td>
       <td>
         ${report ? `<button class="table-action-btn" data-report="${report.id}" data-employee="${item.employeeId}" data-date="${item.date}">Print Report</button>` : '--'}
       </td>
-      <td class="table-location">${location || '--'}</td>
     `;
     setStatusCell(row.querySelector('.status-cell'), item.status || '');
     attendanceHistory.appendChild(row);
