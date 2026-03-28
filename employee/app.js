@@ -540,17 +540,23 @@ function applyConfirmedLocation() {
   if (!confirmedBarangay) return;
   const label = formatConfirmedLocation(confirmedBarangay);
   if (!label) return;
-  const current = String(locationName.textContent || '').trim();
-  if (!current || /^address unavailable$/i.test(current)) {
-    locationName.textContent = label;
-    empLocation.textContent = label;
-  }
+  locationName.textContent = label;
+  empLocation.textContent = label;
+  lastAddress = label;
+  localStorage.setItem('lastAddress', label);
+}
+
+function addressContainsBarangay(address, barangay) {
+  if (!address || !barangay) return false;
+  const normalized = normalizeText(address);
+  const target = normalizeText(barangay);
+  return normalized.includes(target);
 }
 
 function applyConfirmedOverride(address) {
-  if (address) return address;
-  if (!confirmedBarangay) return '';
-  return formatConfirmedLocation(confirmedBarangay) || '';
+  if (!confirmedBarangay) return address;
+  if (addressContainsBarangay(address, confirmedBarangay.barangay)) return address;
+  return formatConfirmedLocation(confirmedBarangay) || address;
 }
 
 function inferMunicipality(address) {
@@ -824,10 +830,10 @@ let nativeWatchId = null;
 let lastCoords = null;
 let lastMapAt = 0;
 let lastAddressAt = 0;
-const ADDRESS_GEOCODE_MAX_ACCURACY = 100;
-const ATTENDANCE_REQUIRED_ACCURACY = 80;
-const ATTENDANCE_LOCATION_MAX_AGE_MS = 2 * 60 * 1000;
-const BEST_SAMPLE_WINDOW_MS = 15000;
+const ADDRESS_ACCURACY_THRESHOLD = 6;
+const ADDRESS_STABLE_HITS = 4;
+const BEST_SAMPLE_WINDOW_MS = 20000;
+let accuracyStreak = 0;
 
 function getCapacitorGeo() {
   if (typeof window === 'undefined') return null;
@@ -864,39 +870,6 @@ function distanceMeters(a, b) {
     Math.sin(dLat / 2) ** 2 +
     Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
   return 2 * R * Math.asin(Math.sqrt(h));
-}
-
-function formatCoordinateLocation(lat, lng, accuracy) {
-  const latText = Number.isFinite(lat) ? lat.toFixed(6) : '--';
-  const lngText = Number.isFinite(lng) ? lng.toFixed(6) : '--';
-  const accText = Number.isFinite(accuracy) ? ` (±${Math.round(accuracy)}m)` : '';
-  return `Lat ${latText}, Lng ${lngText}${accText}`;
-}
-
-function hasFreshAccurateLocation() {
-  if (!lastCoords) return false;
-  const ageMs = Date.now() - (lastCoords.capturedAt || 0);
-  const accuracy = Number(lastCoords.accuracy);
-  return ageMs <= ATTENDANCE_LOCATION_MAX_AGE_MS && Number.isFinite(accuracy) && accuracy <= ATTENDANCE_REQUIRED_ACCURACY;
-}
-
-function getCurrentLocationPayload() {
-  const lat = lastCoords && Number.isFinite(lastCoords.lat) ? lastCoords.lat : parseFloat(locationLat.textContent);
-  const lng = lastCoords && Number.isFinite(lastCoords.lng) ? lastCoords.lng : parseFloat(locationLng.textContent);
-  const accuracy = lastCoords && Number.isFinite(lastCoords.accuracy) ? lastCoords.accuracy : null;
-  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
-
-  let locationLabel = String(locationName.textContent || '').trim();
-  if (!locationLabel || /^address unavailable$/i.test(locationLabel)) {
-    locationLabel = formatCoordinateLocation(lat, lng, accuracy);
-  }
-
-  return {
-    location: locationLabel,
-    latitude: lat.toFixed(6),
-    longitude: lng.toFixed(6),
-    accuracy
-  };
 }
 
 function chooseBetterPosition(best, candidate) {
@@ -955,31 +928,40 @@ async function collectBestNativePosition() {
 }
 
 async function applyLocationUpdate(pos) {
-  if (!pos || !pos.coords) return;
   const { latitude, longitude, accuracy } = pos.coords;
-  const safeAccuracy = Number.isFinite(Number(accuracy)) ? Number(accuracy) : 9999;
-  const latValue = latitude.toFixed(6);
-  const lngValue = longitude.toFixed(6);
+  const latValue = latitude.toFixed(5);
+  const lngValue = longitude.toFixed(5);
   locationLat.textContent = latValue;
   locationLng.textContent = lngValue;
-  if (locationAccuracy) locationAccuracy.textContent = `${Math.round(safeAccuracy)} m`;
+  if (locationAccuracy) locationAccuracy.textContent = `${Math.round(accuracy)} m`;
+  if (confirmedBarangay) {
+    applyConfirmedLocation();
+  }
 
   const now = Date.now();
   const moved = lastCoords ? distanceMeters(lastCoords, { lat: latitude, lng: longitude }) : 9999;
   const shouldUpdateMap = moved > 10 || now - lastMapAt > 10000;
-  const shouldUpdateAddress = moved > 20 || now - lastAddressAt > 15000 || !lastAddress;
+  const shouldUpdateAddress = moved > 25 || now - lastAddressAt > 20000;
 
   if (shouldUpdateMap) {
     updateMapPreview(latitude, longitude);
     lastMapAt = now;
   }
 
-  if (safeAccuracy > ADDRESS_GEOCODE_MAX_ACCURACY) {
-    const fallback = formatCoordinateLocation(latitude, longitude, safeAccuracy);
-    locationName.textContent = fallback;
-    empLocation.textContent = fallback;
-    setGpsStatus(`GPS signal weak · ±${Math.round(safeAccuracy)}m (move outdoors)`);
-    lastCoords = { lat: latitude, lng: longitude, accuracy: safeAccuracy, capturedAt: now };
+  if (accuracy <= ADDRESS_ACCURACY_THRESHOLD) {
+    accuracyStreak += 1;
+  } else {
+    accuracyStreak = 0;
+  }
+
+  if (accuracy > ADDRESS_ACCURACY_THRESHOLD || accuracyStreak < ADDRESS_STABLE_HITS) {
+    const fallback = lastAddress || localStorage.getItem('lastAddress') || '';
+    if (fallback) {
+      locationName.textContent = fallback;
+      empLocation.textContent = fallback;
+    }
+    setGpsStatus(`Improving GPS accuracy · ±${Math.round(accuracy)}m (move outdoors)`);
+    lastCoords = { lat: latitude, lng: longitude };
     return;
   }
 
@@ -993,29 +975,41 @@ async function applyLocationUpdate(pos) {
         empLocation.textContent = finalAddress;
         lastAddress = finalAddress;
         localStorage.setItem('lastAddress', finalAddress);
-        setGpsStatus(`Live GPS · ±${Math.round(safeAccuracy)}m`);
+        setGpsStatus(`Live GPS · ±${Math.round(accuracy)}m`);
         if (!confirmedBarangay && !barangayPrompted) {
           barangayPrompted = true;
           openBarangayModal();
         }
       } else {
-        const fallback = formatCoordinateLocation(latitude, longitude, safeAccuracy);
-        locationName.textContent = fallback;
-        empLocation.textContent = fallback;
-        setGpsStatus(`Live GPS · ±${Math.round(safeAccuracy)}m (coordinates)`);
+        const fallback = lastAddress || localStorage.getItem('lastAddress') || '';
+        if (fallback && moved < 80) {
+          locationName.textContent = fallback;
+          empLocation.textContent = fallback;
+          setGpsStatus(`Live GPS · ±${Math.round(accuracy)}m`);
+        } else {
+          locationName.textContent = 'Address unavailable';
+          empLocation.textContent = 'Address unavailable';
+          setGpsStatus('Address unavailable. Live GPS continues.');
+        }
       }
     } catch (err) {
-      const fallback = formatCoordinateLocation(latitude, longitude, safeAccuracy);
-      locationName.textContent = fallback;
-      empLocation.textContent = fallback;
-      setGpsStatus(`Live GPS · ±${Math.round(safeAccuracy)}m (coordinates)`);
+      const fallback = lastAddress || localStorage.getItem('lastAddress') || '';
+      if (fallback && moved < 80) {
+        locationName.textContent = fallback;
+        empLocation.textContent = fallback;
+        setGpsStatus(`Live GPS · ±${Math.round(accuracy)}m`);
+      } else {
+        locationName.textContent = 'Address unavailable';
+        empLocation.textContent = 'Address unavailable';
+        setGpsStatus('Address unavailable. Live GPS continues.');
+      }
     }
     lastAddressAt = now;
   } else {
-    setGpsStatus(`Live GPS · ±${Math.round(safeAccuracy)}m`);
+    setGpsStatus(`Live GPS · ±${Math.round(accuracy)}m`);
   }
 
-  lastCoords = { lat: latitude, lng: longitude, accuracy: safeAccuracy, capturedAt: now };
+  lastCoords = { lat: latitude, lng: longitude };
 }
 
 async function startGpsWatch() {
@@ -1377,56 +1371,44 @@ async function updateLocation() {
     if (!ok) {
       setGpsStatus('Location denied or unavailable. Tap Update to allow.');
       alert('Please allow location access (Allow While Using) for accurate GPS.');
-      return false;
+      return;
     }
     try {
       setGpsStatus('Improving GPS accuracy…');
       const best = await collectBestNativePosition();
       if (best) {
-        await applyLocationUpdate(best);
+        applyLocationUpdate(best);
       } else {
         const pos = await capGeo.getCurrentPosition({ enableHighAccuracy: true, timeout: 60000, maximumAge: 0 });
-        await applyLocationUpdate(pos);
+        applyLocationUpdate(pos);
       }
       startGpsWatch();
-      return true;
     } catch (err) {
       setGpsStatus('Unable to get GPS. Tap Update to retry.');
-      return false;
     }
+    return;
   }
   if (!navigator.geolocation) {
-    const fallback = lastAddress || 'Address unavailable';
-    locationName.textContent = fallback;
-    empLocation.textContent = fallback;
+    locationName.textContent = lastAddress || 'Address unavailable';
     setGpsStatus('Geolocation not supported on this device.');
-    return false;
+    return;
   }
   setGpsStatus('Requesting location permission…');
-  return new Promise((resolve) => {
-    navigator.geolocation.getCurrentPosition(
-      async (pos) => {
-        try {
-          setGpsStatus('Improving GPS accuracy…');
-          const best = await collectBestWebPosition();
-          await applyLocationUpdate(best || pos);
-          startGpsWatch();
-          resolve(true);
-        } catch (err) {
-          setGpsStatus('Unable to get GPS. Tap Update to retry.');
-          resolve(false);
-        }
-      },
-      (err) => {
-        setGpsStatus('Location denied or unavailable. Tap Update to allow.');
-        if (err && err.code === 1) {
-          alert('Please allow location access (Allow While Using) for accurate GPS.');
-        }
-        resolve(false);
-      },
-      { enableHighAccuracy: true, timeout: 60000, maximumAge: 0 }
-    );
-  });
+  navigator.geolocation.getCurrentPosition(
+    async (pos) => {
+      setGpsStatus('Improving GPS accuracy…');
+      const best = await collectBestWebPosition();
+      applyLocationUpdate(best || pos);
+      startGpsWatch();
+    },
+    (err) => {
+      setGpsStatus('Location denied or unavailable. Tap Update to allow.');
+      if (err && err.code === 1) {
+        alert('Please allow location access (Allow While Using) for accurate GPS.');
+      }
+    },
+    { enableHighAccuracy: true, timeout: 60000, maximumAge: 0 }
+  );
 }
 
 function requirePhoto() {
@@ -1459,35 +1441,6 @@ function pickRecordedTime(result, action) {
     : (attendance.timeOutAM || attendance.timeOut || '');
 }
 
-async function ensureAccurateLocationForAttendance(actionLabel) {
-  if (!hasFreshAccurateLocation()) {
-    setGpsStatus(`Refreshing GPS before ${actionLabel}…`);
-    const refreshed = await updateLocation();
-    if (!refreshed && !lastCoords) {
-      alert('Unable to get your live GPS location. Please tap GET ACCURATE LOCATION (GPS) and try again.');
-      return null;
-    }
-  }
-
-  if (!hasFreshAccurateLocation()) {
-    const accuracy = lastCoords && Number.isFinite(lastCoords.accuracy)
-      ? Math.round(lastCoords.accuracy)
-      : 'unknown';
-    setGpsStatus(`GPS too weak for attendance · ±${accuracy}m`);
-    alert(`GPS is not accurate yet (±${accuracy}m). Please move outdoors and tap GET ACCURATE LOCATION (GPS) first.`);
-    return null;
-  }
-
-  const payload = getCurrentLocationPayload();
-  if (!payload) {
-    alert('Unable to read your GPS coordinates. Please tap GET ACCURATE LOCATION (GPS) and try again.');
-    return null;
-  }
-
-  setGpsStatus(`GPS locked for ${actionLabel} · ±${Math.round(payload.accuracy || 0)}m`);
-  return payload;
-}
-
 async function markTimeIn() {
   if (attendanceRequestInFlight) return;
   await primeAttendanceAudio();
@@ -1499,12 +1452,6 @@ async function markTimeIn() {
     alert('Please log in first.');
     return;
   }
-  const locationSnapshot = await ensureAccurateLocationForAttendance('time in');
-  if (!locationSnapshot) {
-    await playAttendanceSound('error');
-    await delay(120);
-    return;
-  }
 
   attendanceRequestInFlight = true;
   setAttendanceButtonsLocked(true);
@@ -1513,9 +1460,9 @@ async function markTimeIn() {
     timeIn: timeNow(),
     date: isoToday(),
     useServerTime: true,
-    location: locationSnapshot.location,
-    latitude: locationSnapshot.latitude,
-    longitude: locationSnapshot.longitude,
+    location: locationName.textContent,
+    latitude: locationLat.textContent,
+    longitude: locationLng.textContent,
     photo: photoData
   };
   try {
@@ -1548,12 +1495,6 @@ async function markTimeOut() {
     alert('Please log in first.');
     return;
   }
-  const locationSnapshot = await ensureAccurateLocationForAttendance('time out');
-  if (!locationSnapshot) {
-    await playAttendanceSound('error');
-    await delay(120);
-    return;
-  }
 
   attendanceRequestInFlight = true;
   setAttendanceButtonsLocked(true);
@@ -1562,9 +1503,9 @@ async function markTimeOut() {
     timeOut: timeNow(),
     date: isoToday(),
     useServerTime: true,
-    location: locationSnapshot.location,
-    latitude: locationSnapshot.latitude,
-    longitude: locationSnapshot.longitude,
+    location: locationName.textContent,
+    latitude: locationLat.textContent,
+    longitude: locationLng.textContent,
     photo: photoData
   };
   try {
