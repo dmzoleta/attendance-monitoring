@@ -1029,6 +1029,7 @@ async function api(path, options = {}, attempt = 0) {
     if (!res.ok) {
       const error = new Error(data.message || 'Request failed');
       error.status = res.status;
+      error.data = data;
       throw error;
     }
     return data;
@@ -1522,8 +1523,10 @@ loginForm.addEventListener('submit', async (event) => {
     const message = err.message || 'Invalid credentials. Use email or ID.';
     if (message.toLowerCase().includes('email not verified')) {
       const username = String(payload.username || '').trim();
-      if (username) {
-        pendingOtpEmail = username;
+      const identifierFromServer = err && err.data && err.data.identifier ? String(err.data.identifier).trim() : '';
+      const otpIdentifier = identifierFromServer || username;
+      if (otpIdentifier) {
+        pendingOtpEmail = otpIdentifier;
         openOtpModal();
       }
     }
@@ -1666,7 +1669,7 @@ async function handleRegister(event) {
     const loginPass = loginForm.querySelector('input[name="password"]');
     if (loginUser) loginUser.value = payload.email || result.employee.email || result.employee.id;
     if (loginPass) loginPass.value = payload.password;
-    pendingOtpEmail = payload.email || result.employee.email;
+    pendingOtpEmail = result.employee.email || result.employee.username || result.employee.id || payload.email;
     closeRegisterModal();
     openOtpModal();
     notifyOtpDelivery(result, {
@@ -1725,7 +1728,7 @@ function closeOtpModal() {
 async function handleOtpVerify(event) {
   event.preventDefault();
   if (!pendingOtpEmail) {
-    alert('Missing email for verification. Please register again.');
+    alert('Missing account identifier for verification. Please register again.');
     return;
   }
   const formData = new FormData(otpForm);
@@ -1733,7 +1736,7 @@ async function handleOtpVerify(event) {
   try {
     await api('/api/register/verify', {
       method: 'POST',
-      body: JSON.stringify({ email: pendingOtpEmail, otp: payload.otp })
+      body: JSON.stringify({ identifier: pendingOtpEmail, otp: payload.otp })
     });
     alert('Email verified. You can now log in.');
     closeOtpModal();
@@ -1744,13 +1747,13 @@ async function handleOtpVerify(event) {
 
 async function handleOtpResend() {
   if (!pendingOtpEmail) {
-    alert('Missing email for verification. Please register again.');
+    alert('Missing account identifier for verification. Please register again.');
     return;
   }
   try {
     const result = await api('/api/register/resend', {
       method: 'POST',
-      body: JSON.stringify({ email: pendingOtpEmail })
+      body: JSON.stringify({ identifier: pendingOtpEmail })
     });
     notifyOtpDelivery(result, {
       successMessage: 'OTP resent. Please check your email.',
@@ -2037,14 +2040,14 @@ async function attemptAutoLogin() {
   } catch (err) {
     setLoginStatus('');
     const profile = loadProfile();
-    if (!autoRestoreAttempted && profile && profile.email) {
+    if (!autoRestoreAttempted && profile && (profile.email || profile.username)) {
       autoRestoreAttempted = true;
       try {
         const restore = await api('/api/register', {
           method: 'POST',
           body: JSON.stringify(profile)
         });
-        pendingOtpEmail = profile.email;
+        pendingOtpEmail = profile.email || profile.username || '';
         openOtpModal();
         notifyOtpDelivery(restore, {
           successMessage: 'Account restored. OTP sent to your email.',

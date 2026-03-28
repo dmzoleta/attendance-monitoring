@@ -629,6 +629,27 @@ function normalizeEmail(value) {
   return String(value || '').trim().toLowerCase();
 }
 
+function normalizeLookup(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function isEmailAddress(value) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || '').trim());
+}
+
+function resolveOtpLookup(body) {
+  return normalizeLookup(body.identifier || body.email || body.username || body.id || '');
+}
+
+function resolveOtpTargetEmail(employee) {
+  if (!employee) return '';
+  const candidateEmail = String(employee.email || '').trim().toLowerCase();
+  if (isEmailAddress(candidateEmail)) return candidateEmail;
+  const candidateUsername = String(employee.username || '').trim().toLowerCase();
+  if (isEmailAddress(candidateUsername)) return candidateUsername;
+  return '';
+}
+
 function isDepedEmail(email) {
   return /@deped\.gov\.ph$/i.test(email);
 }
@@ -1190,6 +1211,7 @@ async function upsertAttendancePg(record) {
 
 async function handleApiPg(req, res, pathname) {
   if (req.method === 'GET' && pathname === '/api/db-health') {
+    const brevoConfig = getBrevoConfig();
     const [admins, employees, attendance, notifications, messages, reports] = await Promise.all([
       pgQuery('SELECT COUNT(*) AS count FROM admins'),
       pgQuery('SELECT COUNT(*) AS count FROM employees'),
@@ -1208,6 +1230,11 @@ async function handleApiPg(req, res, pathname) {
         notifications: Number(notifications.rows[0].count),
         messages: Number(messages.rows[0].count),
         reports: Number(reports.rows[0].count)
+      },
+      email: {
+        provider: 'brevo',
+        configured: Boolean(brevoConfig),
+        from: brevoConfig ? brevoConfig.fromEmail : ''
       },
       time: Date.now()
     });
@@ -1611,12 +1638,15 @@ async function handleApiPg(req, res, pathname) {
 
   if (req.method === 'POST' && pathname === '/api/register/verify') {
     const body = await collectBody(req);
-    const email = normalizeEmail(body.email || '');
+    const lookup = resolveOtpLookup(body);
     const otp = String(body.otp || '').trim();
-    if (!email || !otp) {
-      return sendJson(res, 400, { ok: false, message: 'Email and OTP are required.' });
+    if (!lookup || !otp) {
+      return sendJson(res, 400, { ok: false, message: 'Account identifier and OTP are required.' });
     }
-    const employeeRes = await pgQuery('SELECT * FROM employees WHERE LOWER(email) = LOWER($1)', [email]);
+    const employeeRes = await pgQuery(
+      'SELECT * FROM employees WHERE LOWER(email) = $1 OR LOWER(username) = $1 OR LOWER(id) = $1',
+      [lookup]
+    );
     if (!employeeRes.rows.length) return sendJson(res, 404, { ok: false, message: 'Employee not found.' });
     const employee = mapEmployeeRow(employeeRes.rows[0]);
     if (!employee.otp || employee.otp !== otp) {
@@ -1631,18 +1661,28 @@ async function handleApiPg(req, res, pathname) {
 
   if (req.method === 'POST' && pathname === '/api/register/resend') {
     const body = await collectBody(req);
-    const email = normalizeEmail(body.email || '');
-    if (!email) return sendJson(res, 400, { ok: false, message: 'Email is required.' });
-    const employeeRes = await pgQuery('SELECT * FROM employees WHERE LOWER(email) = LOWER($1)', [email]);
+    const lookup = resolveOtpLookup(body);
+    if (!lookup) return sendJson(res, 400, { ok: false, message: 'Account identifier is required.' });
+    const employeeRes = await pgQuery(
+      'SELECT * FROM employees WHERE LOWER(email) = $1 OR LOWER(username) = $1 OR LOWER(id) = $1',
+      [lookup]
+    );
     if (!employeeRes.rows.length) return sendJson(res, 404, { ok: false, message: 'Employee not found.' });
     const employee = mapEmployeeRow(employeeRes.rows[0]);
+    const targetEmail = resolveOtpTargetEmail(employee);
+    if (!targetEmail) {
+      return sendJson(res, 400, {
+        ok: false,
+        message: 'No valid email is registered for this account. Please contact admin.'
+      });
+    }
     const otp = generateOtp();
     const expires = Date.now() + 10 * 60 * 1000;
     await pgQuery('UPDATE employees SET otp = $1, otp_expires_at = $2 WHERE id = $3', [otp, expires, employee.id]);
     let devOtp = '';
     let emailError = '';
     try {
-      const mailResult = await sendOtpEmail(email, otp);
+      const mailResult = await sendOtpEmail(targetEmail, otp);
       if (!mailResult.ok) {
         devOtp = otp;
         emailError = mailResult.reason || 'Brevo request failed';
@@ -1655,7 +1695,8 @@ async function handleApiPg(req, res, pathname) {
       ok: true,
       devOtp,
       emailSent: !emailError,
-      emailError
+      emailError,
+      sentTo: targetEmail
     });
   }
 
@@ -1715,7 +1756,11 @@ async function handleApiPg(req, res, pathname) {
       return sendJson(res, 401, { ok: false, message: 'Invalid credentials' });
     }
     if (emp.verified === false) {
-      return sendJson(res, 403, { ok: false, message: 'Email not verified. Please enter the OTP sent to your email.' });
+      return sendJson(res, 403, {
+        ok: false,
+        message: 'Email not verified. Please enter the OTP sent to your email.',
+        identifier: emp.email || emp.username || emp.id || username
+      });
     }
     return sendJson(res, 200, { ok: true, user: emp, role: 'employee' });
   }
@@ -2114,6 +2159,7 @@ async function handleApi(req, res, pathname) {
   if (req.method === 'GET' && pathname === '/api/db-health') {
     const db = readDb();
     const diag = getJsonDbDiagnostics(db);
+    const brevoConfig = getBrevoConfig();
     return sendJson(res, 200, {
       ok: true,
       mode: 'json',
@@ -2129,6 +2175,11 @@ async function handleApi(req, res, pathname) {
         lastDbWriteError: diag.lastDbWriteError,
         lastDbWriteAttemptAt: diag.lastDbWriteAttemptAt,
         lastDbWriteOkAt: diag.lastDbWriteOkAt
+      },
+      email: {
+        provider: 'brevo',
+        configured: Boolean(brevoConfig),
+        from: brevoConfig ? brevoConfig.fromEmail : ''
       },
       time: Date.now()
     });
@@ -2436,12 +2487,16 @@ async function handleApi(req, res, pathname) {
   if (req.method === 'POST' && pathname === '/api/register/verify') {
     return collectBody(req).then((body) => {
       const db = readDb();
-      const email = normalizeEmail(body.email || '');
+      const lookup = resolveOtpLookup(body);
       const otp = String(body.otp || '').trim();
-      if (!email || !otp) {
-        return sendJson(res, 400, { ok: false, message: 'Email and OTP are required.' });
+      if (!lookup || !otp) {
+        return sendJson(res, 400, { ok: false, message: 'Account identifier and OTP are required.' });
       }
-      const employee = db.employees.find((e) => e.email && e.email.toLowerCase() === email);
+      const employee = db.employees.find((e) =>
+        (e.email && e.email.toLowerCase() === lookup) ||
+        (e.username && e.username.toLowerCase() === lookup) ||
+        (e.id && e.id.toLowerCase() === lookup)
+      );
       if (!employee) return sendJson(res, 404, { ok: false, message: 'Employee not found.' });
       if (!employee.otp || employee.otp !== otp) {
         return sendJson(res, 400, { ok: false, message: 'Invalid OTP.' });
@@ -2460,10 +2515,21 @@ async function handleApi(req, res, pathname) {
   if (req.method === 'POST' && pathname === '/api/register/resend') {
     return collectBody(req).then(async (body) => {
       const db = readDb();
-      const email = normalizeEmail(body.email || '');
-      if (!email) return sendJson(res, 400, { ok: false, message: 'Email is required.' });
-      const employee = db.employees.find((e) => e.email && e.email.toLowerCase() === email);
+      const lookup = resolveOtpLookup(body);
+      if (!lookup) return sendJson(res, 400, { ok: false, message: 'Account identifier is required.' });
+      const employee = db.employees.find((e) =>
+        (e.email && e.email.toLowerCase() === lookup) ||
+        (e.username && e.username.toLowerCase() === lookup) ||
+        (e.id && e.id.toLowerCase() === lookup)
+      );
       if (!employee) return sendJson(res, 404, { ok: false, message: 'Employee not found.' });
+      const targetEmail = resolveOtpTargetEmail(employee);
+      if (!targetEmail) {
+        return sendJson(res, 400, {
+          ok: false,
+          message: 'No valid email is registered for this account. Please contact admin.'
+        });
+      }
       const otp = generateOtp();
       employee.otp = otp;
       employee.otpExpiresAt = Date.now() + 10 * 60 * 1000;
@@ -2471,7 +2537,7 @@ async function handleApi(req, res, pathname) {
       let devOtp = '';
       let emailError = '';
       try {
-        const mailResult = await sendOtpEmail(email, otp);
+        const mailResult = await sendOtpEmail(targetEmail, otp);
         if (!mailResult.ok) {
           devOtp = otp;
           emailError = mailResult.reason || 'Brevo request failed';
@@ -2484,7 +2550,8 @@ async function handleApi(req, res, pathname) {
         ok: true,
         devOtp,
         emailSent: !emailError,
-        emailError
+        emailError,
+        sentTo: targetEmail
       });
     });
   }
@@ -2547,7 +2614,11 @@ async function handleApi(req, res, pathname) {
         return sendJson(res, 401, { ok: false, message: 'Invalid credentials' });
       }
       if (emp.verified === false) {
-        return sendJson(res, 403, { ok: false, message: 'Email not verified. Please enter the OTP sent to your email.' });
+        return sendJson(res, 403, {
+          ok: false,
+          message: 'Email not verified. Please enter the OTP sent to your email.',
+          identifier: emp.email || emp.username || emp.id || username
+        });
       }
       return sendJson(res, 200, { ok: true, user: emp, role: 'employee' });
     });
