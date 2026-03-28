@@ -389,12 +389,12 @@ async function fetchAttendanceForReport(employeeId, reportDate) {
 async function openReportPrint(report) {
   if (!report) return;
   const attachmentName = report.attachmentName || 'attachment';
-  const attachmentLabel = report.attachmentData ? attachmentName : 'No attachment';
-  const attachmentHtml = report.attachmentData
+  const hasAttachment = Boolean(report.attachmentData);
+  const attachmentHtml = hasAttachment
     ? (isImageAttachment(report.attachmentData)
-      ? `<img src="${report.attachmentData}" alt="Attachment" style="max-width:100%; margin-top:12px; border-radius:6px;" />`
+      ? `<img src="${report.attachmentData}" alt="Attachment" style="max-width:100%; max-height:70mm; margin-top:8px; border:1px solid #000;" />`
       : `<a href="${report.attachmentData}" download="${attachmentName}">Download attachment</a>`)
-    : '<em>No attachment</em>';
+    : '';
 
   let attendanceRecord = null;
   try {
@@ -419,16 +419,32 @@ async function openReportPrint(report) {
   const bagongLogo = `${window.location.origin}/admin/assets/bagong-pilipinas.png?v=${assetVersion}`;
   const sdoLogo = `${window.location.origin}/admin/assets/logo.jpg?v=${assetVersion}`;
 
-  const printWindow = window.open('', '', 'width=900,height=700');
+  const printWindow = window.open(`${window.location.origin}/admin/`, '', 'width=900,height=700');
+  if (!printWindow) {
+    alert('Unable to open print preview. Please allow popups and try again.');
+    return;
+  }
+  const attachmentSectionHtml = hasAttachment
+    ? `
+        <div class="attachment">
+          <strong>Attachment:</strong> ${escapeHtml(attachmentName)}<br/>
+          ${attachmentHtml}
+        </div>
+      `
+    : '';
+  printWindow.document.open();
   printWindow.document.write(`
     <html>
       <head>
         <title>Individual Daily Log and Accomplishment Report</title>
         <style>
-          @page { size: A4; margin: 18mm; }
-          body { font-family: "Times New Roman", serif; color: #111; margin: 0; }
+          @page { margin: 12mm; }
+          html, body { margin: 0; padding: 0; }
+          body { font-family: "Times New Roman", serif; color: #111; }
+          .page { min-height: 100vh; display: flex; flex-direction: column; }
+          .content { flex: 1 1 auto; }
           .report-header { text-align: center; }
-          .seal { width: 76px; height: 76px; object-fit: contain; margin: 0 auto 4px; display: block; }
+          .seal { width: 20mm; height: 20mm; object-fit: contain; margin: 0 auto 3px; display: block; }
           .header-text { line-height: 1.1; }
           .rep { font-size: 12px; letter-spacing: 0.02em; font-family: "Old English Text MT", "Garamond", "Times New Roman", serif; }
           .dept { font-weight: 700; font-size: 20px; letter-spacing: 0.04em; text-transform: uppercase; font-family: "Old English Text MT", "Garamond", "Times New Roman", serif; }
@@ -450,88 +466,89 @@ async function openReportPrint(report) {
           .signatures { display: flex; justify-content: space-between; margin-top: 18px; font-size: 12px; }
           .sig { width: 44%; text-align: center; }
           .sig-line { border-top: 1px solid #000; margin-top: 22px; }
-          .footer { position: fixed; left: 18mm; right: 18mm; bottom: 12mm; font-size: 10px; }
+          .attachment { margin-top: 10px; font-size: 11px; page-break-inside: avoid; }
+          .footer { margin-top: 14mm; font-size: 10px; page-break-inside: avoid; }
           .footer-line { border-top: 1.5px solid #000; margin-bottom: 6px; }
-          .footer-content { display: flex; gap: 18px; align-items: center; }
-          .footer-logos { display: flex; gap: 10px; align-items: center; }
-          .footer-logos img { width: 46px; height: 46px; object-fit: contain; }
-          .footer-text { line-height: 1.3; }
+          .footer-content { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+          .footer-logos { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+          .footer-logos img { width: 42px; height: 42px; object-fit: contain; }
+          .footer-text { line-height: 1.35; flex: 1 1 220px; min-width: 220px; }
         </style>
       </head>
       <body>
-        <div class="report-header">
-          <img class="seal" src="${sealUrl}" alt="Seal" />
-          <div class="header-text">
-            <div class="rep">Republic of the Philippines</div>
-            <div class="dept">Department of Education</div>
-            <div class="division">SCHOOLS DIVISION OF MARINDUQUE</div>
-          </div>
-          <div class="header-lines">
-            <div class="header-line"></div>
-            <div class="header-line thin"></div>
-          </div>
-          <div class="office-line">Office of the Schools Division Superintendent</div>
-          <div class="header-line thin"></div>
-          <div class="title">INDIVIDUAL DAILY LOG AND ACCOMPLISHMENT REPORT</div>
-          <div class="subtitle">(WORK FROM HOME)</div>
-        </div>
-
-        <div class="meta">
-          <div class="meta-row"><span class="meta-label">NAME:</span><span class="meta-line">${escapeHtml(employeeName)}</span></div>
-          <div class="meta-row"><span class="meta-label">POSITION:</span><span class="meta-line">${escapeHtml(employeePosition)}</span></div>
-          <div class="meta-row"><span class="meta-label">DIVISION:</span><span class="meta-line">Office of the Schools Division Superintendent</span></div>
-          <div class="meta-row"><span class="meta-label">SECTION:</span><span class="meta-line">${escapeHtml(employeeOffice || '--')}</span></div>
-          <div class="meta-row"><span class="meta-label">Date/s Covered:</span><span class="meta-line">${escapeHtml(reportDate)}</span></div>
-        </div>
-
-        <table class="report">
-          <thead>
-            <tr>
-              <th>Date and Actual Time Logs</th>
-              <th>Actual Accomplishments</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td class="logs">${escapeHtml(reportDate)}\nAM In: ${escapeHtml(timeInAM)}\nAM Out: ${escapeHtml(timeOutAM)}\nPM In: ${escapeHtml(timeInPM)}\nPM Out: ${escapeHtml(timeOutPM)}</td>
-              <td>${summaryHtml || '&nbsp;'}</td>
-            </tr>
-          </tbody>
-        </table>
-
-        <div class="signatures">
-          <div class="sig">
-            <div>Submitted by:</div>
-            <div class="sig-line"></div>
-            <div><strong>${escapeHtml(employeeName)}</strong></div>
-            <div>${escapeHtml(employeePosition)}</div>
-          </div>
-          <div class="sig">
-            <div>Attested by:</div>
-            <div class="sig-line"></div>
-            <div><strong>MAY BERNADETH O. DE LA ROSA</strong></div>
-            <div>Administrative Officer V</div>
-          </div>
-        </div>
-
-        <div style="margin-top: 10px; font-size: 11px;">
-          <strong>Attachment:</strong> <em>${escapeHtml(attachmentLabel)}</em><br/>
-          ${report.attachmentData ? attachmentHtml : ''}
-        </div>
-
-        <div class="footer">
-          <div class="footer-line"></div>
-          <div class="footer-content">
-            <div class="footer-logos">
-              <img src="${depedLogo}" alt="DepEd" onerror="this.style.display='none'" />
-              <img src="${bagongLogo}" alt="Bagong Pilipinas" onerror="this.style.display='none'" />
-              <img src="${sdoLogo}" alt="SDO Marinduque" onerror="this.style.display='none'" />
+        <div class="page">
+          <div class="content">
+            <div class="report-header">
+              <img class="seal" src="${sealUrl}" alt="Seal" />
+              <div class="header-text">
+                <div class="rep">Republic of the Philippines</div>
+                <div class="dept">Department of Education</div>
+                <div class="division">SCHOOLS DIVISION OF MARINDUQUE</div>
+              </div>
+              <div class="header-lines">
+                <div class="header-line"></div>
+                <div class="header-line thin"></div>
+              </div>
+              <div class="office-line">Office of the Schools Division Superintendent</div>
+              <div class="header-line thin"></div>
+              <div class="title">INDIVIDUAL DAILY LOG AND ACCOMPLISHMENT REPORT</div>
+              <div class="subtitle">(WORK FROM HOME)</div>
             </div>
-            <div class="footer-text">
-              Address: T. Roque St., Malusak, Boac, Marinduque<br/>
-              Tel. No.: (042) 754-0247 ● Fax No.: (042) 332-1611<br/>
-              Email: marinduque@deped.gov.ph<br/>
-              Website: https://depedmarinduque.com
+
+            <div class="meta">
+              <div class="meta-row"><span class="meta-label">NAME:</span><span class="meta-line">${escapeHtml(employeeName)}</span></div>
+              <div class="meta-row"><span class="meta-label">POSITION:</span><span class="meta-line">${escapeHtml(employeePosition)}</span></div>
+              <div class="meta-row"><span class="meta-label">DIVISION:</span><span class="meta-line">Office of the Schools Division Superintendent</span></div>
+              <div class="meta-row"><span class="meta-label">SECTION:</span><span class="meta-line">${escapeHtml(employeeOffice || '--')}</span></div>
+              <div class="meta-row"><span class="meta-label">Date/s Covered:</span><span class="meta-line">${escapeHtml(reportDate)}</span></div>
+            </div>
+
+            <table class="report">
+              <thead>
+                <tr>
+                  <th>Date and Actual Time Logs</th>
+                  <th>Actual Accomplishments</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="logs">${escapeHtml(reportDate)}\nAM In: ${escapeHtml(timeInAM)}\nAM Out: ${escapeHtml(timeOutAM)}\nPM In: ${escapeHtml(timeInPM)}\nPM Out: ${escapeHtml(timeOutPM)}</td>
+                  <td>${summaryHtml || '&nbsp;'}</td>
+                </tr>
+              </tbody>
+            </table>
+
+            <div class="signatures">
+              <div class="sig">
+                <div>Submitted by:</div>
+                <div class="sig-line"></div>
+                <div><strong>${escapeHtml(employeeName)}</strong></div>
+                <div>${escapeHtml(employeePosition)}</div>
+              </div>
+              <div class="sig">
+                <div>Attested by:</div>
+                <div class="sig-line"></div>
+                <div><strong>MAY BERNADETH O. DE LA ROSA</strong></div>
+                <div>Administrative Officer V</div>
+              </div>
+            </div>
+
+            ${attachmentSectionHtml}
+          </div>
+          <div class="footer">
+            <div class="footer-line"></div>
+            <div class="footer-content">
+              <div class="footer-logos">
+                <img src="${depedLogo}" alt="DepEd" onerror="this.style.display='none'" />
+                <img src="${bagongLogo}" alt="Bagong Pilipinas" onerror="this.style.display='none'" />
+                <img src="${sdoLogo}" alt="SDO Marinduque" onerror="this.style.display='none'" />
+              </div>
+              <div class="footer-text">
+                Address: T. Roque St., Malusak, Boac, Marinduque<br/>
+                Tel. No.: (042) 754-0247 ● Fax No.: (042) 332-1611<br/>
+                Email: marinduque@deped.gov.ph<br/>
+                Website: https://depedmarinduque.com
+              </div>
             </div>
           </div>
         </div>
