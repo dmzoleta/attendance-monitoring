@@ -346,6 +346,13 @@ function buildReportKey(employeeId, date) {
   return `${employeeId || ''}|${date || ''}`;
 }
 
+function buildRangeQuery(from, to) {
+  const params = new URLSearchParams();
+  if (from) params.set('from', from);
+  if (to) params.set('to', to);
+  return params.toString();
+}
+
 function updateReportMap(list) {
   reportMap = new Map();
   list.forEach((report) => {
@@ -665,10 +672,12 @@ function renderEmployees(list) {
 }
 
 async function loadAttendanceHistory(from, to) {
-  const query = new URLSearchParams({ from, to }).toString();
+  const query = buildRangeQuery(from, to);
+  const attendancePath = query ? `/api/attendance?${query}` : '/api/attendance';
+  const reportsPath = query ? `/api/reports?${query}` : '/api/reports';
   const [attendanceResult, reportsResult] = await Promise.allSettled([
-    api(`/api/attendance?${query}`),
-    api(`/api/reports?${query}`)
+    api(attendancePath),
+    api(reportsPath)
   ]);
   if (attendanceResult.status !== 'fulfilled') throw attendanceResult.reason;
   const data = attendanceResult.value;
@@ -785,8 +794,9 @@ function renderReportsTable(list) {
 }
 
 async function loadReportsTable(from, to) {
-  const query = new URLSearchParams({ from, to }).toString();
-  const data = await api(`/api/reports?${query}`);
+  const query = buildRangeQuery(from, to);
+  const path = query ? `/api/reports?${query}` : '/api/reports';
+  const data = await api(path);
   reportsCache = data.reports || [];
   renderReportsTable(reportsCache);
 }
@@ -1301,10 +1311,6 @@ reportsTable.addEventListener('click', handleReportPrintClick);
 document.getElementById('filter-attendance').addEventListener('click', () => {
   const from = document.getElementById('attendance-from').value;
   const to = document.getElementById('attendance-to').value;
-  if (!from || !to) {
-    alert('Select start and end dates.');
-    return;
-  }
   loadAttendanceHistory(from, to);
 });
 
@@ -1315,10 +1321,6 @@ if (filterReportsBtn) {
   filterReportsBtn.addEventListener('click', () => {
     const from = reportsFrom.value;
     const to = reportsTo.value;
-    if (!from || !to) {
-      alert('Select start and end dates.');
-      return;
-    }
     loadReportsTable(from, to);
   });
 }
