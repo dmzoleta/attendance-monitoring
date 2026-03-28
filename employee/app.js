@@ -653,10 +653,12 @@ function setView(viewId) {
 function setStatusCell(cell, status) {
   if (!cell) return;
   const statusLower = status.toLowerCase();
-  cell.classList.remove('status-present', 'status-late', 'status-absent');
+  cell.classList.remove('status-present', 'status-late', 'status-absent', 'status-recorded', 'status-pending');
   if (statusLower === 'present') cell.classList.add('status-present');
   if (statusLower === 'late') cell.classList.add('status-late');
   if (statusLower === 'absent') cell.classList.add('status-absent');
+  if (statusLower === 'recorded') cell.classList.add('status-recorded');
+  if (statusLower === 'pending') cell.classList.add('status-pending');
 }
 
 function setLoginStatus(message) {
@@ -718,6 +720,27 @@ function buildAttendanceSlotTimes(item) {
   if (!values.amIn && item.timeIn && !values.pmIn) values.amIn = item.timeIn;
   if (!values.pmOut && item.timeOut) values.pmOut = item.timeOut;
   return values;
+}
+
+function getSlotInStatus(timeValue, cutoffMinutes) {
+  const minutes = timeToMinutes(timeValue);
+  if (minutes === null) return '--';
+  return minutes > cutoffMinutes ? 'Late' : 'Present';
+}
+
+function getSlotOutStatus(timeOut, timeIn) {
+  if (!timeOut) return timeIn ? 'Pending' : '--';
+  return 'Recorded';
+}
+
+function buildAttendanceSlotStatuses(item) {
+  const times = buildAttendanceSlotTimes(item);
+  return {
+    amIn: getSlotInStatus(times.amIn, 8 * 60),
+    amOut: getSlotOutStatus(times.amOut, times.amIn),
+    pmIn: getSlotInStatus(times.pmIn, 13 * 60),
+    pmOut: getSlotOutStatus(times.pmOut, times.pmIn)
+  };
 }
 
 function buildAttendanceSlotDetails(item) {
@@ -1297,25 +1320,34 @@ function renderRecords(list) {
   recordsTable.innerHTML = '';
   list.forEach((item) => {
     const times = buildAttendanceSlotTimes(item);
+    const slotStatuses = buildAttendanceSlotStatuses(item);
     const slots = buildAttendanceSlotDetails(item);
     const row = document.createElement('tr');
     row.innerHTML = `
       <td>${item.date}</td>
       <td>${times.amIn || '--'}</td>
+      <td class="status-cell status-am-in">${slotStatuses.amIn}</td>
       <td>${renderSlotPhoto(slots.amIn.photo, 'AM Time In Photo')}</td>
       <td class="table-location">${slots.amIn.location || '--'}</td>
       <td>${times.amOut || '--'}</td>
+      <td class="status-cell status-am-out">${slotStatuses.amOut}</td>
       <td>${renderSlotPhoto(slots.amOut.photo, 'AM Time Out Photo')}</td>
       <td class="table-location">${slots.amOut.location || '--'}</td>
       <td>${times.pmIn || '--'}</td>
+      <td class="status-cell status-pm-in">${slotStatuses.pmIn}</td>
       <td>${renderSlotPhoto(slots.pmIn.photo, 'PM Time In Photo')}</td>
       <td class="table-location">${slots.pmIn.location || '--'}</td>
       <td>${times.pmOut || '--'}</td>
+      <td class="status-cell status-pm-out">${slotStatuses.pmOut}</td>
       <td>${renderSlotPhoto(slots.pmOut.photo, 'PM Time Out Photo')}</td>
       <td class="table-location">${slots.pmOut.location || '--'}</td>
-      <td class="status-cell">${item.status || '--'}</td>
+      <td class="status-cell status-overall">${item.status || '--'}</td>
     `;
-    setStatusCell(row.querySelector('.status-cell'), item.status || '');
+    setStatusCell(row.querySelector('.status-am-in'), slotStatuses.amIn);
+    setStatusCell(row.querySelector('.status-am-out'), slotStatuses.amOut);
+    setStatusCell(row.querySelector('.status-pm-in'), slotStatuses.pmIn);
+    setStatusCell(row.querySelector('.status-pm-out'), slotStatuses.pmOut);
+    setStatusCell(row.querySelector('.status-overall'), item.status || '');
     recordsTable.appendChild(row);
   });
 }

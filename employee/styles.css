@@ -723,6 +723,8 @@ body::before {
 .data-table td.status-present { color: #2f8f48; font-weight: 700; }
 .data-table td.status-late { color: #d64545; font-weight: 700; }
 .data-table td.status-absent { color: #f06b3f; font-weight: 700; }
+.data-table td.status-recorded { color: #2f8f48; font-weight: 700; }
+.data-table td.status-pending { color: #d08b22; font-weight: 700; }
 
 .table-photo {
   width: 36px;
