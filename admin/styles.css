@@ -532,6 +532,42 @@ body::before {
   color: #3a4b70;
 }
 
+.gps-cell {
+  display: grid;
+  gap: 4px;
+  min-width: 150px;
+}
+
+.gps-coords {
+  font-weight: 700;
+  color: #1f3f86;
+  font-size: 12px;
+}
+
+.gps-address {
+  color: #5e6f99;
+  font-size: 11px;
+}
+
+.table-map-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: fit-content;
+  padding: 4px 8px;
+  border-radius: 7px;
+  background: #e9f0ff;
+  border: 1px solid #cfdcfb;
+  color: #1f4bb8;
+  text-decoration: none;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.table-map-link:hover {
+  background: #dbe7ff;
+}
+
 .table-action-btn {
   padding: 6px 10px;
   border-radius: 8px;

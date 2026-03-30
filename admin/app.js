@@ -210,16 +210,21 @@ function buildAttendanceSlotStatuses(item) {
 
 function buildAttendanceSlotDetails(item) {
   const details = {
-    amIn: { photo: item.photoInAM || '', location: item.locationInAM || '' },
-    amOut: { photo: item.photoOutAM || '', location: item.locationOutAM || '' },
-    pmIn: { photo: item.photoInPM || '', location: item.locationInPM || '' },
-    pmOut: { photo: item.photoOutPM || '', location: item.locationOutPM || '' }
+    amIn: { photo: item.photoInAM || '', location: item.locationInAM || '', lat: item.latInAM || '', lng: item.lngInAM || '' },
+    amOut: { photo: item.photoOutAM || '', location: item.locationOutAM || '', lat: item.latOutAM || '', lng: item.lngOutAM || '' },
+    pmIn: { photo: item.photoInPM || '', location: item.locationInPM || '', lat: item.latInPM || '', lng: item.lngInPM || '' },
+    pmOut: { photo: item.photoOutPM || '', location: item.locationOutPM || '', lat: item.latOutPM || '', lng: item.lngOutPM || '' }
   };
   const hasSlotPhoto = Object.values(details).some((slot) => !!slot.photo);
   const hasSlotLocation = Object.values(details).some((slot) => !!slot.location);
+  const hasSlotGps = Object.values(details).some((slot) => normalizeCoordinate(slot.lat) && normalizeCoordinate(slot.lng));
   const legacySlot = inferLegacyAttendanceSlot(item);
   if (!hasSlotPhoto && item.photo) details[legacySlot].photo = item.photo;
   if (!hasSlotLocation && item.location) details[legacySlot].location = item.location;
+  if (!hasSlotGps && item.latitude && item.longitude) {
+    details[legacySlot].lat = item.latitude;
+    details[legacySlot].lng = item.longitude;
+  }
   return details;
 }
 
@@ -230,6 +235,39 @@ function renderSlotPhoto(photo, altText) {
     <button class="table-photo-btn" type="button" data-photo-src="${encodedPhoto}" data-photo-alt="${escapeHtml(altText)}">
       <img class="table-photo" src="${photo}" alt="${altText}" />
     </button>
+  `;
+}
+
+function normalizeCoordinate(value) {
+  const parsed = Number.parseFloat(String(value ?? '').trim());
+  if (!Number.isFinite(parsed)) return '';
+  return parsed.toFixed(5);
+}
+
+function buildGoogleMapsUrl(lat, lng) {
+  const normalizedLat = normalizeCoordinate(lat);
+  const normalizedLng = normalizeCoordinate(lng);
+  if (!normalizedLat || !normalizedLng) return '';
+  const query = encodeURIComponent(`${normalizedLat},${normalizedLng}`);
+  return `https://www.google.com/maps/search/?api=1&query=${query}`;
+}
+
+function renderSlotLocation(slot) {
+  if (!slot) return '--';
+  const lat = normalizeCoordinate(slot.lat);
+  const lng = normalizeCoordinate(slot.lng);
+  const locationText = slot.location ? escapeHtml(shorten(slot.location, 84)) : '';
+  if (!lat || !lng) {
+    if (locationText) return `<div class="gps-cell"><div class="gps-address">${locationText}</div></div>`;
+    return '--';
+  }
+  const mapUrl = buildGoogleMapsUrl(lat, lng);
+  return `
+    <div class="gps-cell">
+      <div class="gps-coords">${lat}, ${lng}</div>
+      ${locationText ? `<div class="gps-address">${locationText}</div>` : ''}
+      ${mapUrl ? `<a class="table-map-link" href="${mapUrl}" target="_blank" rel="noopener noreferrer">View Map</a>` : ''}
+    </div>
   `;
 }
 
@@ -746,19 +784,19 @@ async function loadAttendanceToday() {
       <td>${times.amIn || '--'}</td>
       <td class="status-cell status-am-in">${slotStatuses.amIn}</td>
       <td>${renderSlotPhoto(slots.amIn.photo, 'AM Time In Photo')}</td>
-      <td class="table-location">${slots.amIn.location || '--'}</td>
+      <td class="table-location">${renderSlotLocation(slots.amIn)}</td>
       <td>${times.amOut || '--'}</td>
       <td class="status-cell status-am-out">${slotStatuses.amOut}</td>
       <td>${renderSlotPhoto(slots.amOut.photo, 'AM Time Out Photo')}</td>
-      <td class="table-location">${slots.amOut.location || '--'}</td>
+      <td class="table-location">${renderSlotLocation(slots.amOut)}</td>
       <td>${times.pmIn || '--'}</td>
       <td class="status-cell status-pm-in">${slotStatuses.pmIn}</td>
       <td>${renderSlotPhoto(slots.pmIn.photo, 'PM Time In Photo')}</td>
-      <td class="table-location">${slots.pmIn.location || '--'}</td>
+      <td class="table-location">${renderSlotLocation(slots.pmIn)}</td>
       <td>${times.pmOut || '--'}</td>
       <td class="status-cell status-pm-out">${slotStatuses.pmOut}</td>
       <td>${renderSlotPhoto(slots.pmOut.photo, 'PM Time Out Photo')}</td>
-      <td class="table-location">${slots.pmOut.location || '--'}</td>
+      <td class="table-location">${renderSlotLocation(slots.pmOut)}</td>
       <td>
         ${report ? `<button class="table-action-btn" data-report="${report.id}" data-employee="${item.employeeId}" data-date="${item.date}">Print Report</button>` : '--'}
       </td>
@@ -820,19 +858,19 @@ async function loadAttendanceHistory(from, to) {
       <td>${times.amIn || '--'}</td>
       <td class="status-cell status-am-in">${slotStatuses.amIn}</td>
       <td>${renderSlotPhoto(slots.amIn.photo, 'AM Time In Photo')}</td>
-      <td class="table-location">${slots.amIn.location || '--'}</td>
+      <td class="table-location">${renderSlotLocation(slots.amIn)}</td>
       <td>${times.amOut || '--'}</td>
       <td class="status-cell status-am-out">${slotStatuses.amOut}</td>
       <td>${renderSlotPhoto(slots.amOut.photo, 'AM Time Out Photo')}</td>
-      <td class="table-location">${slots.amOut.location || '--'}</td>
+      <td class="table-location">${renderSlotLocation(slots.amOut)}</td>
       <td>${times.pmIn || '--'}</td>
       <td class="status-cell status-pm-in">${slotStatuses.pmIn}</td>
       <td>${renderSlotPhoto(slots.pmIn.photo, 'PM Time In Photo')}</td>
-      <td class="table-location">${slots.pmIn.location || '--'}</td>
+      <td class="table-location">${renderSlotLocation(slots.pmIn)}</td>
       <td>${times.pmOut || '--'}</td>
       <td class="status-cell status-pm-out">${slotStatuses.pmOut}</td>
       <td>${renderSlotPhoto(slots.pmOut.photo, 'PM Time Out Photo')}</td>
-      <td class="table-location">${slots.pmOut.location || '--'}</td>
+      <td class="table-location">${renderSlotLocation(slots.pmOut)}</td>
       <td>
         ${report ? `<button class="table-action-btn" data-report="${report.id}" data-employee="${item.employeeId}" data-date="${item.date}">Print Report</button>` : '--'}
       </td>

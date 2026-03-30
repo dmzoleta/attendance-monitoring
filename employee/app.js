@@ -42,6 +42,7 @@ const locationLng = document.getElementById('location-lng');
 const locationAccuracy = document.getElementById('location-accuracy');
 const empLocation = document.getElementById('emp-location');
 const gpsStatus = document.getElementById('gps-status');
+const openMapCurrentBtn = document.getElementById('open-map-current');
 
 const timeInBtn = document.getElementById('time-in');
 const timeOutBtn = document.getElementById('time-out');
@@ -702,6 +703,58 @@ function pickLocation(item) {
   return item.locationInAM || item.locationInPM || item.locationOutAM || item.locationOutPM || item.location || '';
 }
 
+function escapeHtml(value) {
+  return String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function normalizeCoordinate(value) {
+  const parsed = Number.parseFloat(String(value ?? '').trim());
+  if (!Number.isFinite(parsed)) return '';
+  return parsed.toFixed(5);
+}
+
+function buildGoogleMapsUrl(lat, lng) {
+  const normalizedLat = normalizeCoordinate(lat);
+  const normalizedLng = normalizeCoordinate(lng);
+  if (!normalizedLat || !normalizedLng) return '';
+  const query = encodeURIComponent(`${normalizedLat},${normalizedLng}`);
+  return `https://www.google.com/maps/search/?api=1&query=${query}`;
+}
+
+function openMapByCoordinates(lat, lng) {
+  const mapUrl = buildGoogleMapsUrl(lat, lng);
+  if (!mapUrl) {
+    alert('GPS coordinates are not available yet. Tap Update first.');
+    return;
+  }
+  const opened = window.open(mapUrl, '_blank');
+  if (!opened) window.location.href = mapUrl;
+}
+
+function renderSlotLocation(slot) {
+  if (!slot) return '--';
+  const lat = normalizeCoordinate(slot.lat);
+  const lng = normalizeCoordinate(slot.lng);
+  const locationText = slot.location ? escapeHtml(String(slot.location).slice(0, 80)) : '';
+  if (!lat || !lng) {
+    if (locationText) return `<div class="gps-cell"><div class="gps-address">${locationText}</div></div>`;
+    return '--';
+  }
+  const mapUrl = buildGoogleMapsUrl(lat, lng);
+  return `
+    <div class="gps-cell">
+      <div class="gps-coords">${lat}, ${lng}</div>
+      ${locationText ? `<div class="gps-address">${locationText}</div>` : ''}
+      ${mapUrl ? `<a class="table-map-link" href="${mapUrl}" target="_blank" rel="noopener noreferrer">View Map</a>` : ''}
+    </div>
+  `;
+}
+
 function inferLegacyAttendanceSlot(item) {
   if (!item) return 'amIn';
   if (item.timeOutPM || item.timeOut) return 'pmOut';
@@ -745,16 +798,21 @@ function buildAttendanceSlotStatuses(item) {
 
 function buildAttendanceSlotDetails(item) {
   const details = {
-    amIn: { photo: item.photoInAM || '', location: item.locationInAM || '' },
-    amOut: { photo: item.photoOutAM || '', location: item.locationOutAM || '' },
-    pmIn: { photo: item.photoInPM || '', location: item.locationInPM || '' },
-    pmOut: { photo: item.photoOutPM || '', location: item.locationOutPM || '' }
+    amIn: { photo: item.photoInAM || '', location: item.locationInAM || '', lat: item.latInAM || '', lng: item.lngInAM || '' },
+    amOut: { photo: item.photoOutAM || '', location: item.locationOutAM || '', lat: item.latOutAM || '', lng: item.lngOutAM || '' },
+    pmIn: { photo: item.photoInPM || '', location: item.locationInPM || '', lat: item.latInPM || '', lng: item.lngInPM || '' },
+    pmOut: { photo: item.photoOutPM || '', location: item.locationOutPM || '', lat: item.latOutPM || '', lng: item.lngOutPM || '' }
   };
   const hasSlotPhoto = Object.values(details).some((slot) => !!slot.photo);
   const hasSlotLocation = Object.values(details).some((slot) => !!slot.location);
+  const hasSlotGps = Object.values(details).some((slot) => normalizeCoordinate(slot.lat) && normalizeCoordinate(slot.lng));
   const legacySlot = inferLegacyAttendanceSlot(item);
   if (!hasSlotPhoto && item.photo) details[legacySlot].photo = item.photo;
   if (!hasSlotLocation && item.location) details[legacySlot].location = item.location;
+  if (!hasSlotGps && item.latitude && item.longitude) {
+    details[legacySlot].lat = item.latitude;
+    details[legacySlot].lng = item.longitude;
+  }
   return details;
 }
 
@@ -1328,19 +1386,19 @@ function renderRecords(list) {
       <td>${times.amIn || '--'}</td>
       <td class="status-cell status-am-in">${slotStatuses.amIn}</td>
       <td>${renderSlotPhoto(slots.amIn.photo, 'AM Time In Photo')}</td>
-      <td class="table-location">${slots.amIn.location || '--'}</td>
+      <td class="table-location">${renderSlotLocation(slots.amIn)}</td>
       <td>${times.amOut || '--'}</td>
       <td class="status-cell status-am-out">${slotStatuses.amOut}</td>
       <td>${renderSlotPhoto(slots.amOut.photo, 'AM Time Out Photo')}</td>
-      <td class="table-location">${slots.amOut.location || '--'}</td>
+      <td class="table-location">${renderSlotLocation(slots.amOut)}</td>
       <td>${times.pmIn || '--'}</td>
       <td class="status-cell status-pm-in">${slotStatuses.pmIn}</td>
       <td>${renderSlotPhoto(slots.pmIn.photo, 'PM Time In Photo')}</td>
-      <td class="table-location">${slots.pmIn.location || '--'}</td>
+      <td class="table-location">${renderSlotLocation(slots.pmIn)}</td>
       <td>${times.pmOut || '--'}</td>
       <td class="status-cell status-pm-out">${slotStatuses.pmOut}</td>
       <td>${renderSlotPhoto(slots.pmOut.photo, 'PM Time Out Photo')}</td>
-      <td class="table-location">${slots.pmOut.location || '--'}</td>
+      <td class="table-location">${renderSlotLocation(slots.pmOut)}</td>
     `;
     setStatusCell(row.querySelector('.status-am-in'), slotStatuses.amIn);
     setStatusCell(row.querySelector('.status-am-out'), slotStatuses.amOut);
@@ -1952,6 +2010,11 @@ recordsMonth.addEventListener('change', filterRecordsByMonth);
 
 document.getElementById('refresh-location').addEventListener('click', updateLocation);
 if (gpsRefreshBtn) gpsRefreshBtn.addEventListener('click', updateLocation);
+if (openMapCurrentBtn) {
+  openMapCurrentBtn.addEventListener('click', () => {
+    openMapByCoordinates(locationLat.textContent, locationLng.textContent);
+  });
+}
 
 function bindAttendanceAudioWarmup(button) {
   if (!button) return;
