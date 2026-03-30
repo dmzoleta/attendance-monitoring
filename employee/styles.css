@@ -243,6 +243,28 @@ body::before {
   transform: translateY(-1px);
 }
 
+.login-screen .password-row .icon-btn,
+.modal-card .card-header .icon-btn {
+  background: #eef3ff;
+  color: var(--navy);
+  border: 1px solid #cfdaf6;
+  min-width: 38px;
+  min-height: 38px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  line-height: 1;
+  font-weight: 700;
+}
+
+.login-screen .password-row .icon-btn:hover,
+.modal-card .card-header .icon-btn:hover {
+  background: #e2ebff;
+  transform: translateY(-1px);
+}
+
 .content {
   padding: 16px;
   padding-bottom: 80px;
