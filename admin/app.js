@@ -1136,6 +1136,17 @@ async function handleAddEmployee(event) {
   closeAddEmployee();
 }
 
+function getOfficeFilterSet(selectedOffice) {
+  const aliases = {
+    'SGOD Unit': ['SGOD Unit', 'SGOD'],
+    'Payroll Unit': ['Payroll Unit', 'Payroll'],
+    'Office of ASDS': ['Office of ASDS', 'ASDS Office', 'Assistant Superintendent Office'],
+    'Office of SDS': ['Office of SDS', 'Superintendent Office']
+  };
+  const list = aliases[selectedOffice] || [selectedOffice];
+  return new Set(list);
+}
+
 async function generateReport() {
   const monthValue = document.getElementById('report-month').value;
   const office = document.getElementById('report-office').value;
@@ -1151,7 +1162,10 @@ async function generateReport() {
   const query = new URLSearchParams({ from, to }).toString();
   const data = await api(`/api/attendance?${query}`);
   let list = data.attendance;
-  if (office) list = list.filter((item) => item.office === office);
+  if (office) {
+    const officeSet = getOfficeFilterSet(office);
+    list = list.filter((item) => officeSet.has(item.office));
+  }
 
   reportPreview.innerHTML = '';
   if (!list.length) {
