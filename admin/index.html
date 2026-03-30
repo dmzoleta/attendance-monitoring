@@ -154,7 +154,6 @@
                     <th>Status Out (PM)</th>
                     <th>Photo Out (PM)</th>
                     <th>Location Out (PM)</th>
-                    <th>Status</th>
                     <th>Report</th>
                   </tr>
                 </thead>
@@ -222,7 +221,6 @@
                     <th>Status Out (PM)</th>
                     <th>Photo Out (PM)</th>
                     <th>Location Out (PM)</th>
-                    <th>Status</th>
                     <th>Report</th>
                   </tr>
                 </thead>
@@ -473,8 +471,20 @@
         </div>
       </div>
     </div>
+
+    <div id="photo-preview-modal" class="modal hidden">
+      <div class="modal-card photo-preview-card">
+        <div class="card-header">
+          <h3>Attendance Photo</h3>
+          <button class="icon-btn" id="close-photo-preview">✖</button>
+        </div>
+        <div class="photo-preview-body">
+          <img id="photo-preview-image" alt="Attendance Photo" />
+        </div>
+      </div>
+    </div>
   </div>
 
-  <script src="app.js?v=20260330-1"></script>
+  <script src="app.js?v=20260330-2"></script>
 </body>
 </html>

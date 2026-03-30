@@ -1341,13 +1341,11 @@ function renderRecords(list) {
       <td class="status-cell status-pm-out">${slotStatuses.pmOut}</td>
       <td>${renderSlotPhoto(slots.pmOut.photo, 'PM Time Out Photo')}</td>
       <td class="table-location">${slots.pmOut.location || '--'}</td>
-      <td class="status-cell status-overall">${item.status || '--'}</td>
     `;
     setStatusCell(row.querySelector('.status-am-in'), slotStatuses.amIn);
     setStatusCell(row.querySelector('.status-am-out'), slotStatuses.amOut);
     setStatusCell(row.querySelector('.status-pm-in'), slotStatuses.pmIn);
     setStatusCell(row.querySelector('.status-pm-out'), slotStatuses.pmOut);
-    setStatusCell(row.querySelector('.status-overall'), item.status || '');
     recordsTable.appendChild(row);
   });
 }

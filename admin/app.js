@@ -15,6 +15,9 @@ const statModalSubtitle = document.getElementById('stat-modal-subtitle');
 const statModalTable = document.getElementById('stat-modal-table');
 const statModalEmpty = document.getElementById('stat-modal-empty');
 const closeStatModalBtn = document.getElementById('close-stat-modal');
+const photoPreviewModal = document.getElementById('photo-preview-modal');
+const photoPreviewImage = document.getElementById('photo-preview-image');
+const closePhotoPreviewBtn = document.getElementById('close-photo-preview');
 const currentTime = document.getElementById('current-time');
 const currentDate = document.getElementById('current-date');
 
@@ -222,7 +225,26 @@ function buildAttendanceSlotDetails(item) {
 
 function renderSlotPhoto(photo, altText) {
   if (!photo) return '--';
-  return `<img class="table-photo" src="${photo}" alt="${altText}" />`;
+  const encodedPhoto = encodeURIComponent(photo);
+  return `
+    <button class="table-photo-btn" type="button" data-photo-src="${encodedPhoto}" data-photo-alt="${escapeHtml(altText)}">
+      <img class="table-photo" src="${photo}" alt="${altText}" />
+    </button>
+  `;
+}
+
+function openPhotoPreview(photoSrc, altText = 'Attendance Photo') {
+  if (!photoPreviewModal || !photoPreviewImage || !photoSrc) return;
+  photoPreviewImage.src = photoSrc;
+  photoPreviewImage.alt = altText;
+  photoPreviewModal.classList.remove('hidden');
+}
+
+function closePhotoPreview() {
+  if (!photoPreviewModal || !photoPreviewImage) return;
+  photoPreviewModal.classList.add('hidden');
+  photoPreviewImage.src = '';
+  photoPreviewImage.alt = 'Attendance Photo';
 }
 
 function hasAnyAttendanceLocal(item) {
@@ -737,7 +759,6 @@ async function loadAttendanceToday() {
       <td class="status-cell status-pm-out">${slotStatuses.pmOut}</td>
       <td>${renderSlotPhoto(slots.pmOut.photo, 'PM Time Out Photo')}</td>
       <td class="table-location">${slots.pmOut.location || '--'}</td>
-      <td class="status-cell status-overall">${item.status || '--'}</td>
       <td>
         ${report ? `<button class="table-action-btn" data-report="${report.id}" data-employee="${item.employeeId}" data-date="${item.date}">Print Report</button>` : '--'}
       </td>
@@ -746,7 +767,6 @@ async function loadAttendanceToday() {
     setStatusCell(row.querySelector('.status-am-out'), slotStatuses.amOut);
     setStatusCell(row.querySelector('.status-pm-in'), slotStatuses.pmIn);
     setStatusCell(row.querySelector('.status-pm-out'), slotStatuses.pmOut);
-    setStatusCell(row.querySelector('.status-overall'), item.status || '');
     attendanceTable.appendChild(row);
   });
 }
@@ -813,7 +833,6 @@ async function loadAttendanceHistory(from, to) {
       <td class="status-cell status-pm-out">${slotStatuses.pmOut}</td>
       <td>${renderSlotPhoto(slots.pmOut.photo, 'PM Time Out Photo')}</td>
       <td class="table-location">${slots.pmOut.location || '--'}</td>
-      <td class="status-cell status-overall">${item.status || '--'}</td>
       <td>
         ${report ? `<button class="table-action-btn" data-report="${report.id}" data-employee="${item.employeeId}" data-date="${item.date}">Print Report</button>` : '--'}
       </td>
@@ -822,7 +841,6 @@ async function loadAttendanceHistory(from, to) {
     setStatusCell(row.querySelector('.status-am-out'), slotStatuses.amOut);
     setStatusCell(row.querySelector('.status-pm-in'), slotStatuses.pmIn);
     setStatusCell(row.querySelector('.status-pm-out'), slotStatuses.pmOut);
-    setStatusCell(row.querySelector('.status-overall'), item.status || '');
     attendanceHistory.appendChild(row);
   });
 }
@@ -1231,6 +1249,24 @@ function downloadReport() {
 }
 
 async function handleReportPrintClick(event) {
+  const photoBtn = event.target.closest('button[data-photo-src]');
+  if (photoBtn) {
+    const encodedSrc = photoBtn.dataset.photoSrc || '';
+    const alt = photoBtn.dataset.photoAlt || 'Attendance Photo';
+    let photoSrc = '';
+    try {
+      photoSrc = encodedSrc ? decodeURIComponent(encodedSrc) : '';
+    } catch (err) {
+      photoSrc = '';
+    }
+    if (!photoSrc) {
+      alert('Photo not available.');
+      return;
+    }
+    openPhotoPreview(photoSrc, alt);
+    return;
+  }
+
   const btn = event.target.closest('button[data-report]');
   if (!btn) return;
   const reportId = btn.dataset.report;
@@ -1547,6 +1583,16 @@ if (statModal) {
     if (event.target === statModal) closeStatModal();
   });
 }
+
+if (closePhotoPreviewBtn) closePhotoPreviewBtn.addEventListener('click', closePhotoPreview);
+if (photoPreviewModal) {
+  photoPreviewModal.addEventListener('click', (event) => {
+    if (event.target === photoPreviewModal) closePhotoPreview();
+  });
+}
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape') closePhotoPreview();
+});
 
 if (helpBtn && helpDetails) {
   helpBtn.addEventListener('click', () => {
