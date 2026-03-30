@@ -497,22 +497,14 @@ const AM_OUT_END = 12 * 60 + 59;
 const PM_IN_START = 13 * 60;
 const PM_IN_END = 16 * 60 + 59;
 const PM_OUT_START = 17 * 60;
+const BIOMETRIC_SESSION_SPLIT = 13 * 60; // 1:00 PM
 
 function classifyTimeIn(time) {
   const minutes = timeToMinutes(time);
   if (minutes === null) {
     return { ok: false, message: 'Invalid time.' };
   }
-  if (minutes >= AM_IN_START && minutes <= AM_IN_END) {
-    return { ok: true, session: 'AM' };
-  }
-  if (minutes >= PM_IN_START && minutes <= PM_IN_END) {
-    return { ok: true, session: 'PM' };
-  }
-  return {
-    ok: false,
-    message: 'Time in allowed only 6:00–11:59 AM or 1:00–4:59 PM (PH time).'
-  };
+  return { ok: true, session: minutes >= BIOMETRIC_SESSION_SPLIT ? 'PM' : 'AM' };
 }
 
 function classifyTimeOut(time) {
@@ -520,16 +512,7 @@ function classifyTimeOut(time) {
   if (minutes === null) {
     return { ok: false, message: 'Invalid time.' };
   }
-  if (minutes >= AM_OUT_START && minutes <= AM_OUT_END) {
-    return { ok: true, session: 'AM' };
-  }
-  if (minutes >= PM_OUT_START) {
-    return { ok: true, session: 'PM' };
-  }
-  return {
-    ok: false,
-    message: 'Time out allowed only 12:00–12:59 PM or 5:00 PM onwards (PH time).'
-  };
+  return { ok: true, session: minutes >= BIOMETRIC_SESSION_SPLIT ? 'PM' : 'AM' };
 }
 
 function hasAnyAttendance(record) {
