@@ -718,16 +718,26 @@ function normalizeCoordinate(value) {
   return parsed.toFixed(5);
 }
 
-function buildGoogleMapsUrl(lat, lng) {
+function buildMapLabel(locationText) {
+  const raw = String(locationText || '').trim();
+  if (!raw) return '';
+  const firstPart = raw.split(',').map((part) => part.trim()).filter(Boolean)[0] || raw;
+  return firstPart.slice(0, 60);
+}
+
+function buildGoogleMapsUrl(lat, lng, locationText = '') {
   const normalizedLat = normalizeCoordinate(lat);
   const normalizedLng = normalizeCoordinate(lng);
   if (!normalizedLat || !normalizedLng) return '';
-  const query = encodeURIComponent(`${normalizedLat},${normalizedLng}`);
-  return `https://www.google.com/maps/search/?api=1&query=${query}`;
+  const label = buildMapLabel(locationText);
+  const queryValue = label
+    ? `loc:${normalizedLat},${normalizedLng} (${label})`
+    : `${normalizedLat},${normalizedLng}`;
+  return `https://www.google.com/maps?q=${encodeURIComponent(queryValue)}`;
 }
 
-function openMapByCoordinates(lat, lng) {
-  const mapUrl = buildGoogleMapsUrl(lat, lng);
+function openMapByCoordinates(lat, lng, locationText = '') {
+  const mapUrl = buildGoogleMapsUrl(lat, lng, locationText);
   if (!mapUrl) {
     alert('GPS coordinates are not available yet. Tap Update first.');
     return;
@@ -745,7 +755,7 @@ function renderSlotLocation(slot) {
     if (locationText) return `<div class="gps-cell"><div class="gps-address">${locationText}</div></div>`;
     return '--';
   }
-  const mapUrl = buildGoogleMapsUrl(lat, lng);
+  const mapUrl = buildGoogleMapsUrl(lat, lng, slot.location || '');
   return `
     <div class="gps-cell">
       <div class="gps-coords">${lat}, ${lng}</div>
@@ -2012,7 +2022,7 @@ document.getElementById('refresh-location').addEventListener('click', updateLoca
 if (gpsRefreshBtn) gpsRefreshBtn.addEventListener('click', updateLocation);
 if (openMapCurrentBtn) {
   openMapCurrentBtn.addEventListener('click', () => {
-    openMapByCoordinates(locationLat.textContent, locationLng.textContent);
+    openMapByCoordinates(locationLat.textContent, locationLng.textContent, locationName.textContent);
   });
 }
 
