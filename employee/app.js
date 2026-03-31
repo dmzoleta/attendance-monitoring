@@ -451,6 +451,10 @@ const runtimeOrigin =
   /^https?:\/\//i.test(window.location.origin || '')
     ? window.location.origin.replace(/\/+$/, '')
     : '';
+const isHostedCapacitorRuntime =
+  isCapacitor &&
+  !!runtimeOrigin &&
+  !/^https?:\/\/(?:localhost|127(?:\.\d{1,3}){3}|10\.0\.2\.2)(?::\d+)?$/i.test(runtimeOrigin);
 lastAddress = localStorage.getItem('lastAddress') || '';
 loadConfirmedBarangay();
 
@@ -477,7 +481,11 @@ function buildWebsiteUrl(baseUrl) {
 }
 
 let apiBase = '';
-if (isCapacitor) {
+if (isHostedCapacitorRuntime) {
+  apiBase = runtimeOrigin;
+  localStorage.setItem('apiBase', apiBase);
+  localStorage.setItem('apiBaseOverride', 'false');
+} else if (isCapacitor) {
   apiBase = storedOverride
     ? (storedApiBase || defaultApiBase || 'http://10.0.2.2:5173')
     : (defaultApiBase || storedApiBase || 'http://10.0.2.2:5173');
@@ -487,7 +495,7 @@ if (isCapacitor) {
 }
 
 let websiteUrl = storedWebsiteUrl || defaultWebsiteUrl || buildWebsiteUrl(apiBase);
-if (!isCapacitor) {
+if (!isCapacitor || isHostedCapacitorRuntime) {
   // Force browser/PWA clients to a single backend to avoid split data.
   if (!apiBase && runtimeOrigin) apiBase = runtimeOrigin;
   localStorage.setItem('apiBase', apiBase);
@@ -1702,7 +1710,7 @@ function saveServerSettings() {
   }
 
   if (value) {
-    if (isCapacitor) {
+    if (isCapacitor && !isHostedCapacitorRuntime) {
       apiBase = normalizedServer;
       localStorage.setItem('apiBase', apiBase);
       localStorage.setItem('apiBaseOverride', 'true');
@@ -1725,8 +1733,10 @@ function saveServerSettings() {
   if (websiteUrlInput) websiteUrlInput.value = websiteUrl;
 
   closeServerModal();
-  if (isCapacitor) {
+  if (isCapacitor && !isHostedCapacitorRuntime) {
     alert('Server settings saved.');
+  } else if (isHostedCapacitorRuntime) {
+    alert('Server URL is locked to the official hosted domain for consistent Android updates.');
   } else {
     alert('Web mode uses the current website domain automatically.');
   }

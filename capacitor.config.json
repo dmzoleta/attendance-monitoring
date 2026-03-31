@@ -1,5 +1,12 @@
 {
   "appId": "com.sdo.marinduque.attendance",
   "appName": "SDO Marinduque Attendance",
-  "webDir": "employee"
+  "webDir": "employee",
+  "server": {
+    "url": "https://sdoattendance-monitoring.depedmarinduque.com/employee/",
+    "cleartext": false,
+    "allowNavigation": [
+      "sdoattendance-monitoring.depedmarinduque.com"
+    ]
+  }
 }
