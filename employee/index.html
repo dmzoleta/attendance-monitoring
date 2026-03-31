@@ -7,11 +7,35 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <meta name="apple-mobile-web-app-title" content="SDO Attendance" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
   <title>SDO Marinduque - Employee</title>
-  <link rel="manifest" href="manifest.webmanifest?v=20260327-3" />
-  <link rel="icon" type="image/png" sizes="192x192" href="assets/icon-192.png" />
-  <link rel="apple-touch-icon" href="assets/apple-touch-icon.png" />
-  <link rel="stylesheet" href="styles.css?v=20260330-5" />
+  <link id="employee-manifest" rel="manifest" href="manifest.webmanifest" />
+  <link id="employee-favicon" rel="icon" type="image/png" sizes="192x192" href="assets/icon-192.png" />
+  <link id="employee-apple-touch-icon" rel="apple-touch-icon" href="assets/apple-touch-icon.png" />
+  <link id="employee-stylesheet" rel="stylesheet" href="styles.css" />
+  <script>
+    window.APP_BUILD = '20260331-android-refresh-1';
+    (function applyEmployeeAssetStamp() {
+      var build = window.APP_BUILD || 'dev';
+      var stamp = build + '-' + Date.now().toString(36);
+      window.APP_ASSET_STAMP = stamp;
+      var encoded = encodeURIComponent(stamp);
+
+      var manifest = document.getElementById('employee-manifest');
+      if (manifest) manifest.href = 'manifest.webmanifest?v=' + encoded;
+
+      var icon = document.getElementById('employee-favicon');
+      if (icon) icon.href = 'assets/icon-192.png?v=' + encoded;
+
+      var appleTouchIcon = document.getElementById('employee-apple-touch-icon');
+      if (appleTouchIcon) appleTouchIcon.href = 'assets/apple-touch-icon.png?v=' + encoded;
+
+      var css = document.getElementById('employee-stylesheet');
+      if (css) css.href = 'styles.css?v=' + encoded;
+    })();
+  </script>
 </head>
 <body>
   <div class="phone-shell">
@@ -472,7 +496,22 @@
     </section>
   </div>
 
-  <script src="config.js?v=20260328-7"></script>
-  <script src="app.js?v=20260330-9"></script>
+  <script>
+    (function loadEmployeeScripts() {
+      var stamp = encodeURIComponent(window.APP_ASSET_STAMP || Date.now().toString(36));
+
+      function appendScript(src, onload) {
+        var script = document.createElement('script');
+        script.src = src;
+        script.defer = true;
+        if (typeof onload === 'function') script.onload = onload;
+        document.body.appendChild(script);
+      }
+
+      appendScript('config.js?v=' + stamp, function () {
+        appendScript('app.js?v=' + stamp);
+      });
+    })();
+  </script>
 </body>
 </html>
