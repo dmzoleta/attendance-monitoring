@@ -473,6 +473,10 @@ function setLocationDeniedState() {
   setGpsStatus('Location denied. Attendance still works without GPS.');
 }
 
+function hasActiveGpsFix() {
+  return !!(normalizeCoordinate(locationLat.textContent) && normalizeCoordinate(locationLng.textContent));
+}
+
 function closeGpsConsentModal() {
   if (!gpsConsentModal) return;
   gpsConsentModal.classList.add('hidden');
@@ -1066,6 +1070,10 @@ async function startGpsWatch() {
         (pos, err) => {
           if (err) {
             if (isPermissionDeniedError(err)) {
+              if (hasActiveGpsFix()) {
+                setGpsStatus('GPS live updates paused. Using your last accurate location.');
+                return;
+              }
               stopGpsWatch();
               setLocationDeniedState();
               return;
@@ -1079,6 +1087,10 @@ async function startGpsWatch() {
       nativeWatchId = idResult && typeof idResult === 'object' && 'id' in idResult ? idResult.id : idResult;
     } catch (err) {
       if (isPermissionDeniedError(err)) {
+        if (hasActiveGpsFix()) {
+          setGpsStatus('GPS live updates paused. Using your last accurate location.');
+          return;
+        }
         stopGpsWatch();
         setLocationDeniedState();
         return;
@@ -1099,6 +1111,10 @@ async function startGpsWatch() {
     },
     (err) => {
       if (err && err.code === 1) {
+        if (hasActiveGpsFix()) {
+          setGpsStatus('GPS live updates paused. Using your last accurate location.');
+          return;
+        }
         stopGpsWatch();
         setLocationDeniedState();
       } else {
@@ -1371,6 +1387,10 @@ async function updateLocation() {
       startGpsWatch();
     } catch (err) {
       if (isPermissionDeniedError(err)) {
+        if (hasActiveGpsFix()) {
+          setGpsStatus('GPS live updates paused. Using your last accurate location.');
+          return;
+        }
         stopGpsWatch();
         setLocationDeniedState();
         return;
@@ -1396,6 +1416,10 @@ async function updateLocation() {
     },
     (err) => {
       if (err && err.code === 1) {
+        if (hasActiveGpsFix()) {
+          setGpsStatus('GPS permission changed, but last accurate location is still in use.');
+          return;
+        }
         stopGpsWatch();
         setLocationDeniedState();
         return;
@@ -1407,6 +1431,21 @@ async function updateLocation() {
     },
     { enableHighAccuracy: true, timeout: 60000, maximumAge: 0 }
   );
+}
+
+function clearLegacyEmployeeCache() {
+  try {
+    const keys = [
+      'confirmedBarangay',
+      'barangayPrompted',
+      'gpsDenied',
+      'gpsPermissionDenied',
+      'gpsPermissionState'
+    ];
+    keys.forEach((key) => localStorage.removeItem(key));
+  } catch (err) {
+    // ignore cache cleanup issues
+  }
 }
 
 function requirePhoto() {
@@ -2089,6 +2128,7 @@ if (!recordsMonth.value) {
 }
 
 tickClock();
+clearLegacyEmployeeCache();
 
 async function attemptAutoLogin() {
   if (rememberLogin && !rememberLogin.checked) return;
