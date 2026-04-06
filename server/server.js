@@ -12,6 +12,27 @@ try {
 
 const DEFAULT_ROOT = path.join(__dirname, '..');
 const ROOT = fs.existsSync(path.join(DEFAULT_ROOT, 'admin')) ? DEFAULT_ROOT : process.cwd();
+const EMPLOYEE_INDEX_PATH = path.join(ROOT, 'employee', 'index.html');
+const EMPLOYEE_APP_PATH = path.join(ROOT, 'employee', 'app.js');
+
+function computeEmployeeBuildStamp() {
+  const candidates = [EMPLOYEE_INDEX_PATH, EMPLOYEE_APP_PATH];
+  let latestMtime = 0;
+  candidates.forEach((filePath) => {
+    try {
+      const stat = fs.statSync(filePath);
+      if (stat && Number.isFinite(stat.mtimeMs)) {
+        latestMtime = Math.max(latestMtime, Math.floor(stat.mtimeMs));
+      }
+    } catch (err) {
+      // ignore missing file stat errors
+    }
+  });
+  if (!latestMtime) return String(Date.now());
+  return String(latestMtime);
+}
+
+const EMPLOYEE_CACHE_BUSTER = String(process.env.EMPLOYEE_CACHE_BUSTER || '').trim() || computeEmployeeBuildStamp();
 
 function resolveDataPath(rawPath, fallbackPath = '') {
   const value = String(rawPath || '').trim();
@@ -2969,6 +2990,15 @@ function routeRequest(req, res) {
   }
 
   if (pathname.startsWith('/employee')) {
+    if ((pathname === '/employee' || pathname === '/employee/') && !parsed.query) {
+      res.writeHead(302, {
+        Location: `/employee/?v=${encodeURIComponent(EMPLOYEE_CACHE_BUSTER)}`,
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+        Pragma: 'no-cache',
+        Expires: '0'
+      });
+      return res.end();
+    }
     const safePath = pathname.replace('/employee', '').replace(/\/+$/, '');
     const filePath = safePath === '' || safePath === '/' ? 'index.html' : safePath;
     return sendFile(res, path.join(ROOT, 'employee', filePath));
