@@ -224,9 +224,13 @@ async function ensureSchema() {
       summary TEXT,
       attachment_name TEXT,
       attachment_data TEXT,
+      attested_by TEXT,
+      attested_position TEXT,
       created_at TIMESTAMPTZ DEFAULT NOW()
     );`
   );
+  await pgQuery('ALTER TABLE reports ADD COLUMN IF NOT EXISTS attested_by TEXT;');
+  await pgQuery('ALTER TABLE reports ADD COLUMN IF NOT EXISTS attested_position TEXT;');
   await pgQuery(`CREATE INDEX IF NOT EXISTS idx_reports_employee ON reports (employee_id);`);
   await pgQuery(`CREATE INDEX IF NOT EXISTS idx_reports_date ON reports (report_date);`);
   const adminCheck = await pgQuery('SELECT COUNT(*) AS count FROM admins');
@@ -322,6 +326,8 @@ function mapReportRow(row) {
     summary: row.summary || '',
     attachmentName: row.attachment_name || '',
     attachmentData: row.attachment_data || '',
+    attestedBy: row.attested_by || '',
+    attestedPosition: row.attested_position || '',
     createdAt: row.created_at ? new Date(row.created_at).toISOString() : ''
   };
 }
@@ -1227,10 +1233,35 @@ function pushReport(db, data) {
     summary: data.summary || '',
     attachmentName: data.attachmentName || '',
     attachmentData: data.attachmentData || '',
+    attestedBy: data.attestedBy || '',
+    attestedPosition: data.attestedPosition || '',
     createdAt: new Date().toISOString()
   };
   db.reports.unshift(report);
   if (db.reports.length > 500) db.reports = db.reports.slice(0, 500);
+  return report;
+}
+
+function updateReportAttestedJson(db, payload) {
+  const reportId = String(payload.id || '').trim();
+  const employeeId = String(payload.employeeId || '').trim();
+  const reportDate = String(payload.reportDate || payload.date || '').trim();
+  const attestedBy = String(payload.attestedBy || '').trim();
+  const attestedPosition = String(payload.attestedPosition || '').trim();
+
+  let report = null;
+  if (reportId) {
+    report = (db.reports || []).find((item) => item.id === reportId) || null;
+  }
+  if (!report && employeeId && reportDate) {
+    report = (db.reports || [])
+      .filter((item) => item.employeeId === employeeId && String(item.reportDate) === reportDate)
+      .sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')))[0] || null;
+  }
+  if (!report) return null;
+
+  report.attestedBy = attestedBy;
+  report.attestedPosition = attestedPosition;
   return report;
 }
 
@@ -1279,11 +1310,14 @@ async function insertReportPg(data) {
     summary: data.summary || '',
     attachmentName: data.attachmentName || '',
     attachmentData: data.attachmentData || '',
+    attestedBy: data.attestedBy || '',
+    attestedPosition: data.attestedPosition || '',
     createdAt: new Date().toISOString()
   };
   await pgQuery(
-    `INSERT INTO reports (id, employee_id, employee_name, office, report_date, summary, attachment_name, attachment_data, created_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+    `INSERT INTO reports (
+       id, employee_id, employee_name, office, report_date, summary, attachment_name, attachment_data, attested_by, attested_position, created_at
+     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
     [
       report.id,
       report.employeeId,
@@ -1293,10 +1327,49 @@ async function insertReportPg(data) {
       report.summary,
       report.attachmentName,
       report.attachmentData,
+      report.attestedBy,
+      report.attestedPosition,
       report.createdAt
     ]
   );
   return report;
+}
+
+async function updateReportAttestedPg(payload) {
+  const reportId = String(payload.id || '').trim();
+  const employeeId = String(payload.employeeId || '').trim();
+  const reportDate = String(payload.reportDate || payload.date || '').trim();
+  const attestedBy = String(payload.attestedBy || '').trim();
+  const attestedPosition = String(payload.attestedPosition || '').trim();
+
+  if (!reportId && (!employeeId || !reportDate)) return null;
+
+  if (reportId) {
+    const result = await pgQuery(
+      `UPDATE reports
+         SET attested_by = $2, attested_position = $3
+       WHERE id = $1
+       RETURNING *`,
+      [reportId, attestedBy, attestedPosition]
+    );
+    if (result.rows.length) return mapReportRow(result.rows[0]);
+  }
+
+  const fallback = await pgQuery(
+    `UPDATE reports
+       SET attested_by = $3, attested_position = $4
+     WHERE id = (
+       SELECT id
+       FROM reports
+       WHERE employee_id = $1 AND report_date = $2
+       ORDER BY created_at DESC
+       LIMIT 1
+     )
+     RETURNING *`,
+    [employeeId, reportDate, attestedBy, attestedPosition]
+  );
+  if (!fallback.rows.length) return null;
+  return mapReportRow(fallback.rows[0]);
 }
 
 async function upsertAttendancePg(record) {
@@ -1594,6 +1667,21 @@ async function handleApiPg(req, res, pathname) {
       employeeId
     });
     return sendJson(res, 201, { ok: true, report });
+  }
+
+  if (req.method === 'POST' && pathname === '/api/reports/attested') {
+    const body = await collectBody(req);
+    const hasReportId = Boolean(String(body.id || '').trim());
+    const employeeId = String(body.employeeId || '').trim();
+    const reportDate = String(body.reportDate || body.date || '').trim();
+    if (!hasReportId && (!employeeId || !reportDate)) {
+      return sendJson(res, 400, { ok: false, message: 'Report id or employee/date is required.' });
+    }
+    const report = await updateReportAttestedPg(body);
+    if (!report) {
+      return sendJson(res, 404, { ok: false, message: 'Report not found.' });
+    }
+    return sendJson(res, 200, { ok: true, report });
   }
 
   if (req.method === 'POST' && pathname === '/api/employees') {
@@ -2497,6 +2585,24 @@ async function handleApi(req, res, pathname) {
       });
       if (!persistJsonDbOrFail(res, db)) return;
       return sendJson(res, 201, { ok: true, report });
+    });
+  }
+
+  if (req.method === 'POST' && pathname === '/api/reports/attested') {
+    return collectBody(req).then((body) => {
+      const db = readDb();
+      const hasReportId = Boolean(String(body.id || '').trim());
+      const employeeId = String(body.employeeId || '').trim();
+      const reportDate = String(body.reportDate || body.date || '').trim();
+      if (!hasReportId && (!employeeId || !reportDate)) {
+        return sendJson(res, 400, { ok: false, message: 'Report id or employee/date is required.' });
+      }
+      const report = updateReportAttestedJson(db, body);
+      if (!report) {
+        return sendJson(res, 404, { ok: false, message: 'Report not found.' });
+      }
+      if (!persistJsonDbOrFail(res, db)) return;
+      return sendJson(res, 200, { ok: true, report });
     });
   }
 

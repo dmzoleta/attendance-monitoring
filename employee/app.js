@@ -77,10 +77,6 @@ const closeConcernBtn = document.getElementById('close-concern');
 const cancelConcernBtn = document.getElementById('cancel-concern');
 const concernForm = document.getElementById('concern-form');
 const reportForm = document.getElementById('daily-report-form');
-const reportFileInput = document.getElementById('report-file');
-const reportFileName = document.getElementById('report-file-name');
-const reportPreviewBox = document.getElementById('report-preview-box');
-const reportPreviewImg = document.getElementById('report-preview');
 const reportDateLabel = document.getElementById('report-date-label');
 const reportEmpName = document.getElementById('report-emp-name');
 const reportEmpPosition = document.getElementById('report-emp-position');
@@ -96,8 +92,6 @@ const rememberLogin = document.getElementById('remember-login');
 let currentUser = null;
 let attendanceCache = [];
 let photoData = '';
-let reportAttachmentData = '';
-let reportAttachmentName = '';
 let pendingOtpEmail = '';
 let autoRestoreAttempted = false;
 let lastAddress = '';
@@ -2104,12 +2098,6 @@ async function handleConcern(event) {
 }
 
 function resetReportForm() {
-  reportAttachmentData = '';
-  reportAttachmentName = '';
-  if (reportFileInput) reportFileInput.value = '';
-  if (reportFileName) reportFileName.textContent = 'No file selected';
-  if (reportPreviewBox) reportPreviewBox.classList.add('hidden');
-  if (reportPreviewImg) reportPreviewImg.removeAttribute('src');
   if (reportForm) reportForm.reset();
 }
 
@@ -2148,9 +2136,7 @@ async function handleDailyReport(event) {
         office: currentUser.office,
         reportDate: isoToday(),
         summary,
-        timeLogs,
-        attachmentName: reportAttachmentName,
-        attachment: reportAttachmentData
+        timeLogs
       })
     });
     if (result && result.report) {
@@ -2219,32 +2205,6 @@ photoInput.addEventListener('change', (event) => {
   };
   reader.readAsDataURL(file);
 });
-
-if (reportFileInput) {
-  reportFileInput.addEventListener('change', (event) => {
-    const file = event.target.files[0];
-    if (!file) {
-      reportAttachmentData = '';
-      reportAttachmentName = '';
-      if (reportFileName) reportFileName.textContent = 'No file selected';
-      if (reportPreviewBox) reportPreviewBox.classList.add('hidden');
-      return;
-    }
-    reportAttachmentName = file.name;
-    if (reportFileName) reportFileName.textContent = file.name;
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      reportAttachmentData = e.target.result;
-      if (file.type && file.type.startsWith('image/')) {
-        if (reportPreviewImg) reportPreviewImg.src = reportAttachmentData;
-        if (reportPreviewBox) reportPreviewBox.classList.remove('hidden');
-      } else if (reportPreviewBox) {
-        reportPreviewBox.classList.add('hidden');
-      }
-    };
-    reader.readAsDataURL(file);
-  });
-}
 
 toggleButtons.forEach((btn) => {
   btn.addEventListener('click', () => {

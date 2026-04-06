@@ -16,7 +16,7 @@
   <link id="employee-apple-touch-icon" rel="apple-touch-icon" href="assets/apple-touch-icon.png" />
   <link id="employee-stylesheet" rel="stylesheet" href="styles.css" />
   <script>
-    window.APP_BUILD = '20260406-location-address-refresh-4';
+    window.APP_BUILD = '20260406-report-attested-admin-1';
     (function applyEmployeeAssetStamp() {
       var build = window.APP_BUILD || 'dev';
       var stamp = build + '-' + Date.now().toString(36);
@@ -350,19 +350,11 @@
                 </div>
                 <div class="report-sign-block">
                   <span class="meta-label">Attested by</span>
-                  <strong>MAY BERNADETH O. DE LA ROSA</strong>
-                  <span class="muted small">Administrative Officer V</span>
+                  <strong>To be set by admin</strong>
+                  <span class="muted small">After review on Admin Web</span>
                 </div>
               </div>
 
-              <div class="report-attachment">
-                <input id="report-file" type="file" accept="image/*,.pdf,.doc,.docx,.xlsx" />
-                <label class="ghost-btn" for="report-file">Attach File</label>
-                <span id="report-file-name" class="muted">No file selected</span>
-              </div>
-              <div class="report-preview hidden" id="report-preview-box">
-                <img id="report-preview" alt="Attachment preview" />
-              </div>
               <button class="primary-btn" type="submit">Submit Report</button>
             </form>
           </div>

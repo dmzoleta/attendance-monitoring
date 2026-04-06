@@ -590,6 +590,23 @@ body::before {
   filter: brightness(1.03);
 }
 
+.report-attested-input {
+  width: 100%;
+  min-width: 180px;
+  padding: 7px 9px;
+  border-radius: 8px;
+  border: 1px solid #d1dcf6;
+  background: #f9fbff;
+  color: #1d2b52;
+  font-size: 12px;
+}
+
+.report-attested-input:focus {
+  outline: none;
+  border-color: #1f4bb8;
+  box-shadow: 0 0 0 2px rgba(31, 75, 184, 0.12);
+}
+
 .summary-cell {
   max-width: 260px;
   white-space: nowrap;

@@ -515,10 +515,6 @@ function escapeHtml(value) {
     .replace(/'/g, '&#39;');
 }
 
-function isImageAttachment(data) {
-  return typeof data === 'string' && data.startsWith('data:image');
-}
-
 async function fetchAttendanceForReport(employeeId, reportDate) {
   if (!employeeId || !reportDate) return null;
   const query = new URLSearchParams({ employeeId, from: reportDate, to: reportDate }).toString();
@@ -528,13 +524,6 @@ async function fetchAttendanceForReport(employeeId, reportDate) {
 
 async function openReportPrint(report) {
   if (!report) return;
-  const attachmentName = report.attachmentName || 'attachment';
-  const hasAttachment = Boolean(report.attachmentData);
-  const attachmentHtml = hasAttachment
-    ? (isImageAttachment(report.attachmentData)
-      ? `<img src="${report.attachmentData}" alt="Attachment" style="max-width:100%; max-height:70mm; margin-top:8px; border:1px solid #000;" />`
-      : `<a href="${report.attachmentData}" download="${attachmentName}">Download attachment</a>`)
-    : '';
 
   let attendanceRecord = null;
   try {
@@ -552,6 +541,8 @@ async function openReportPrint(report) {
   const timeOutAM = attendanceRecord ? (attendanceRecord.timeOutAM || '--') : '--';
   const timeInPM = attendanceRecord ? (attendanceRecord.timeInPM || '--') : '--';
   const timeOutPM = attendanceRecord ? (attendanceRecord.timeOutPM || attendanceRecord.timeOut || '--') : '--';
+  const attestedBy = String(report.attestedBy || '').trim() || '______________________________';
+  const attestedPosition = String(report.attestedPosition || '').trim() || '______________________________';
   const summaryHtml = escapeHtml(report.summary || '').replace(/\n/g, '<br>');
   const assetVersion = Date.now();
   const sealUrl = `${window.location.origin}/admin/assets/deped-seal.png?v=${assetVersion}`;
@@ -564,14 +555,6 @@ async function openReportPrint(report) {
     alert('Unable to open print preview. Please allow popups and try again.');
     return;
   }
-  const attachmentSectionHtml = hasAttachment
-    ? `
-        <div class="attachment">
-          <strong>Attachment:</strong> ${escapeHtml(attachmentName)}<br/>
-          ${attachmentHtml}
-        </div>
-      `
-    : '';
   printWindow.document.open();
   printWindow.document.write(`
     <html>
@@ -606,7 +589,6 @@ async function openReportPrint(report) {
           .signatures { display: flex; justify-content: space-between; margin-top: 18px; font-size: 12px; }
           .sig { width: 44%; text-align: center; }
           .sig-line { border-top: 1px solid #000; margin-top: 22px; }
-          .attachment { margin-top: 10px; font-size: 11px; page-break-inside: avoid; }
           .footer { margin-top: 14mm; font-size: 10px; page-break-inside: avoid; }
           .footer-line { border-top: 1.5px solid #000; margin-bottom: 6px; }
           .footer-content { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
@@ -668,12 +650,10 @@ async function openReportPrint(report) {
               <div class="sig">
                 <div>Attested by:</div>
                 <div class="sig-line"></div>
-                <div><strong>MAY BERNADETH O. DE LA ROSA</strong></div>
-                <div>Administrative Officer V</div>
+                <div><strong>${escapeHtml(attestedBy)}</strong></div>
+                <div>${escapeHtml(attestedPosition)}</div>
               </div>
             </div>
-
-            ${attachmentSectionHtml}
           </div>
           <div class="footer">
             <div class="footer-line"></div>
@@ -959,15 +939,34 @@ async function loadMessages() {
 function renderReportsTable(list) {
   reportsTable.innerHTML = '';
   list.forEach((report) => {
-    const attachmentLabel = report.attachmentName || (report.attachmentData ? 'Attachment' : '--');
+    const attestedBy = String(report.attestedBy || '');
+    const attestedPosition = String(report.attestedPosition || '');
     const row = document.createElement('tr');
     row.innerHTML = `
       <td>${report.reportDate || '--'}</td>
       <td>${report.employeeName || '--'}</td>
       <td>${report.office || '--'}</td>
       <td class="summary-cell">${shorten(report.summary || '--')}</td>
-      <td>${attachmentLabel}</td>
       <td>
+        <input
+          class="report-attested-input"
+          type="text"
+          data-attested-by="${report.id}"
+          placeholder="Attested by name"
+          value="${escapeHtml(attestedBy)}"
+        />
+      </td>
+      <td>
+        <input
+          class="report-attested-input"
+          type="text"
+          data-attested-position="${report.id}"
+          placeholder="Attested by position"
+          value="${escapeHtml(attestedPosition)}"
+        />
+      </td>
+      <td>
+        <button class="table-action-btn" data-save-attested="${report.id}" data-employee="${report.employeeId}" data-date="${report.reportDate}">Save</button>
         <button class="table-action-btn ghost" data-report="${report.id}" data-employee="${report.employeeId}" data-date="${report.reportDate}">Print</button>
       </td>
     `;
@@ -982,6 +981,60 @@ async function loadReportsTable(from, to) {
   const data = await api(path);
   reportsCache = data.reports || [];
   renderReportsTable(reportsCache);
+}
+
+function syncUpdatedReportInCache(updatedReport) {
+  if (!updatedReport) return;
+  const byIdIndex = reportsCache.findIndex((item) => item.id === updatedReport.id);
+  if (byIdIndex >= 0) {
+    reportsCache[byIdIndex] = { ...reportsCache[byIdIndex], ...updatedReport };
+  } else {
+    const byEmployeeDate = reportsCache.findIndex(
+      (item) => item.employeeId === updatedReport.employeeId && item.reportDate === updatedReport.reportDate
+    );
+    if (byEmployeeDate >= 0) reportsCache[byEmployeeDate] = { ...reportsCache[byEmployeeDate], ...updatedReport };
+  }
+  updateReportMap(reportsCache);
+}
+
+async function handleReportAttestedSave(button) {
+  if (!button) return;
+  const reportId = button.dataset.saveAttested || '';
+  const employeeId = button.dataset.employee || '';
+  const reportDate = button.dataset.date || '';
+  const row = button.closest('tr');
+  const attestedByInput = row ? row.querySelector('input[data-attested-by]') : null;
+  const attestedPositionInput = row ? row.querySelector('input[data-attested-position]') : null;
+  const attestedBy = String(attestedByInput ? attestedByInput.value : '').trim();
+  const attestedPosition = String(attestedPositionInput ? attestedPositionInput.value : '').trim();
+
+  const previousLabel = button.textContent;
+  button.disabled = true;
+  button.textContent = 'Saving...';
+  try {
+    const data = await api('/api/reports/attested', {
+      method: 'POST',
+      body: JSON.stringify({
+        id: reportId,
+        employeeId,
+        reportDate,
+        attestedBy,
+        attestedPosition
+      })
+    });
+    const updated = data && data.report ? data.report : null;
+    syncUpdatedReportInCache(updated);
+    if (updated) {
+      if (attestedByInput) attestedByInput.value = updated.attestedBy || '';
+      if (attestedPositionInput) attestedPositionInput.value = updated.attestedPosition || '';
+    }
+    alert('Attested by details saved.');
+  } catch (err) {
+    alert(err.message || 'Unable to save attested by details.');
+  } finally {
+    button.disabled = false;
+    button.textContent = previousLabel;
+  }
 }
 
 function populateDtrEmployees() {
@@ -1304,6 +1357,12 @@ function downloadReport() {
 }
 
 async function handleReportPrintClick(event) {
+  const saveBtn = event.target.closest('button[data-save-attested]');
+  if (saveBtn) {
+    await handleReportAttestedSave(saveBtn);
+    return;
+  }
+
   const photoBtn = event.target.closest('button[data-photo-src]');
   if (photoBtn) {
     const encodedSrc = photoBtn.dataset.photoSrc || '';
