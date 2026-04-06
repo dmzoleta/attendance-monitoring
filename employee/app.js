@@ -101,6 +101,7 @@ let reportAttachmentName = '';
 let pendingOtpEmail = '';
 let autoRestoreAttempted = false;
 let lastAddress = '';
+let locationDeniedByUserChoice = false;
 let attendanceAudioContext = null;
 let attendanceAudioPrimed = false;
 let attendanceRequestInFlight = false;
@@ -473,6 +474,20 @@ function setLocationDeniedState() {
   setGpsStatus('Location denied. Attendance still works without GPS.');
 }
 
+function setLocationUnavailableState(message = '') {
+  const fallback = lastAddress || localStorage.getItem('lastAddress') || '';
+  if (fallback) {
+    setLocationLabel(fallback);
+  } else {
+    setLocationLabel(LOCATION_UNKNOWN_TEXT);
+    resetMapPreview();
+  }
+  clearLocationCoordinates();
+  setGpsStatus(
+    message || 'Location temporarily unavailable. Tap GET ACCURATE LOCATION (GPS) to retry.'
+  );
+}
+
 function hasActiveGpsFix() {
   return !!(normalizeCoordinate(locationLat.textContent) && normalizeCoordinate(locationLng.textContent));
 }
@@ -492,11 +507,16 @@ function openGpsConsentModal() {
 
 async function handleGpsConsentAllow() {
   closeGpsConsentModal();
+  locationDeniedByUserChoice = false;
+  if (String(locationName.textContent || '').trim() === LOCATION_DENIED_TEXT) {
+    setLocationUnavailableState('Requesting location permission…');
+  }
   await updateLocation();
 }
 
 function handleGpsConsentDeny() {
   closeGpsConsentModal();
+  locationDeniedByUserChoice = true;
   stopGpsWatch();
   setLocationDeniedState();
 }
@@ -509,6 +529,7 @@ function initializeLocationState() {
     setLocationLabel(LOCATION_UNKNOWN_TEXT);
     resetMapPreview();
   }
+  locationDeniedByUserChoice = false;
   clearLocationCoordinates();
   setGpsStatus('Tap GET ACCURATE LOCATION (GPS) to request location permission.');
 }
@@ -1125,7 +1146,13 @@ async function startGpsWatch() {
               isNativePermissionExplicitlyDenied().then((denied) => {
                 if (denied) {
                   stopGpsWatch();
-                  setLocationDeniedState();
+                  if (locationDeniedByUserChoice) {
+                    setLocationDeniedState();
+                    return;
+                  }
+                  setLocationUnavailableState(
+                    'Location blocked by phone settings. Enable Location for this app, then tap GET ACCURATE LOCATION (GPS).'
+                  );
                   return;
                 }
                 setGpsStatus('Location temporarily unavailable. Tap GET ACCURATE LOCATION (GPS) to retry.');
@@ -1148,7 +1175,13 @@ async function startGpsWatch() {
         const denied = await isNativePermissionExplicitlyDenied();
         if (denied) {
           stopGpsWatch();
-          setLocationDeniedState();
+          if (locationDeniedByUserChoice) {
+            setLocationDeniedState();
+            return;
+          }
+          setLocationUnavailableState(
+            'Location blocked by phone settings. Enable Location for this app, then tap GET ACCURATE LOCATION (GPS).'
+          );
           return;
         }
         setGpsStatus('Location temporarily unavailable. Tap GET ACCURATE LOCATION (GPS) to retry.');
@@ -1177,7 +1210,13 @@ async function startGpsWatch() {
         const denied = await isWebPermissionExplicitlyDenied(err);
         if (denied) {
           stopGpsWatch();
-          setLocationDeniedState();
+          if (locationDeniedByUserChoice) {
+            setLocationDeniedState();
+            return;
+          }
+          setLocationUnavailableState(
+            'Location blocked by browser/site settings. Enable Location, then tap GET ACCURATE LOCATION (GPS).'
+          );
           return;
         }
         setGpsStatus('Location temporarily unavailable. Tap GET ACCURATE LOCATION (GPS) to retry.');
@@ -1430,13 +1469,16 @@ function filterRecordsByMonth() {
 }
 
 async function updateLocation() {
+  locationDeniedByUserChoice = false;
   const capGeo = getCapacitorGeo();
   if (capGeo) {
     setGpsStatus('Requesting location permission…');
     const ok = await ensureNativePermission({ prompt: true, tryDirect: true });
     if (!ok) {
       stopGpsWatch();
-      setLocationDeniedState();
+      setLocationUnavailableState(
+        'Location blocked by phone settings. Enable Location for this app, then tap GET ACCURATE LOCATION (GPS).'
+      );
       return;
     }
     try {
@@ -1456,7 +1498,9 @@ async function updateLocation() {
           return;
         }
         stopGpsWatch();
-        setLocationDeniedState();
+        setLocationUnavailableState(
+          'Location blocked by phone settings. Enable Location for this app, then tap GET ACCURATE LOCATION (GPS).'
+        );
         return;
       }
       setGpsStatus('Unable to get GPS right now. Tap GET ACCURATE LOCATION (GPS) to retry.');
@@ -1494,7 +1538,13 @@ async function updateLocation() {
       const denied = await isWebPermissionExplicitlyDenied(err);
       if (denied) {
         stopGpsWatch();
-        setLocationDeniedState();
+        if (locationDeniedByUserChoice) {
+          setLocationDeniedState();
+          return;
+        }
+        setLocationUnavailableState(
+          'Location blocked by browser/site settings. Enable Location, then tap GET ACCURATE LOCATION (GPS).'
+        );
         return;
       }
       setGpsStatus('Location temporarily unavailable. Tap GET ACCURATE LOCATION (GPS) to retry.');
