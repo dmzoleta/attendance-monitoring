@@ -123,7 +123,8 @@ If you want Hostinger compatibility without VPS, use the built-in JSON database 
    - `npm start`
 4. Set environment variables in Hostinger:
    - `DB_MODE=json`
-   - `DB_PATH=./data/db.json`
+   - `DB_PATH=../persistent-data/db.json`
+   - `DB_MIRROR_PATH=../persistent-data/db-mirror.json` (recommended)
    - `ALLOW_SEED=false` (recommended in production)
 5. Point your domain/subdomain to the deployed app URL.
 
@@ -135,6 +136,13 @@ App setup after deploy:
 ### Hostinger Database Notes
 
 - `DB_MODE=json` works on Hostinger Web/Cloud plans and requires no SQL migration.
+- Use a `DB_PATH` outside `./nodejs` deploy folder so records survive each redeploy.
+- Server now auto-recovers from the old `./data/db.json` file on first run when you switch to a new persistent `DB_PATH`.
+- Check persistence health at: `https://your-domain.com/api/db-health`
+- Confirm these fields:
+  - `dataPath` points to `../persistent-data/...`
+  - `dbMirrorPath` is set
+  - `counts.attendance`, `counts.reports` keep increasing after deploys
 - If you want PostgreSQL, use:
   - Hostinger VPS, or
   - external PostgreSQL (`DATABASE_URL`) and set `DB_MODE=postgres`.

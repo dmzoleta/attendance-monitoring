@@ -1,5 +1,6 @@
 const express = require('express');
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const url = require('url');
 const { Pool } = require('pg');
@@ -11,12 +12,35 @@ try {
 
 const DEFAULT_ROOT = path.join(__dirname, '..');
 const ROOT = fs.existsSync(path.join(DEFAULT_ROOT, 'admin')) ? DEFAULT_ROOT : process.cwd();
+
+function resolveDataPath(rawPath, fallbackPath = '') {
+  const value = String(rawPath || '').trim();
+  if (value) {
+    return path.isAbsolute(value) ? path.normalize(value) : path.normalize(path.join(ROOT, value));
+  }
+  if (!fallbackPath) return '';
+  return path.normalize(fallbackPath);
+}
+
+const CWD_NORMALIZED = String(process.cwd()).replace(/\\/g, '/').toLowerCase();
+const IS_HOSTINGER_LIKE_RUNTIME = CWD_NORMALIZED.includes('/domains/') && CWD_NORMALIZED.includes('/nodejs');
 const ENV_DB_PATH = process.env.DB_PATH || process.env.RENDER_DB_PATH || '';
-const DATA_PATH = ENV_DB_PATH
-  ? (path.isAbsolute(ENV_DB_PATH) ? path.normalize(ENV_DB_PATH) : path.join(ROOT, ENV_DB_PATH))
-  : path.join(ROOT, 'data', 'db.json');
+const DEFAULT_JSON_DB_PATH = path.join(ROOT, 'data', 'db.json');
+const DATA_PATH = resolveDataPath(ENV_DB_PATH, DEFAULT_JSON_DB_PATH);
 const BACKUP_PATH = `${DATA_PATH}.bak`;
 const DATA_DIR = path.dirname(DATA_PATH);
+const LEGACY_DATA_PATH = path.normalize(path.join(ROOT, 'data', 'db.json'));
+const LEGACY_BACKUP_PATH = `${LEGACY_DATA_PATH}.bak`;
+const USE_LEGACY_DB_FALLBACK = LEGACY_DATA_PATH !== path.normalize(DATA_PATH);
+const ENV_DB_MIRROR_PATH = process.env.DB_MIRROR_PATH || process.env.PERSISTENT_DB_PATH || '';
+const HOSTINGER_DB_MIRROR_FALLBACK = IS_HOSTINGER_LIKE_RUNTIME ? path.join(ROOT, '..', 'persistent-data', 'db.json') : '';
+const HOME_DB_MIRROR_FALLBACK =
+  !HOSTINGER_DB_MIRROR_FALLBACK && String(process.env.NODE_ENV || '').toLowerCase() === 'production'
+    ? path.join(os.homedir(), '.sdo-attendance', 'db.json')
+    : '';
+const DB_MIRROR_PATH = resolveDataPath(ENV_DB_MIRROR_PATH, HOSTINGER_DB_MIRROR_FALLBACK || HOME_DB_MIRROR_FALLBACK);
+const DB_MIRROR_BACKUP_PATH = DB_MIRROR_PATH ? `${DB_MIRROR_PATH}.bak` : '';
+const DB_MIRROR_DIR = DB_MIRROR_PATH ? path.dirname(DB_MIRROR_PATH) : '';
 
 const DEFAULT_DB = {
   admins: [
@@ -283,8 +307,10 @@ function mapReportRow(row) {
 
 let memoryDb = null;
 let lastDbWriteError = '';
+let lastDbWriteWarning = '';
 let lastDbWriteAttemptAt = 0;
 let lastDbWriteOkAt = 0;
+let lastDbLoadSource = '';
 
 function normalizeDb(db) {
   const safe = db && typeof db === 'object' ? db : {};
@@ -297,36 +323,94 @@ function normalizeDb(db) {
   return safe;
 }
 
+function getDbScore(db) {
+  const safe = normalizeDb(db);
+  return (
+    (safe.admins || []).length +
+    (safe.employees || []).length * 10 +
+    (safe.attendance || []).length * 8 +
+    (safe.notifications || []).length * 3 +
+    (safe.messages || []).length * 3 +
+    (safe.reports || []).length * 5
+  );
+}
+
+function readDbCandidate(filePath, source) {
+  if (!filePath || !fs.existsSync(filePath)) return null;
+  try {
+    const raw = fs.readFileSync(filePath, 'utf8');
+    const parsed = parseJsonSafe(raw);
+    if (!parsed.ok) return null;
+    const stat = fs.statSync(filePath);
+    const db = normalizeDb(parsed.value);
+    return {
+      db,
+      source,
+      filePath,
+      mtimeMs: Number(stat.mtimeMs || 0),
+      score: getDbScore(db)
+    };
+  } catch (err) {
+    return null;
+  }
+}
+
+function ensureDirExists(dirPath) {
+  if (!dirPath) return;
+  if (!fs.existsSync(dirPath)) fs.mkdirSync(dirPath, { recursive: true });
+}
+
+function writeDbFileWithBackup(filePath, backupPath, db) {
+  const dirPath = path.dirname(filePath);
+  ensureDirExists(dirPath);
+  if (fs.existsSync(filePath)) {
+    try {
+      fs.copyFileSync(filePath, backupPath);
+    } catch (err) {
+      // Ignore backup copy failures; main write still proceeds.
+    }
+  }
+  fs.writeFileSync(filePath, JSON.stringify(db, null, 2), 'utf8');
+}
+
 function readDb() {
   if (memoryDb) return memoryDb;
 
   try {
-    if (!fs.existsSync(DATA_DIR)) {
-      fs.mkdirSync(DATA_DIR, { recursive: true });
-    }
+    ensureDirExists(DATA_DIR);
+    ensureDirExists(DB_MIRROR_DIR);
   } catch (err) {
     // ignore directory errors
   }
 
-  if (fs.existsSync(DATA_PATH)) {
-    const raw = fs.readFileSync(DATA_PATH, 'utf8');
-    const parsed = parseJsonSafe(raw);
-    if (parsed.ok) {
-      memoryDb = normalizeDb(parsed.value);
-      return memoryDb;
-    }
-  }
+  const candidates = [
+    readDbCandidate(DATA_PATH, 'data'),
+    readDbCandidate(BACKUP_PATH, 'data-backup'),
+    ...(USE_LEGACY_DB_FALLBACK
+      ? [
+          readDbCandidate(LEGACY_DATA_PATH, 'legacy-data'),
+          readDbCandidate(LEGACY_BACKUP_PATH, 'legacy-data-backup')
+        ]
+      : []),
+    readDbCandidate(DB_MIRROR_PATH, 'mirror'),
+    readDbCandidate(DB_MIRROR_BACKUP_PATH, 'mirror-backup')
+  ].filter(Boolean);
 
-  if (fs.existsSync(BACKUP_PATH)) {
-    const backupRaw = fs.readFileSync(BACKUP_PATH, 'utf8');
-    const backupParsed = parseJsonSafe(backupRaw);
-    if (backupParsed.ok) {
-      memoryDb = normalizeDb(backupParsed.value);
-      return memoryDb;
-    }
+  if (candidates.length) {
+    candidates.sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score;
+      return b.mtimeMs - a.mtimeMs;
+    });
+    const selected = candidates[0];
+    memoryDb = normalizeDb(selected.db);
+    lastDbLoadSource = `${selected.source}:${selected.filePath}`;
+    // Keep main and mirror files synchronized after choosing best candidate.
+    writeDb(memoryDb);
+    return memoryDb;
   }
 
   memoryDb = normalizeDb(JSON.parse(JSON.stringify(DEFAULT_DB)));
+  lastDbLoadSource = 'default-template';
   writeDb(memoryDb);
   return memoryDb;
 }
@@ -334,20 +418,35 @@ function readDb() {
 function writeDb(db) {
   memoryDb = normalizeDb(db);
   lastDbWriteAttemptAt = Date.now();
+  lastDbWriteWarning = '';
+
+  const targets = [
+    { name: 'primary', filePath: DATA_PATH, backupPath: BACKUP_PATH }
+  ];
+  if (DB_MIRROR_PATH && path.normalize(DB_MIRROR_PATH) !== path.normalize(DATA_PATH)) {
+    targets.push({ name: 'mirror', filePath: DB_MIRROR_PATH, backupPath: DB_MIRROR_BACKUP_PATH });
+  }
+
+  const warnings = [];
+  let writesOk = 0;
   try {
-    if (!fs.existsSync(DATA_DIR)) {
-      fs.mkdirSync(DATA_DIR, { recursive: true });
-    }
-    if (fs.existsSync(DATA_PATH)) {
+    for (const target of targets) {
       try {
-        fs.copyFileSync(DATA_PATH, BACKUP_PATH);
+        writeDbFileWithBackup(target.filePath, target.backupPath, memoryDb);
+        writesOk += 1;
       } catch (err) {
-        // ignore backup errors
+        const message = err && err.message ? err.message : 'Unknown write error';
+        warnings.push(`${target.name}(${target.filePath}): ${message}`);
       }
     }
-    fs.writeFileSync(DATA_PATH, JSON.stringify(db, null, 2), 'utf8');
-    lastDbWriteError = '';
-    lastDbWriteOkAt = Date.now();
+
+    if (writesOk > 0) {
+      lastDbWriteError = '';
+      lastDbWriteWarning = warnings.join(' | ');
+      lastDbWriteOkAt = Date.now();
+    } else {
+      lastDbWriteError = warnings.join(' | ') || 'Unknown DB write error';
+    }
   } catch (err) {
     // Track write failures so API can return an accurate error.
     lastDbWriteError = err && err.message ? err.message : 'Unknown DB write error';
@@ -379,13 +478,22 @@ function getJsonDbDiagnostics(db) {
   }
   return {
     envDbPath: ENV_DB_PATH || '',
+    envDbMirrorPath: ENV_DB_MIRROR_PATH || '',
     dataPath: DATA_PATH,
     dataDir: DATA_DIR,
+    legacyDataPath: USE_LEGACY_DB_FALLBACK ? LEGACY_DATA_PATH : '',
+    dbMirrorPath: DB_MIRROR_PATH || '',
+    dbMirrorDir: DB_MIRROR_DIR || '',
+    dbMirrorEnabled: !!DB_MIRROR_PATH,
     dataDirWritable,
     dataFileExists: fs.existsSync(DATA_PATH),
+    dbMirrorFileExists: DB_MIRROR_PATH ? fs.existsSync(DB_MIRROR_PATH) : false,
     cwd: process.cwd(),
     root: ROOT,
+    hostingerLikeRuntime: IS_HOSTINGER_LIKE_RUNTIME,
+    dbLoadSource: lastDbLoadSource,
     lastDbWriteError,
+    lastDbWriteWarning,
     lastDbWriteAttemptAt,
     lastDbWriteOkAt,
     counts: {
