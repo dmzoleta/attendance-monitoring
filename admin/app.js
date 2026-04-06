@@ -1204,10 +1204,17 @@ async function handleAddEmployee(event) {
 
 function getOfficeFilterSet(selectedOffice) {
   const aliases = {
-    'SGOD Unit': ['SGOD Unit', 'SGOD'],
-    'Payroll Unit': ['Payroll Unit', 'Payroll'],
-    'Office of ASDS': ['Office of ASDS', 'ASDS Office', 'Assistant Superintendent Office'],
-    'Office of SDS': ['Office of SDS', 'Superintendent Office']
+    'Office of the SDS': ['Office of the SDS', 'Office of SDS', 'Superintendent Office'],
+    'Office of the ASDS': ['Office of the ASDS', 'Office of ASDS', 'ASDS Office', 'Assistant Superintendent Office'],
+    'Personnel Section': ['Personnel Section', 'Personnel Unit'],
+    'Supply Section': ['Supply Section', 'Supply Unit'],
+    'Cash Section': ['Cash Section', 'Cash Unit'],
+    'Records Section': ['Records Section', 'Records Unit'],
+    'Procurement Section': ['Procurement Section', 'Procurement Office'],
+    'Curriculum Implementation Division': ['Curriculum Implementation Division', 'CID Unit', 'CID'],
+    'School Governance and Operations Division': ['School Governance and Operations Division', 'SGOD Unit', 'SGOD'],
+    'Accounting Section': ['Accounting Section', 'Accounting Unit', 'Finance Unit'],
+    'Budget Section': ['Budget Section', 'Budget Unit']
   };
   const list = aliases[selectedOffice] || [selectedOffice];
   return new Set(list);
