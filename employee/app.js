@@ -21,6 +21,10 @@ const statModalSubtitle = document.getElementById('stat-modal-subtitle');
 const statModalTable = document.getElementById('stat-modal-table');
 const statModalEmpty = document.getElementById('stat-modal-empty');
 const closeStatModalBtn = document.getElementById('close-stat-modal');
+const gpsConsentModal = document.getElementById('gps-consent-modal');
+const closeGpsConsentBtn = document.getElementById('close-gps-consent');
+const denyGpsConsentBtn = document.getElementById('deny-gps-consent');
+const allowGpsConsentBtn = document.getElementById('allow-gps-consent');
 
 const empTime = document.getElementById('emp-time');
 const empDate = document.getElementById('emp-date');
@@ -33,6 +37,7 @@ const locationAccuracy = document.getElementById('location-accuracy');
 const empLocation = document.getElementById('emp-location');
 const gpsStatus = document.getElementById('gps-status');
 const openMapCurrentBtn = document.getElementById('open-map-current');
+const refreshLocationBtn = document.getElementById('refresh-location');
 
 const timeInBtn = document.getElementById('time-in');
 const timeOutBtn = document.getElementById('time-out');
@@ -466,6 +471,42 @@ function setLocationDeniedState() {
   setLocationLabel(LOCATION_DENIED_TEXT);
   resetMapPreview();
   setGpsStatus('Location denied. Attendance still works without GPS.');
+}
+
+function closeGpsConsentModal() {
+  if (!gpsConsentModal) return;
+  gpsConsentModal.classList.add('hidden');
+}
+
+function openGpsConsentModal() {
+  if (!gpsConsentModal) {
+    updateLocation();
+    return;
+  }
+  gpsConsentModal.classList.remove('hidden');
+}
+
+async function handleGpsConsentAllow() {
+  closeGpsConsentModal();
+  await updateLocation();
+}
+
+function handleGpsConsentDeny() {
+  closeGpsConsentModal();
+  stopGpsWatch();
+  setLocationDeniedState();
+}
+
+function initializeLocationState() {
+  const fallback = lastAddress || localStorage.getItem('lastAddress') || '';
+  if (fallback) {
+    setLocationLabel(fallback);
+  } else {
+    setLocationLabel(LOCATION_UNKNOWN_TEXT);
+    resetMapPreview();
+  }
+  clearLocationCoordinates();
+  setGpsStatus('Tap GET ACCURATE LOCATION (GPS) to request location permission.');
 }
 
 function getAttendanceLocationPayload() {
@@ -1436,7 +1477,7 @@ async function startEmployeeSession(user) {
   } else if (photoPreview) {
     photoPreview.src = 'assets/photo-placeholder.svg';
   }
-  updateLocation();
+  initializeLocationState();
   tickClock();
 }
 
@@ -1454,6 +1495,7 @@ function logoutEmployee() {
   loginScreen.classList.remove('hidden');
   clearSavedLogin();
   closeServerModal();
+  closeGpsConsentModal();
   stopGpsWatch();
 }
 
@@ -1840,11 +1882,19 @@ navButtons.forEach((btn) => {
 
 recordsMonth.addEventListener('change', filterRecordsByMonth);
 
-document.getElementById('refresh-location').addEventListener('click', updateLocation);
-if (gpsRefreshBtn) gpsRefreshBtn.addEventListener('click', updateLocation);
+if (refreshLocationBtn) refreshLocationBtn.addEventListener('click', openGpsConsentModal);
+if (gpsRefreshBtn) gpsRefreshBtn.addEventListener('click', openGpsConsentModal);
 if (openMapCurrentBtn) {
   openMapCurrentBtn.addEventListener('click', () => {
     openMapByCoordinates(locationLat.textContent, locationLng.textContent, locationName.textContent);
+  });
+}
+if (closeGpsConsentBtn) closeGpsConsentBtn.addEventListener('click', closeGpsConsentModal);
+if (denyGpsConsentBtn) denyGpsConsentBtn.addEventListener('click', handleGpsConsentDeny);
+if (allowGpsConsentBtn) allowGpsConsentBtn.addEventListener('click', handleGpsConsentAllow);
+if (gpsConsentModal) {
+  gpsConsentModal.addEventListener('click', (event) => {
+    if (event.target === gpsConsentModal) closeGpsConsentModal();
   });
 }
 

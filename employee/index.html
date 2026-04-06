@@ -215,6 +215,20 @@
       </div>
     </div>
 
+    <div id="gps-consent-modal" class="modal hidden">
+      <div class="modal-card">
+        <div class="card-header">
+          <h3>Location Access</h3>
+          <button class="icon-btn" id="close-gps-consent" aria-label="Close">&times;</button>
+        </div>
+        <p class="helper-text">Allow GPS to capture accurate location and barangay from map data. Attendance still works even if location is not allowed.</p>
+        <div class="action-row">
+          <button class="ghost-btn" id="deny-gps-consent" type="button">Don't Allow</button>
+          <button class="primary-btn" id="allow-gps-consent" type="button">Allow</button>
+        </div>
+      </div>
+    </div>
+
     <section id="employee-app" class="app-screen hidden">
       <header class="topbar">
         <div class="brand">
@@ -270,7 +284,7 @@
                     <button class="ghost-btn" id="open-map-current">View Map</button>
                   </div>
                 </div>
-              <div class="gps-status" id="gps-status">Tap Update to allow location access.</div>
+              <div class="gps-status" id="gps-status">Tap GET ACCURATE LOCATION (GPS) to allow location access.</div>
             </div>
           </div>
 
