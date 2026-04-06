@@ -834,17 +834,76 @@ function getCapacitorGeo() {
   return window.Capacitor.Plugins.Geolocation || null;
 }
 
-async function ensureNativePermission() {
+function getNativePermissionStatus(result) {
+  if (!result) return '';
+  if (typeof result === 'string') return result;
+  return String(result.location || result.coarseLocation || '').toLowerCase();
+}
+
+function isNativePermissionGranted(result) {
+  const status = getNativePermissionStatus(result);
+  return status === 'granted';
+}
+
+function isPermissionDeniedError(err) {
+  if (!err) return false;
+  const code = Number(err.code ?? err.errorCode);
+  if (Number.isFinite(code) && code === 1) return true;
+  const message = String(err.message || err.errorMessage || '').toLowerCase();
+  if (!message) return false;
+  return (
+    message.includes('denied') ||
+    message.includes('not authorized') ||
+    message.includes('permission denied')
+  );
+}
+
+async function ensureNativePermission(options = {}) {
+  const { prompt = true, tryDirect = true } = options;
   const geo = getCapacitorGeo();
   if (!geo) return false;
+
+  const readCurrent = async () => {
+    if (typeof geo.checkPermissions !== 'function') return null;
+    try {
+      return await geo.checkPermissions();
+    } catch (err) {
+      return null;
+    }
+  };
+
+  const requestPrompt = async () => {
+    if (!prompt || typeof geo.requestPermissions !== 'function') return null;
+    try {
+      return await geo.requestPermissions();
+    } catch (err) {
+      return null;
+    }
+  };
+
+  const tryDirectPosition = async () => {
+    if (!tryDirect || typeof geo.getCurrentPosition !== 'function') return false;
+    try {
+      await geo.getCurrentPosition({ enableHighAccuracy: true, timeout: 30000, maximumAge: 0 });
+      return true;
+    } catch (err) {
+      return false;
+    }
+  };
+
   try {
-    const current = await geo.checkPermissions();
-    if (current && (current.location === 'granted' || current.coarseLocation === 'granted')) return true;
-    const requested = await geo.requestPermissions();
-    const status = requested ? (requested.location || requested.coarseLocation) : null;
-    return status === 'granted';
+    const current = await readCurrent();
+    if (isNativePermissionGranted(current)) return true;
+
+    const requested = await requestPrompt();
+    if (isNativePermissionGranted(requested)) return true;
+
+    const currentAfterPrompt = await readCurrent();
+    if (isNativePermissionGranted(currentAfterPrompt)) return true;
+
+    return await tryDirectPosition();
   } catch (err) {
-    return false;
+    return await tryDirectPosition();
   }
 }
 
@@ -995,10 +1054,9 @@ async function startGpsWatch() {
   const capGeo = getCapacitorGeo();
   if (capGeo) {
     if (nativeWatchId !== null) return;
-    const ok = await ensureNativePermission();
+    const ok = await ensureNativePermission({ prompt: false, tryDirect: false });
     if (!ok) {
-      stopGpsWatch();
-      setLocationDeniedState();
+      setGpsStatus('GPS watch not started yet. Tap GET ACCURATE LOCATION (GPS).');
       return;
     }
     setGpsStatus('Live GPS started. Waiting for signal…');
@@ -1007,7 +1065,12 @@ async function startGpsWatch() {
         { enableHighAccuracy: true, timeout: 30000, maximumAge: 0, distanceFilter: 1, minimumUpdateInterval: 1000 },
         (pos, err) => {
           if (err) {
-            setGpsStatus('Unable to get GPS. Tap Update to retry.');
+            if (isPermissionDeniedError(err)) {
+              stopGpsWatch();
+              setLocationDeniedState();
+              return;
+            }
+            setGpsStatus('Unable to get GPS. Tap GET ACCURATE LOCATION (GPS) to retry.');
             return;
           }
           applyLocationUpdate(pos);
@@ -1015,7 +1078,12 @@ async function startGpsWatch() {
       );
       nativeWatchId = idResult && typeof idResult === 'object' && 'id' in idResult ? idResult.id : idResult;
     } catch (err) {
-      setGpsStatus('Unable to get GPS. Tap Update to retry.');
+      if (isPermissionDeniedError(err)) {
+        stopGpsWatch();
+        setLocationDeniedState();
+        return;
+      }
+      setGpsStatus('Unable to get GPS. Tap GET ACCURATE LOCATION (GPS) to retry.');
     }
     return;
   }
@@ -1285,7 +1353,7 @@ async function updateLocation() {
   const capGeo = getCapacitorGeo();
   if (capGeo) {
     setGpsStatus('Requesting location permission…');
-    const ok = await ensureNativePermission();
+    const ok = await ensureNativePermission({ prompt: true, tryDirect: true });
     if (!ok) {
       stopGpsWatch();
       setLocationDeniedState();
@@ -1302,7 +1370,12 @@ async function updateLocation() {
       }
       startGpsWatch();
     } catch (err) {
-      setGpsStatus('Unable to get GPS. Tap Update to retry.');
+      if (isPermissionDeniedError(err)) {
+        stopGpsWatch();
+        setLocationDeniedState();
+        return;
+      }
+      setGpsStatus('Unable to get GPS right now. Tap GET ACCURATE LOCATION (GPS) to retry.');
     }
     return;
   }
