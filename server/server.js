@@ -2175,13 +2175,14 @@ async function handleApi(req, res, pathname) {
         }
       }
       let best = { address: '', score: 0 };
-      const osmUrl = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1&namedetails=1`;
+      const osmUrl = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=19&addressdetails=1&namedetails=1`;
       const osmRes = await fetch(osmUrl, { headers: { 'Accept-Language': 'en,fil;q=0.9' } });
       if (osmRes.ok) {
         const osmData = await osmRes.json();
         const formatted = formatOsmAddress(osmData);
-        if (formatted.address && formatted.score > best.score) {
-          best = formatted;
+        if (formatted.address) {
+          // Prefer OSM reverse result for exact coordinate lookups to avoid provider mismatch.
+          return sendJson(res, 200, { ok: true, address: formatted.address });
         }
       }
 

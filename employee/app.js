@@ -793,7 +793,7 @@ async function reverseGeocode(lat, lng) {
   }
 
   try {
-    const osmUrl = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1&namedetails=1`;
+    const osmUrl = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=19&addressdetails=1&namedetails=1`;
     const osmRes = await fetch(osmUrl, { headers: { 'Accept-Language': 'en,fil;q=0.9' } });
     if (osmRes.ok) {
       const osmData = await osmRes.json();
@@ -849,9 +849,11 @@ let lastCoords = null;
 let lastMapAt = 0;
 let lastAddressAt = 0;
 const ADDRESS_ACCURACY_THRESHOLD = 6;
-const ADDRESS_STABLE_HITS = 4;
+const ADDRESS_STABLE_HITS = 2;
 const BEST_SAMPLE_WINDOW_MS = 20000;
+const ADDRESS_MOVE_THRESHOLD_METERS = 8;
 let accuracyStreak = 0;
+let forceAddressRefresh = false;
 
 function buildCoordinateLocationLabel(lat, lng) {
   const latNum = Number(lat);
@@ -1061,6 +1063,8 @@ async function collectBestNativePosition() {
 
 async function applyLocationUpdate(pos) {
   const { latitude, longitude, accuracy } = pos.coords;
+  const forceRefresh = forceAddressRefresh;
+  forceAddressRefresh = false;
   const latValue = latitude.toFixed(5);
   const lngValue = longitude.toFixed(5);
   locationLat.textContent = latValue;
@@ -1070,7 +1074,7 @@ async function applyLocationUpdate(pos) {
   const now = Date.now();
   const moved = lastCoords ? distanceMeters(lastCoords, { lat: latitude, lng: longitude }) : 9999;
   const shouldUpdateMap = moved > 10 || now - lastMapAt > 10000;
-  const shouldUpdateAddress = moved > 25 || now - lastAddressAt > 20000;
+  const shouldUpdateAddress = moved > ADDRESS_MOVE_THRESHOLD_METERS || now - lastAddressAt > 15000;
 
   if (shouldUpdateMap) {
     updateMapPreview(latitude, longitude);
@@ -1089,7 +1093,7 @@ async function applyLocationUpdate(pos) {
     currentLabel === LOCATION_UNKNOWN_TEXT ||
     currentLabel === LOCATION_DENIED_TEXT ||
     /^Lat\s+-?\d/.test(currentLabel);
-  const shouldTryAddress = shouldUpdateAddress || needsAddressNow;
+  const shouldTryAddress = forceRefresh || shouldUpdateAddress || needsAddressNow;
 
   if (accuracy > ADDRESS_ACCURACY_THRESHOLD || accuracyStreak < ADDRESS_STABLE_HITS) {
     if (shouldTryAddress) {
@@ -1100,11 +1104,11 @@ async function applyLocationUpdate(pos) {
           lastAddress = address;
           localStorage.setItem('lastAddress', address);
         } else {
-          const fallback = lastAddress || localStorage.getItem('lastAddress') || '';
+          const fallback = forceRefresh ? '' : (lastAddress || localStorage.getItem('lastAddress') || '');
           setLocationLabel(fallback || buildCoordinateLocationLabel(latitude, longitude));
         }
       } catch (err) {
-        const fallback = lastAddress || localStorage.getItem('lastAddress') || '';
+        const fallback = forceRefresh ? '' : (lastAddress || localStorage.getItem('lastAddress') || '');
         setLocationLabel(fallback || buildCoordinateLocationLabel(latitude, longitude));
       }
       lastAddressAt = now;
@@ -1501,6 +1505,7 @@ function filterRecordsByMonth() {
 
 async function updateLocation() {
   locationDeniedByUserChoice = false;
+  forceAddressRefresh = true;
   const capGeo = getCapacitorGeo();
   if (capGeo) {
     setGpsStatus('Requesting location permission…');
