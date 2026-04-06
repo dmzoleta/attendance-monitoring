@@ -2990,14 +2990,21 @@ function routeRequest(req, res) {
   }
 
   if (pathname.startsWith('/employee')) {
-    if ((pathname === '/employee' || pathname === '/employee/') && !parsed.query) {
-      res.writeHead(302, {
-        Location: `/employee/?v=${encodeURIComponent(EMPLOYEE_CACHE_BUSTER)}`,
-        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
-        Pragma: 'no-cache',
-        Expires: '0'
-      });
-      return res.end();
+    if (pathname === '/employee' || pathname === '/employee/') {
+      const queryParams = new URLSearchParams(parsed.query || '');
+      const currentVersion = String(queryParams.get('v') || '');
+      if (currentVersion !== EMPLOYEE_CACHE_BUSTER) {
+        queryParams.set('v', EMPLOYEE_CACHE_BUSTER);
+        const queryString = queryParams.toString();
+        const redirectLocation = queryString ? `/employee/?${queryString}` : '/employee/';
+        res.writeHead(302, {
+          Location: redirectLocation,
+          'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+          Pragma: 'no-cache',
+          Expires: '0'
+        });
+        return res.end();
+      }
     }
     const safePath = pathname.replace('/employee', '').replace(/\/+$/, '');
     const filePath = safePath === '' || safePath === '/' ? 'index.html' : safePath;

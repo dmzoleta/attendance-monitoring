@@ -849,10 +849,19 @@ function isNativePermissionGranted(result) {
   return status === 'granted';
 }
 
+function isNativePermissionDenied(result) {
+  const status = getNativePermissionStatus(result);
+  return status === 'denied' || status === 'restricted';
+}
+
+function getGeoErrorCode(err) {
+  const code = Number(err && (err.code ?? err.errorCode));
+  return Number.isFinite(code) ? code : 0;
+}
+
 function isPermissionDeniedError(err) {
   if (!err) return false;
-  const code = Number(err.code ?? err.errorCode);
-  if (Number.isFinite(code) && code === 1) return true;
+  if (getGeoErrorCode(err) === 1) return true;
   const message = String(err.message || err.errorMessage || '').toLowerCase();
   if (!message) return false;
   return (
@@ -909,6 +918,45 @@ async function ensureNativePermission(options = {}) {
   } catch (err) {
     return await tryDirectPosition();
   }
+}
+
+async function isNativePermissionExplicitlyDenied() {
+  const geo = getCapacitorGeo();
+  if (!geo || typeof geo.checkPermissions !== 'function') return false;
+  try {
+    const current = await geo.checkPermissions();
+    return isNativePermissionDenied(current);
+  } catch (err) {
+    return false;
+  }
+}
+
+async function getWebGeolocationPermissionState() {
+  if (
+    typeof navigator === 'undefined' ||
+    !navigator.permissions ||
+    typeof navigator.permissions.query !== 'function'
+  ) {
+    return '';
+  }
+  try {
+    const state = await navigator.permissions.query({ name: 'geolocation' });
+    return String((state && state.state) || '').toLowerCase();
+  } catch (err) {
+    return '';
+  }
+}
+
+async function isWebPermissionExplicitlyDenied(err) {
+  if (getGeoErrorCode(err) !== 1) return false;
+  const state = await getWebGeolocationPermissionState();
+  return state === 'denied';
+}
+
+function getCurrentWebPosition(options) {
+  return new Promise((resolve, reject) => {
+    navigator.geolocation.getCurrentPosition(resolve, reject, options);
+  });
 }
 
 function toRadians(value) {
@@ -1074,8 +1122,14 @@ async function startGpsWatch() {
                 setGpsStatus('GPS live updates paused. Using your last accurate location.');
                 return;
               }
-              stopGpsWatch();
-              setLocationDeniedState();
+              isNativePermissionExplicitlyDenied().then((denied) => {
+                if (denied) {
+                  stopGpsWatch();
+                  setLocationDeniedState();
+                  return;
+                }
+                setGpsStatus('Location temporarily unavailable. Tap GET ACCURATE LOCATION (GPS) to retry.');
+              });
               return;
             }
             setGpsStatus('Unable to get GPS. Tap GET ACCURATE LOCATION (GPS) to retry.');
@@ -1091,8 +1145,13 @@ async function startGpsWatch() {
           setGpsStatus('GPS live updates paused. Using your last accurate location.');
           return;
         }
-        stopGpsWatch();
-        setLocationDeniedState();
+        const denied = await isNativePermissionExplicitlyDenied();
+        if (denied) {
+          stopGpsWatch();
+          setLocationDeniedState();
+          return;
+        }
+        setGpsStatus('Location temporarily unavailable. Tap GET ACCURATE LOCATION (GPS) to retry.');
         return;
       }
       setGpsStatus('Unable to get GPS. Tap GET ACCURATE LOCATION (GPS) to retry.');
@@ -1109,17 +1168,22 @@ async function startGpsWatch() {
     (pos) => {
       applyLocationUpdate(pos);
     },
-    (err) => {
-      if (err && err.code === 1) {
+    async (err) => {
+      if (getGeoErrorCode(err) === 1) {
         if (hasActiveGpsFix()) {
           setGpsStatus('GPS live updates paused. Using your last accurate location.');
           return;
         }
-        stopGpsWatch();
-        setLocationDeniedState();
-      } else {
-        setGpsStatus('Unable to get GPS. Tap Update to retry.');
+        const denied = await isWebPermissionExplicitlyDenied(err);
+        if (denied) {
+          stopGpsWatch();
+          setLocationDeniedState();
+          return;
+        }
+        setGpsStatus('Location temporarily unavailable. Tap GET ACCURATE LOCATION (GPS) to retry.');
+        return;
       }
+      setGpsStatus('Unable to get GPS. Tap Update to retry.');
     },
     { enableHighAccuracy: true, timeout: 60000, maximumAge: 0 }
   );
@@ -1407,30 +1471,40 @@ async function updateLocation() {
     return;
   }
   setGpsStatus('Requesting location permission…');
-  navigator.geolocation.getCurrentPosition(
-    async (pos) => {
-      setGpsStatus('Improving GPS accuracy…');
-      const best = await collectBestWebPosition();
-      applyLocationUpdate(best || pos);
-      startGpsWatch();
-    },
-    (err) => {
-      if (err && err.code === 1) {
-        if (hasActiveGpsFix()) {
-          setGpsStatus('GPS permission changed, but last accurate location is still in use.');
-          return;
-        }
+  try {
+    let pos;
+    try {
+      pos = await getCurrentWebPosition({ enableHighAccuracy: true, timeout: 60000, maximumAge: 0 });
+    } catch (firstErr) {
+      const denied = await isWebPermissionExplicitlyDenied(firstErr);
+      if (denied) throw firstErr;
+      setGpsStatus('Retrying location…');
+      pos = await getCurrentWebPosition({ enableHighAccuracy: false, timeout: 45000, maximumAge: 60000 });
+    }
+    setGpsStatus('Improving GPS accuracy…');
+    const best = await collectBestWebPosition();
+    applyLocationUpdate(best || pos);
+    startGpsWatch();
+  } catch (err) {
+    if (getGeoErrorCode(err) === 1) {
+      if (hasActiveGpsFix()) {
+        setGpsStatus('GPS permission changed, but last accurate location is still in use.');
+        return;
+      }
+      const denied = await isWebPermissionExplicitlyDenied(err);
+      if (denied) {
         stopGpsWatch();
         setLocationDeniedState();
         return;
       }
-      setGpsStatus('Location unavailable. Attendance still works without GPS.');
-      setLocationLabel(lastAddress || LOCATION_UNKNOWN_TEXT);
-      clearLocationCoordinates();
-      if (!lastAddress) resetMapPreview();
-    },
-    { enableHighAccuracy: true, timeout: 60000, maximumAge: 0 }
-  );
+      setGpsStatus('Location temporarily unavailable. Tap GET ACCURATE LOCATION (GPS) to retry.');
+      return;
+    }
+    setGpsStatus('Location unavailable. Attendance still works without GPS.');
+    setLocationLabel(lastAddress || LOCATION_UNKNOWN_TEXT);
+    clearLocationCoordinates();
+    if (!lastAddress) resetMapPreview();
+  }
 }
 
 function clearLegacyEmployeeCache() {
