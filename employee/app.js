@@ -853,6 +853,13 @@ const ADDRESS_STABLE_HITS = 4;
 const BEST_SAMPLE_WINDOW_MS = 20000;
 let accuracyStreak = 0;
 
+function buildCoordinateLocationLabel(lat, lng) {
+  const latNum = Number(lat);
+  const lngNum = Number(lng);
+  if (!Number.isFinite(latNum) || !Number.isFinite(lngNum)) return LOCATION_UNKNOWN_TEXT;
+  return `Lat ${latNum.toFixed(5)}, Lng ${lngNum.toFixed(5)}`;
+}
+
 function getCapacitorGeo() {
   if (typeof window === 'undefined') return null;
   if (!window.Capacitor || !window.Capacitor.Plugins) return null;
@@ -1076,17 +1083,41 @@ async function applyLocationUpdate(pos) {
     accuracyStreak = 0;
   }
 
+  const currentLabel = String(locationName.textContent || '').trim();
+  const needsAddressNow =
+    !currentLabel ||
+    currentLabel === LOCATION_UNKNOWN_TEXT ||
+    currentLabel === LOCATION_DENIED_TEXT ||
+    /^Lat\s+-?\d/.test(currentLabel);
+  const shouldTryAddress = shouldUpdateAddress || needsAddressNow;
+
   if (accuracy > ADDRESS_ACCURACY_THRESHOLD || accuracyStreak < ADDRESS_STABLE_HITS) {
-    const fallback = lastAddress || localStorage.getItem('lastAddress') || '';
-    if (fallback) {
-      setLocationLabel(fallback);
+    if (shouldTryAddress) {
+      try {
+        const address = await reverseGeocode(latitude, longitude);
+        if (address) {
+          setLocationLabel(address);
+          lastAddress = address;
+          localStorage.setItem('lastAddress', address);
+        } else {
+          const fallback = lastAddress || localStorage.getItem('lastAddress') || '';
+          setLocationLabel(fallback || buildCoordinateLocationLabel(latitude, longitude));
+        }
+      } catch (err) {
+        const fallback = lastAddress || localStorage.getItem('lastAddress') || '';
+        setLocationLabel(fallback || buildCoordinateLocationLabel(latitude, longitude));
+      }
+      lastAddressAt = now;
+    } else {
+      const fallback = lastAddress || localStorage.getItem('lastAddress') || '';
+      if (fallback) setLocationLabel(fallback);
     }
     setGpsStatus(`Improving GPS accuracy · ±${Math.round(accuracy)}m (move outdoors)`);
     lastCoords = { lat: latitude, lng: longitude };
     return;
   }
 
-  if (shouldUpdateAddress) {
+  if (shouldTryAddress) {
     setGpsStatus('Fetching address…');
     try {
       const address = await reverseGeocode(latitude, longitude);
@@ -1101,8 +1132,8 @@ async function applyLocationUpdate(pos) {
           setLocationLabel(fallback);
           setGpsStatus(`Live GPS · ±${Math.round(accuracy)}m`);
         } else {
-          setLocationLabel(LOCATION_UNKNOWN_TEXT);
-          setGpsStatus('Address unavailable. Live GPS continues.');
+          setLocationLabel(buildCoordinateLocationLabel(latitude, longitude));
+          setGpsStatus(`Live GPS · ±${Math.round(accuracy)}m (address still resolving)`);
         }
       }
     } catch (err) {
@@ -1111,8 +1142,8 @@ async function applyLocationUpdate(pos) {
         setLocationLabel(fallback);
         setGpsStatus(`Live GPS · ±${Math.round(accuracy)}m`);
       } else {
-        setLocationLabel(LOCATION_UNKNOWN_TEXT);
-        setGpsStatus('Address unavailable. Live GPS continues.');
+        setLocationLabel(buildCoordinateLocationLabel(latitude, longitude));
+        setGpsStatus(`Live GPS · ±${Math.round(accuracy)}m (address still resolving)`);
       }
     }
     lastAddressAt = now;
