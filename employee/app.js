@@ -859,7 +859,20 @@ function buildCoordinateLocationLabel(lat, lng) {
   const latNum = Number(lat);
   const lngNum = Number(lng);
   if (!Number.isFinite(latNum) || !Number.isFinite(lngNum)) return LOCATION_UNKNOWN_TEXT;
-  return `Lat ${latNum.toFixed(5)}, Lng ${lngNum.toFixed(5)}`;
+  return `${latNum.toFixed(5)}, ${lngNum.toFixed(5)}`;
+}
+
+function buildPlaceLabel(lat, lng, address = '') {
+  const coordinateLabel = buildCoordinateLocationLabel(lat, lng);
+  const cleanAddress = String(address || '').trim();
+  if (
+    !cleanAddress ||
+    cleanAddress === LOCATION_UNKNOWN_TEXT ||
+    cleanAddress === LOCATION_DENIED_TEXT
+  ) {
+    return `Pinned map location (${coordinateLabel})`;
+  }
+  return `${cleanAddress} (${coordinateLabel})`;
 }
 
 function getCapacitorGeo() {
@@ -1100,21 +1113,21 @@ async function applyLocationUpdate(pos) {
       try {
         const address = await reverseGeocode(latitude, longitude);
         if (address) {
-          setLocationLabel(address);
+          setLocationLabel(buildPlaceLabel(latitude, longitude, address));
           lastAddress = address;
           localStorage.setItem('lastAddress', address);
         } else {
           const fallback = forceRefresh ? '' : (lastAddress || localStorage.getItem('lastAddress') || '');
-          setLocationLabel(fallback || buildCoordinateLocationLabel(latitude, longitude));
+          setLocationLabel(buildPlaceLabel(latitude, longitude, fallback));
         }
       } catch (err) {
         const fallback = forceRefresh ? '' : (lastAddress || localStorage.getItem('lastAddress') || '');
-        setLocationLabel(fallback || buildCoordinateLocationLabel(latitude, longitude));
+        setLocationLabel(buildPlaceLabel(latitude, longitude, fallback));
       }
       lastAddressAt = now;
     } else {
       const fallback = lastAddress || localStorage.getItem('lastAddress') || '';
-      if (fallback) setLocationLabel(fallback);
+      if (fallback) setLocationLabel(buildPlaceLabel(latitude, longitude, fallback));
     }
     setGpsStatus(`Improving GPS accuracy · ±${Math.round(accuracy)}m (move outdoors)`);
     lastCoords = { lat: latitude, lng: longitude };
@@ -1126,27 +1139,27 @@ async function applyLocationUpdate(pos) {
     try {
       const address = await reverseGeocode(latitude, longitude);
       if (address) {
-        setLocationLabel(address);
+        setLocationLabel(buildPlaceLabel(latitude, longitude, address));
         lastAddress = address;
         localStorage.setItem('lastAddress', address);
         setGpsStatus(`Live GPS · ±${Math.round(accuracy)}m`);
       } else {
         const fallback = lastAddress || localStorage.getItem('lastAddress') || '';
         if (fallback && moved < 80) {
-          setLocationLabel(fallback);
+          setLocationLabel(buildPlaceLabel(latitude, longitude, fallback));
           setGpsStatus(`Live GPS · ±${Math.round(accuracy)}m`);
         } else {
-          setLocationLabel(buildCoordinateLocationLabel(latitude, longitude));
+          setLocationLabel(buildPlaceLabel(latitude, longitude));
           setGpsStatus(`Live GPS · ±${Math.round(accuracy)}m (address still resolving)`);
         }
       }
     } catch (err) {
       const fallback = lastAddress || localStorage.getItem('lastAddress') || '';
       if (fallback && moved < 80) {
-        setLocationLabel(fallback);
+        setLocationLabel(buildPlaceLabel(latitude, longitude, fallback));
         setGpsStatus(`Live GPS · ±${Math.round(accuracy)}m`);
       } else {
-        setLocationLabel(buildCoordinateLocationLabel(latitude, longitude));
+        setLocationLabel(buildPlaceLabel(latitude, longitude));
         setGpsStatus(`Live GPS · ±${Math.round(accuracy)}m (address still resolving)`);
       }
     }
