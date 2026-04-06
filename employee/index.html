@@ -215,32 +215,6 @@
       </div>
     </div>
 
-    <div id="barangay-modal" class="modal hidden">
-      <div class="modal-card">
-        <div class="card-header">
-          <h3>Confirm Barangay</h3>
-          <button class="icon-btn" id="close-barangay-modal" aria-label="Close">&times;</button>
-        </div>
-        <p class="helper-text">Pick the exact barangay so the saved location is precise.</p>
-        <label class="input-field">
-          <span>Municipality</span>
-          <select id="barangay-municipality"></select>
-        </label>
-        <label class="input-field">
-          <span>Barangay</span>
-          <select id="barangay-select"></select>
-        </label>
-        <label class="input-field hidden" id="barangay-other-wrap">
-          <span>Other Barangay</span>
-          <input id="barangay-other" type="text" placeholder="Type barangay name" />
-        </label>
-        <div class="action-row">
-          <button class="primary-btn" type="button" id="save-barangay">Save</button>
-          <button class="ghost-btn" type="button" id="cancel-barangay">Cancel</button>
-        </div>
-      </div>
-    </div>
-
     <section id="employee-app" class="app-screen hidden">
       <header class="topbar">
         <div class="brand">
@@ -294,7 +268,6 @@
                   <div class="map-actions">
                     <button class="ghost-btn" id="refresh-location">Update</button>
                     <button class="ghost-btn" id="open-map-current">View Map</button>
-                    <button class="ghost-btn" id="open-barangay-dashboard">Confirm Barangay</button>
                   </div>
                 </div>
               <div class="gps-status" id="gps-status">Tap Update to allow location access.</div>
@@ -411,7 +384,6 @@
               <button class="ghost-btn" id="time-out" type="button">MARK TIME OUT</button>
             </div>
             <button class="ghost-btn full-width" id="gps-refresh" type="button">GET ACCURATE LOCATION (GPS)</button>
-            <button class="ghost-btn full-width" id="open-barangay" type="button">CONFIRM BARANGAY</button>
           </div>
         </section>
 

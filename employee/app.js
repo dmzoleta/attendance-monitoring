@@ -21,16 +21,6 @@ const statModalSubtitle = document.getElementById('stat-modal-subtitle');
 const statModalTable = document.getElementById('stat-modal-table');
 const statModalEmpty = document.getElementById('stat-modal-empty');
 const closeStatModalBtn = document.getElementById('close-stat-modal');
-const barangayModal = document.getElementById('barangay-modal');
-const openBarangayBtn = document.getElementById('open-barangay');
-const openBarangayDashboardBtn = document.getElementById('open-barangay-dashboard');
-const closeBarangayBtn = document.getElementById('close-barangay-modal');
-const cancelBarangayBtn = document.getElementById('cancel-barangay');
-const saveBarangayBtn = document.getElementById('save-barangay');
-const barangayMunicipality = document.getElementById('barangay-municipality');
-const barangaySelect = document.getElementById('barangay-select');
-const barangayOtherWrap = document.getElementById('barangay-other-wrap');
-const barangayOtherInput = document.getElementById('barangay-other');
 
 const empTime = document.getElementById('emp-time');
 const empDate = document.getElementById('emp-date');
@@ -106,77 +96,13 @@ let reportAttachmentName = '';
 let pendingOtpEmail = '';
 let autoRestoreAttempted = false;
 let lastAddress = '';
-let confirmedBarangay = null;
-let barangayPrompted = false;
 let attendanceAudioContext = null;
 let attendanceAudioPrimed = false;
 let attendanceRequestInFlight = false;
 let attendanceHtmlAudioPrimed = false;
 const attendanceHtmlAudio = { timein: null, timeout: null, error: null };
-const BARANGAY_STORAGE_KEY = 'confirmedBarangay';
-const BARANGAY_DATA = {
-  Marinduque: {
-    Boac: [
-      'Agot',
-      'Agumaymayan',
-      'Apitong',
-      'Balagasan',
-      'Balaring',
-      'Balimbing',
-      'Bamban',
-      'Bangbangalon',
-      'Boi',
-      'Boton',
-      'Buliasnin',
-      'Bunganay',
-      'Caganhao',
-      'Canat',
-      'Catubugan',
-      'Cawit',
-      'Daig',
-      'Daypay',
-      'Duyay',
-      'Hinapulan',
-      'Ihatub',
-      'Isok I',
-      'Isok II',
-      'Laylay',
-      'Lupac',
-      'Mahinhin',
-      'Mainit',
-      'Malbog',
-      'Maligaya',
-      'Malusak',
-      'Mansiwat',
-      'Mataas na Bayan',
-      'Maybo',
-      'Mercado',
-      'Murallon',
-      'Pawa',
-      'Pili',
-      'Poctoy',
-      'Poras',
-      'Puting Buhangin',
-      'San Miguel',
-      'Santol',
-      'Sawi',
-      'Tabigue',
-      'Tabi',
-      'Tagwak',
-      'Tambunan',
-      'Tampus',
-      'Tanza',
-      'Tugos',
-      'Tumagabok',
-      'Tumapon'
-    ],
-    Gasan: [],
-    Mogpog: [],
-    'Santa Cruz': [],
-    Buenavista: [],
-    Torrijos: []
-  }
-};
+const LOCATION_UNKNOWN_TEXT = 'Location unavailable';
+const LOCATION_DENIED_TEXT = 'Location permission denied';
 
 function getAttendanceAudioContext() {
   const AudioCtx = window.AudioContext || window.webkitAudioContext;
@@ -456,7 +382,6 @@ const isHostedCapacitorRuntime =
   !!runtimeOrigin &&
   !/^https?:\/\/(?:localhost|127(?:\.\d{1,3}){3}|10\.0\.2\.2)(?::\d+)?$/i.test(runtimeOrigin);
 lastAddress = localStorage.getItem('lastAddress') || '';
-loadConfirmedBarangay();
 
 function normalizeApiUrl(value) {
   const trimmed = String(value || '').trim();
@@ -519,94 +444,45 @@ function formatTime(date) {
   return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
 }
 
-function normalizeText(value) {
-  return String(value || '').trim().toLowerCase();
+function clearLocationCoordinates() {
+  locationLat.textContent = '--';
+  locationLng.textContent = '--';
+  if (locationAccuracy) locationAccuracy.textContent = '--';
 }
 
-function loadConfirmedBarangay() {
-  try {
-    const stored = localStorage.getItem(BARANGAY_STORAGE_KEY);
-    confirmedBarangay = stored ? JSON.parse(stored) : null;
-  } catch (err) {
-    confirmedBarangay = null;
-  }
+function setLocationLabel(label) {
+  const finalLabel = String(label || '').trim() || LOCATION_UNKNOWN_TEXT;
+  locationName.textContent = finalLabel;
+  empLocation.textContent = finalLabel;
 }
 
-function formatBarangayLabel(value) {
-  if (!value) return '';
-  return value.replace(/^brgy\.?\s+/i, 'Barangay ');
+function resetMapPreview() {
+  if (!mapPreview) return;
+  mapPreview.src = 'assets/map-placeholder.svg';
 }
 
-function formatConfirmedLocation(data) {
-  if (!data || !data.barangay) return '';
-  const barangay = formatBarangayLabel(data.barangay);
-  const municipality = data.municipality || 'Boac';
-  const province = data.province || 'Marinduque';
-  return `${barangay}, ${municipality}, ${province}, Philippines`;
+function setLocationDeniedState() {
+  clearLocationCoordinates();
+  setLocationLabel(LOCATION_DENIED_TEXT);
+  resetMapPreview();
+  setGpsStatus('Location denied. Attendance still works without GPS.');
 }
 
-function applyConfirmedLocation() {
-  if (!confirmedBarangay) return;
-  const label = formatConfirmedLocation(confirmedBarangay);
-  if (!label) return;
-  locationName.textContent = label;
-  empLocation.textContent = label;
-  lastAddress = label;
-  localStorage.setItem('lastAddress', label);
-}
-
-function addressContainsBarangay(address, barangay) {
-  if (!address || !barangay) return false;
-  const normalized = normalizeText(address);
-  const target = normalizeText(barangay);
-  return normalized.includes(target);
-}
-
-function applyConfirmedOverride(address) {
-  if (!confirmedBarangay) return address;
-  if (addressContainsBarangay(address, confirmedBarangay.barangay)) return address;
-  return formatConfirmedLocation(confirmedBarangay) || address;
-}
-
-function inferMunicipality(address) {
-  const normalized = normalizeText(address);
-  const options = Object.keys(BARANGAY_DATA.Marinduque || {});
-  const hit = options.find((name) => normalizeText(name) && normalized.includes(normalizeText(name)));
-  return hit || 'Boac';
-}
-
-function getBarangayList(municipality) {
-  const provinceData = BARANGAY_DATA.Marinduque || {};
-  return provinceData[municipality] || [];
-}
-
-function populateBarangaySelect(municipality) {
-  const list = getBarangayList(municipality);
-  barangaySelect.innerHTML = '';
-  const placeholder = document.createElement('option');
-  placeholder.value = '';
-  placeholder.textContent = list.length ? 'Select barangay' : 'Other (type below)';
-  barangaySelect.appendChild(placeholder);
-  list.forEach((name) => {
-    const opt = document.createElement('option');
-    opt.value = name;
-    opt.textContent = name;
-    barangaySelect.appendChild(opt);
-  });
-  const otherOpt = document.createElement('option');
-  otherOpt.value = '__other__';
-  otherOpt.textContent = 'Other (type below)';
-  barangaySelect.appendChild(otherOpt);
-  toggleBarangayOther();
-}
-
-function toggleBarangayOther() {
-  const selected = barangaySelect.value;
-  if (selected === '__other__' || !selected) {
-    barangayOtherWrap.classList.remove('hidden');
-  } else {
-    barangayOtherWrap.classList.add('hidden');
-  }
+function getAttendanceLocationPayload() {
+  const locationText = String(locationName.textContent || '').trim();
+  const latitude = normalizeCoordinate(locationLat.textContent);
+  const longitude = normalizeCoordinate(locationLng.textContent);
+  const hasLocationText =
+    !!locationText &&
+    locationText !== LOCATION_UNKNOWN_TEXT &&
+    locationText !== LOCATION_DENIED_TEXT;
+  return {
+    location: hasLocationText
+      ? locationText
+      : (locationText === LOCATION_DENIED_TEXT ? LOCATION_DENIED_TEXT : LOCATION_UNKNOWN_TEXT),
+    latitude,
+    longitude
+  };
 }
 
 function isoToday() {
@@ -1010,9 +886,6 @@ async function applyLocationUpdate(pos) {
   locationLat.textContent = latValue;
   locationLng.textContent = lngValue;
   if (locationAccuracy) locationAccuracy.textContent = `${Math.round(accuracy)} m`;
-  if (confirmedBarangay) {
-    applyConfirmedLocation();
-  }
 
   const now = Date.now();
   const moved = lastCoords ? distanceMeters(lastCoords, { lat: latitude, lng: longitude }) : 9999;
@@ -1033,8 +906,7 @@ async function applyLocationUpdate(pos) {
   if (accuracy > ADDRESS_ACCURACY_THRESHOLD || accuracyStreak < ADDRESS_STABLE_HITS) {
     const fallback = lastAddress || localStorage.getItem('lastAddress') || '';
     if (fallback) {
-      locationName.textContent = fallback;
-      empLocation.textContent = fallback;
+      setLocationLabel(fallback);
     }
     setGpsStatus(`Improving GPS accuracy · ±${Math.round(accuracy)}m (move outdoors)`);
     lastCoords = { lat: latitude, lng: longitude };
@@ -1046,37 +918,27 @@ async function applyLocationUpdate(pos) {
     try {
       const address = await reverseGeocode(latitude, longitude);
       if (address) {
-        const finalAddress = applyConfirmedOverride(address);
-        locationName.textContent = finalAddress;
-        empLocation.textContent = finalAddress;
-        lastAddress = finalAddress;
-        localStorage.setItem('lastAddress', finalAddress);
+        setLocationLabel(address);
+        lastAddress = address;
+        localStorage.setItem('lastAddress', address);
         setGpsStatus(`Live GPS · ±${Math.round(accuracy)}m`);
-        if (!confirmedBarangay && !barangayPrompted) {
-          barangayPrompted = true;
-          openBarangayModal();
-        }
       } else {
         const fallback = lastAddress || localStorage.getItem('lastAddress') || '';
         if (fallback && moved < 80) {
-          locationName.textContent = fallback;
-          empLocation.textContent = fallback;
+          setLocationLabel(fallback);
           setGpsStatus(`Live GPS · ±${Math.round(accuracy)}m`);
         } else {
-          locationName.textContent = 'Address unavailable';
-          empLocation.textContent = 'Address unavailable';
+          setLocationLabel(LOCATION_UNKNOWN_TEXT);
           setGpsStatus('Address unavailable. Live GPS continues.');
         }
       }
     } catch (err) {
       const fallback = lastAddress || localStorage.getItem('lastAddress') || '';
       if (fallback && moved < 80) {
-        locationName.textContent = fallback;
-        empLocation.textContent = fallback;
+        setLocationLabel(fallback);
         setGpsStatus(`Live GPS · ±${Math.round(accuracy)}m`);
       } else {
-        locationName.textContent = 'Address unavailable';
-        empLocation.textContent = 'Address unavailable';
+        setLocationLabel(LOCATION_UNKNOWN_TEXT);
         setGpsStatus('Address unavailable. Live GPS continues.');
       }
     }
@@ -1094,7 +956,8 @@ async function startGpsWatch() {
     if (nativeWatchId !== null) return;
     const ok = await ensureNativePermission();
     if (!ok) {
-      setGpsStatus('Location denied. Tap Update to allow.');
+      stopGpsWatch();
+      setLocationDeniedState();
       return;
     }
     setGpsStatus('Live GPS started. Waiting for signal…');
@@ -1127,7 +990,8 @@ async function startGpsWatch() {
     },
     (err) => {
       if (err && err.code === 1) {
-        setGpsStatus('Location denied. Tap Update to allow.');
+        stopGpsWatch();
+        setLocationDeniedState();
       } else {
         setGpsStatus('Unable to get GPS. Tap Update to retry.');
       }
@@ -1298,67 +1162,6 @@ function closeStatModal() {
   if (statModal) statModal.classList.add('hidden');
 }
 
-function openBarangayModal() {
-  if (!barangayModal) return;
-  const currentAddress = locationName.textContent || empLocation.textContent || '';
-  const municipality = confirmedBarangay && confirmedBarangay.municipality
-    ? confirmedBarangay.municipality
-    : inferMunicipality(currentAddress);
-  if (barangayMunicipality) {
-    barangayMunicipality.innerHTML = '';
-    const options = Object.keys(BARANGAY_DATA.Marinduque || {});
-    const extras = ['Other'];
-    const merged = [...new Set([...options, ...extras])];
-    merged.forEach((name) => {
-      const opt = document.createElement('option');
-      opt.value = name;
-      opt.textContent = name;
-      barangayMunicipality.appendChild(opt);
-    });
-    barangayMunicipality.value = municipality || 'Boac';
-  }
-  populateBarangaySelect(barangayMunicipality ? barangayMunicipality.value : 'Boac');
-  if (confirmedBarangay && confirmedBarangay.barangay) {
-    const match = Array.from(barangaySelect.options).find((opt) => opt.value === confirmedBarangay.barangay);
-    if (match) {
-      barangaySelect.value = confirmedBarangay.barangay;
-    } else {
-      barangaySelect.value = '__other__';
-      if (barangayOtherInput) barangayOtherInput.value = confirmedBarangay.barangay;
-    }
-    toggleBarangayOther();
-  }
-  barangayModal.classList.remove('hidden');
-}
-
-function closeBarangayModal() {
-  if (barangayModal) barangayModal.classList.add('hidden');
-}
-
-function handleBarangaySave() {
-  const municipality = barangayMunicipality ? barangayMunicipality.value : 'Boac';
-  let barangay = '';
-  if (barangaySelect && barangaySelect.value && barangaySelect.value !== '__other__') {
-    barangay = barangaySelect.value;
-  } else if (barangayOtherInput) {
-    barangay = barangayOtherInput.value.trim();
-  }
-  if (!barangay) {
-    alert('Please select or type your barangay.');
-    return;
-  }
-  confirmedBarangay = {
-    barangay,
-    municipality: municipality === 'Other' ? 'Boac' : municipality,
-    province: 'Marinduque',
-    confirmedAt: Date.now()
-  };
-  localStorage.setItem(BARANGAY_STORAGE_KEY, JSON.stringify(confirmedBarangay));
-  applyConfirmedLocation();
-  setGpsStatus('Barangay confirmed. Location saved.');
-  closeBarangayModal();
-}
-
 function getTodayAttendance() {
   const today = isoToday();
   return attendanceCache.find((item) => item.date === today) || null;
@@ -1443,8 +1246,8 @@ async function updateLocation() {
     setGpsStatus('Requesting location permission…');
     const ok = await ensureNativePermission();
     if (!ok) {
-      setGpsStatus('Location denied or unavailable. Tap Update to allow.');
-      alert('Please allow location access (Allow While Using) for accurate GPS.');
+      stopGpsWatch();
+      setLocationDeniedState();
       return;
     }
     try {
@@ -1463,7 +1266,9 @@ async function updateLocation() {
     return;
   }
   if (!navigator.geolocation) {
-    locationName.textContent = lastAddress || 'Address unavailable';
+    setLocationLabel(lastAddress || LOCATION_UNKNOWN_TEXT);
+    clearLocationCoordinates();
+    resetMapPreview();
     setGpsStatus('Geolocation not supported on this device.');
     return;
   }
@@ -1476,10 +1281,15 @@ async function updateLocation() {
       startGpsWatch();
     },
     (err) => {
-      setGpsStatus('Location denied or unavailable. Tap Update to allow.');
       if (err && err.code === 1) {
-        alert('Please allow location access (Allow While Using) for accurate GPS.');
+        stopGpsWatch();
+        setLocationDeniedState();
+        return;
       }
+      setGpsStatus('Location unavailable. Attendance still works without GPS.');
+      setLocationLabel(lastAddress || LOCATION_UNKNOWN_TEXT);
+      clearLocationCoordinates();
+      if (!lastAddress) resetMapPreview();
     },
     { enableHighAccuracy: true, timeout: 60000, maximumAge: 0 }
   );
@@ -1529,14 +1339,15 @@ async function markTimeIn() {
 
   attendanceRequestInFlight = true;
   setAttendanceButtonsLocked(true);
+  const locationPayload = getAttendanceLocationPayload();
   const payload = {
     employeeId: currentUser.id,
     timeIn: timeNow(),
     date: isoToday(),
     useServerTime: true,
-    location: locationName.textContent,
-    latitude: locationLat.textContent,
-    longitude: locationLng.textContent,
+    location: locationPayload.location,
+    latitude: locationPayload.latitude,
+    longitude: locationPayload.longitude,
     photo: photoData
   };
   try {
@@ -1572,14 +1383,15 @@ async function markTimeOut() {
 
   attendanceRequestInFlight = true;
   setAttendanceButtonsLocked(true);
+  const locationPayload = getAttendanceLocationPayload();
   const payload = {
     employeeId: currentUser.id,
     timeOut: timeNow(),
     date: isoToday(),
     useServerTime: true,
-    location: locationName.textContent,
-    latitude: locationLat.textContent,
-    longitude: locationLng.textContent,
+    location: locationPayload.location,
+    latitude: locationPayload.latitude,
+    longitude: locationPayload.longitude,
     photo: photoData
   };
   try {
@@ -2145,25 +1957,6 @@ if (statModal) {
     if (event.target === statModal) closeStatModal();
   });
 }
-
-if (openBarangayBtn) openBarangayBtn.addEventListener('click', openBarangayModal);
-if (openBarangayDashboardBtn) openBarangayDashboardBtn.addEventListener('click', openBarangayModal);
-if (closeBarangayBtn) closeBarangayBtn.addEventListener('click', closeBarangayModal);
-if (cancelBarangayBtn) cancelBarangayBtn.addEventListener('click', closeBarangayModal);
-if (saveBarangayBtn) saveBarangayBtn.addEventListener('click', handleBarangaySave);
-if (barangayMunicipality) {
-  barangayMunicipality.addEventListener('change', () => {
-    populateBarangaySelect(barangayMunicipality.value);
-  });
-}
-if (barangaySelect) barangaySelect.addEventListener('change', toggleBarangayOther);
-if (barangayModal) {
-  barangayModal.addEventListener('click', (event) => {
-    if (event.target === barangayModal) closeBarangayModal();
-  });
-}
-
-applyConfirmedLocation();
 
 setInterval(tickClock, 1000);
 
