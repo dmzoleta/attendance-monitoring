@@ -782,23 +782,80 @@ function getGoogleMapsKey() {
   return process.env.GOOGLE_MAPS_KEY || process.env.GMAPS_KEY || '';
 }
 
-function pickGoogleResult(results) {
+function toRadians(value) {
+  return (Number(value) * Math.PI) / 180;
+}
+
+function distanceMeters(a, b) {
+  if (!a || !b) return Number.POSITIVE_INFINITY;
+  const lat1 = Number(a.lat);
+  const lng1 = Number(a.lng);
+  const lat2 = Number(b.lat);
+  const lng2 = Number(b.lng);
+  if (![lat1, lng1, lat2, lng2].every(Number.isFinite)) return Number.POSITIVE_INFINITY;
+  const R = 6371000;
+  const dLat = toRadians(lat2 - lat1);
+  const dLng = toRadians(lng2 - lng1);
+  const s1 = Math.sin(dLat / 2);
+  const s2 = Math.sin(dLng / 2);
+  const aVal = s1 * s1 + Math.cos(toRadians(lat1)) * Math.cos(toRadians(lat2)) * s2 * s2;
+  return 2 * R * Math.asin(Math.sqrt(aVal));
+}
+
+function getGoogleTypeScore(types) {
+  if (!Array.isArray(types)) return 0;
+  const scoreMap = {
+    street_address: 9,
+    premise: 8,
+    subpremise: 7,
+    route: 6,
+    intersection: 5,
+    plus_code: 4,
+    neighborhood: 3,
+    sublocality_level_1: 3,
+    sublocality: 2,
+    locality: 1.5,
+    administrative_area_level_3: 1,
+    administrative_area_level_2: 0.5
+  };
+  return types.reduce((sum, type) => sum + (scoreMap[type] || 0), 0);
+}
+
+function getGoogleLocationTypeScore(value) {
+  const locationType = String(value || '').toUpperCase();
+  if (locationType === 'ROOFTOP') return 5;
+  if (locationType === 'RANGE_INTERPOLATED') return 3.5;
+  if (locationType === 'GEOMETRIC_CENTER') return 2;
+  if (locationType === 'APPROXIMATE') return 1;
+  return 0;
+}
+
+function pickGoogleResult(results, queryLat, queryLng) {
   if (!Array.isArray(results) || results.length === 0) return null;
-  const priorities = [
-    'street_address',
-    'premise',
-    'subpremise',
-    'route',
-    'intersection',
-    'neighborhood',
-    'sublocality',
-    'sublocality_level_1',
-    'locality',
-    'administrative_area_level_3',
-    'administrative_area_level_2'
-  ];
+  let best = null;
+  let bestScore = Number.NEGATIVE_INFINITY;
+  results.forEach((result, index) => {
+    if (!result) return;
+    const formatted = formatGoogleAddress(result);
+    const resultLat = Number(result?.geometry?.location?.lat);
+    const resultLng = Number(result?.geometry?.location?.lng);
+    const dist = distanceMeters({ lat: queryLat, lng: queryLng }, { lat: resultLat, lng: resultLng });
+    const distanceScore = Number.isFinite(dist) ? Math.max(0, 3000 - dist) / 300 : 0;
+    const score =
+      formatted.score +
+      getGoogleTypeScore(result.types) +
+      getGoogleLocationTypeScore(result?.geometry?.location_type) +
+      distanceScore -
+      index * 0.02;
+    if (score > bestScore) {
+      best = result;
+      bestScore = score;
+    }
+  });
+  if (best) return best;
+  const priorities = ['street_address', 'premise', 'subpremise', 'route', 'neighborhood', 'sublocality', 'locality'];
   for (const type of priorities) {
-    const found = results.find((result) => Array.isArray(result.types) && result.types.includes(type));
+    const found = results.find((result) => Array.isArray(result?.types) && result.types.includes(type));
     if (found) return found;
   }
   return results[0];
@@ -2155,13 +2212,25 @@ async function handleApi(req, res, pathname) {
     }
     const apiKey = getGoogleMapsKey();
     try {
+      let best = { address: '', score: 0 };
+      const osmUrl = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=19&addressdetails=1&namedetails=1`;
+      const osmRes = await fetch(osmUrl, { headers: { 'Accept-Language': 'en,fil;q=0.9' } });
+      if (osmRes.ok) {
+        const osmData = await osmRes.json();
+        const formatted = formatOsmAddress(osmData);
+        if (formatted.address) {
+          // Prefer OSM reverse result for exact coordinate lookups to avoid provider mismatch.
+          return sendJson(res, 200, { ok: true, address: formatted.address });
+        }
+      }
+
       if (apiKey) {
         const gUrl = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${apiKey}&language=en&region=PH`;
         const gRes = await fetch(gUrl);
         if (gRes.ok) {
           const gData = await gRes.json();
-          if (gData.results && gData.results.length) {
-            const picked = pickGoogleResult(gData.results);
+          if (Array.isArray(gData.results) && gData.results.length) {
+            const picked = pickGoogleResult(gData.results, lat, lng);
             if (picked) {
               const formatted = formatGoogleAddress(picked);
               if (formatted.address) {
@@ -2172,17 +2241,6 @@ async function handleApi(req, res, pathname) {
               }
             }
           }
-        }
-      }
-      let best = { address: '', score: 0 };
-      const osmUrl = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=19&addressdetails=1&namedetails=1`;
-      const osmRes = await fetch(osmUrl, { headers: { 'Accept-Language': 'en,fil;q=0.9' } });
-      if (osmRes.ok) {
-        const osmData = await osmRes.json();
-        const formatted = formatOsmAddress(osmData);
-        if (formatted.address) {
-          // Prefer OSM reverse result for exact coordinate lookups to avoid provider mismatch.
-          return sendJson(res, 200, { ok: true, address: formatted.address });
         }
       }
 

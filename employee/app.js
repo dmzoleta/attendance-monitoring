@@ -101,6 +101,7 @@ let reportAttachmentName = '';
 let pendingOtpEmail = '';
 let autoRestoreAttempted = false;
 let lastAddress = '';
+let lastAddressCoords = null;
 let locationDeniedByUserChoice = false;
 let attendanceAudioContext = null;
 let attendanceAudioPrimed = false;
@@ -387,7 +388,8 @@ const isHostedCapacitorRuntime =
   isCapacitor &&
   !!runtimeOrigin &&
   !/^https?:\/\/(?:localhost|127(?:\.\d{1,3}){3}|10\.0\.2\.2)(?::\d+)?$/i.test(runtimeOrigin);
-lastAddress = localStorage.getItem('lastAddress') || '';
+lastAddress = '';
+lastAddressCoords = null;
 
 function normalizeApiUrl(value) {
   const trimmed = String(value || '').trim();
@@ -475,14 +477,11 @@ function setLocationDeniedState() {
 }
 
 function setLocationUnavailableState(message = '') {
-  const fallback = lastAddress || localStorage.getItem('lastAddress') || '';
-  if (fallback) {
-    setLocationLabel(fallback);
-  } else {
+  if (!hasActiveGpsFix()) {
     setLocationLabel(LOCATION_UNKNOWN_TEXT);
     resetMapPreview();
+    clearLocationCoordinates();
   }
-  clearLocationCoordinates();
   setGpsStatus(
     message || 'Location temporarily unavailable. Tap GET ACCURATE LOCATION (GPS) to retry.'
   );
@@ -522,13 +521,8 @@ function handleGpsConsentDeny() {
 }
 
 function initializeLocationState() {
-  const fallback = lastAddress || localStorage.getItem('lastAddress') || '';
-  if (fallback) {
-    setLocationLabel(fallback);
-  } else {
-    setLocationLabel(LOCATION_UNKNOWN_TEXT);
-    resetMapPreview();
-  }
+  setLocationLabel(LOCATION_UNKNOWN_TEXT);
+  resetMapPreview();
   locationDeniedByUserChoice = false;
   clearLocationCoordinates();
   setGpsStatus('Tap GET ACCURATE LOCATION (GPS) to request location permission.');
@@ -875,6 +869,18 @@ function buildPlaceLabel(lat, lng, address = '') {
   return `${cleanAddress} (${coordinateLabel})`;
 }
 
+function getNearbyAddressFallback(lat, lng, maxDistanceMeters = 15) {
+  if (!lastAddress || !lastAddressCoords) return '';
+  const latNum = Number(lat);
+  const lngNum = Number(lng);
+  if (!Number.isFinite(latNum) || !Number.isFinite(lngNum)) return '';
+  const moved = distanceMeters(
+    { lat: latNum, lng: lngNum },
+    { lat: Number(lastAddressCoords.lat), lng: Number(lastAddressCoords.lng) }
+  );
+  return moved <= maxDistanceMeters ? lastAddress : '';
+}
+
 function getCapacitorGeo() {
   if (typeof window === 'undefined') return null;
   if (!window.Capacitor || !window.Capacitor.Plugins) return null;
@@ -1105,7 +1111,8 @@ async function applyLocationUpdate(pos) {
     !currentLabel ||
     currentLabel === LOCATION_UNKNOWN_TEXT ||
     currentLabel === LOCATION_DENIED_TEXT ||
-    /^Lat\s+-?\d/.test(currentLabel);
+    /^Pinned map location \(/i.test(currentLabel) ||
+    /^-?\d+(?:\.\d+)?,\s*-?\d+(?:\.\d+)?$/.test(currentLabel);
   const shouldTryAddress = forceRefresh || shouldUpdateAddress || needsAddressNow;
 
   if (accuracy > ADDRESS_ACCURACY_THRESHOLD || accuracyStreak < ADDRESS_STABLE_HITS) {
@@ -1115,19 +1122,19 @@ async function applyLocationUpdate(pos) {
         if (address) {
           setLocationLabel(buildPlaceLabel(latitude, longitude, address));
           lastAddress = address;
-          localStorage.setItem('lastAddress', address);
+          lastAddressCoords = { lat: latitude, lng: longitude };
         } else {
-          const fallback = forceRefresh ? '' : (lastAddress || localStorage.getItem('lastAddress') || '');
+          const fallback = forceRefresh ? '' : getNearbyAddressFallback(latitude, longitude);
           setLocationLabel(buildPlaceLabel(latitude, longitude, fallback));
         }
       } catch (err) {
-        const fallback = forceRefresh ? '' : (lastAddress || localStorage.getItem('lastAddress') || '');
+        const fallback = forceRefresh ? '' : getNearbyAddressFallback(latitude, longitude);
         setLocationLabel(buildPlaceLabel(latitude, longitude, fallback));
       }
       lastAddressAt = now;
     } else {
-      const fallback = lastAddress || localStorage.getItem('lastAddress') || '';
-      if (fallback) setLocationLabel(buildPlaceLabel(latitude, longitude, fallback));
+      const fallback = getNearbyAddressFallback(latitude, longitude);
+      setLocationLabel(buildPlaceLabel(latitude, longitude, fallback));
     }
     setGpsStatus(`Improving GPS accuracy · ±${Math.round(accuracy)}m (move outdoors)`);
     lastCoords = { lat: latitude, lng: longitude };
@@ -1141,11 +1148,11 @@ async function applyLocationUpdate(pos) {
       if (address) {
         setLocationLabel(buildPlaceLabel(latitude, longitude, address));
         lastAddress = address;
-        localStorage.setItem('lastAddress', address);
+        lastAddressCoords = { lat: latitude, lng: longitude };
         setGpsStatus(`Live GPS · ±${Math.round(accuracy)}m`);
       } else {
-        const fallback = lastAddress || localStorage.getItem('lastAddress') || '';
-        if (fallback && moved < 80) {
+        const fallback = getNearbyAddressFallback(latitude, longitude);
+        if (fallback) {
           setLocationLabel(buildPlaceLabel(latitude, longitude, fallback));
           setGpsStatus(`Live GPS · ±${Math.round(accuracy)}m`);
         } else {
@@ -1154,8 +1161,8 @@ async function applyLocationUpdate(pos) {
         }
       }
     } catch (err) {
-      const fallback = lastAddress || localStorage.getItem('lastAddress') || '';
-      if (fallback && moved < 80) {
+      const fallback = getNearbyAddressFallback(latitude, longitude);
+      if (fallback) {
         setLocationLabel(buildPlaceLabel(latitude, longitude, fallback));
         setGpsStatus(`Live GPS · ±${Math.round(accuracy)}m`);
       } else {
@@ -1557,7 +1564,7 @@ async function updateLocation() {
     return;
   }
   if (!navigator.geolocation) {
-    setLocationLabel(lastAddress || LOCATION_UNKNOWN_TEXT);
+    setLocationLabel(LOCATION_UNKNOWN_TEXT);
     clearLocationCoordinates();
     resetMapPreview();
     setGpsStatus('Geolocation not supported on this device.');
@@ -1600,9 +1607,9 @@ async function updateLocation() {
       return;
     }
     setGpsStatus('Location unavailable. Attendance still works without GPS.');
-    setLocationLabel(lastAddress || LOCATION_UNKNOWN_TEXT);
+    setLocationLabel(LOCATION_UNKNOWN_TEXT);
     clearLocationCoordinates();
-    if (!lastAddress) resetMapPreview();
+    resetMapPreview();
   }
 }
 
