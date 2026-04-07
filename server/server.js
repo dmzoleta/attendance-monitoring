@@ -1165,6 +1165,93 @@ function buildBoundaryAddress(boundary, fallbackAddress = '') {
   return String(fallbackAddress || '').trim();
 }
 
+function getPlaceTypeScore(placeTag) {
+  const tag = String(placeTag || '').toLowerCase();
+  if (tag === 'neighbourhood') return 4.5;
+  if (tag === 'suburb') return 4.2;
+  if (tag === 'quarter') return 4;
+  if (tag === 'village') return 3.2;
+  if (tag === 'hamlet') return 2.8;
+  if (tag === 'locality') return 2.4;
+  return 1.8;
+}
+
+function getElementLatLng(element) {
+  if (!element || typeof element !== 'object') return { lat: NaN, lng: NaN };
+  const lat = Number(element.lat ?? element?.center?.lat);
+  const lng = Number(element.lon ?? element?.center?.lon);
+  return { lat, lng };
+}
+
+function parseOverpassNearbyPlaceCandidate(elements, queryLat, queryLng, boundaryContext = null) {
+  if (!Array.isArray(elements) || !elements.length) return null;
+  let best = null;
+  let bestScore = Number.NEGATIVE_INFINITY;
+  elements.forEach((element) => {
+    const tags = element && element.tags ? element.tags : null;
+    const name = String(tags && tags.name ? tags.name : '').trim();
+    if (!name) return;
+    const { lat, lng } = getElementLatLng(element);
+    const dist = distanceMeters({ lat: queryLat, lng: queryLng }, { lat, lng });
+    const placeType = String(tags && tags.place ? tags.place : '').trim();
+    const base = getPlaceTypeScore(placeType) + getDistanceCalibrationScore(dist) + 1.7;
+    const score = base;
+    if (score > bestScore) {
+      bestScore = score;
+      best = { name, placeType, lat, lng, distanceMeters: Number.isFinite(dist) ? dist : null };
+    }
+  });
+  if (!best || !best.name) return null;
+  const address = buildBoundaryAddress(
+    {
+      barangay: best.name,
+      municipality: (boundaryContext && boundaryContext.municipality) || 'Boac',
+      province: (boundaryContext && boundaryContext.province) || 'Marinduque',
+      country: (boundaryContext && boundaryContext.country) || 'Philippines'
+    },
+    best.name
+  );
+  return createAddressCandidate({
+    source: 'overpass-place',
+    address,
+    baseScore: bestScore,
+    providerBoost: 2.6,
+    queryLat,
+    queryLng,
+    resultLat: best.lat,
+    resultLng: best.lng
+  });
+}
+
+async function fetchOverpassNearbyPlaceCandidate(lat, lng, boundaryContext = null) {
+  const endpoint = 'https://overpass-api.de/api/interpreter';
+  const query = `[out:json][timeout:8];
+(
+  node(around:800,${lat},${lng})["place"~"neighbourhood|suburb|quarter|village|hamlet|locality"];
+  way(around:800,${lat},${lng})["place"~"neighbourhood|suburb|quarter|village|hamlet|locality"];
+  relation(around:800,${lat},${lng})["place"~"neighbourhood|suburb|quarter|village|hamlet|locality"];
+);
+out center tags 40;`;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 4500);
+  try {
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+      body: `data=${encodeURIComponent(query)}`,
+      signal: controller.signal
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const elements = Array.isArray(data && data.elements) ? data.elements : [];
+    return parseOverpassNearbyPlaceCandidate(elements, lat, lng, boundaryContext);
+  } catch (err) {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 function canSeed() {
   return String(process.env.ALLOW_SEED || '').toLowerCase() === 'true';
 }
@@ -2454,6 +2541,8 @@ async function handleApi(req, res, pathname) {
     try {
       const candidates = [];
       const boundaryContext = await fetchOverpassBoundaryContext(lat, lng);
+      const nearbyPlaceCandidate = await fetchOverpassNearbyPlaceCandidate(lat, lng, boundaryContext);
+      if (nearbyPlaceCandidate) candidates.push(nearbyPlaceCandidate);
       const osmUrl = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=19&addressdetails=1&namedetails=1`;
       const osmRes = await fetch(osmUrl, { headers: { 'Accept-Language': 'en,fil;q=0.9' } });
       if (osmRes.ok) {
