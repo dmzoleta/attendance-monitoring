@@ -119,6 +119,11 @@ body::before {
   align-items: center;
 }
 
+.password-row input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
 .primary-btn {
   width: 100%;
   border: none;
@@ -244,6 +249,7 @@ body::before {
 }
 
 .login-screen .password-row .icon-btn,
+.modal-card .password-row .icon-btn,
 .modal-card .card-header .icon-btn {
   background: #eef3ff;
   color: var(--navy);
@@ -260,6 +266,7 @@ body::before {
 }
 
 .login-screen .password-row .icon-btn:hover,
+.modal-card .password-row .icon-btn:hover,
 .modal-card .card-header .icon-btn:hover {
   background: #e2ebff;
   transform: translateY(-1px);

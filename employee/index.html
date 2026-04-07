@@ -16,7 +16,7 @@
   <link id="employee-apple-touch-icon" rel="apple-touch-icon" href="assets/apple-touch-icon.png" />
   <link id="employee-stylesheet" rel="stylesheet" href="styles.css" />
   <script>
-    window.APP_BUILD = '20260407-wfh-system-name-1';
+    window.APP_BUILD = '20260407-password-visibility-1';
     (function applyEmployeeAssetStamp() {
       var build = window.APP_BUILD || 'dev';
       var stamp = build + '-' + Date.now().toString(36);
@@ -116,7 +116,10 @@
           </label>
           <label class="input-field">
             <span>Password</span>
-            <input type="password" name="password" required />
+            <div class="password-row">
+              <input type="password" name="password" required />
+              <button type="button" class="icon-btn" data-toggle="password" aria-label="Show password">👁</button>
+            </div>
           </label>
           <div class="action-row">
             <button class="primary-btn" type="submit">Register</button>
@@ -139,7 +142,10 @@
           </label>
           <label class="input-field">
             <span>New Password</span>
-            <input type="password" name="newPassword" required />
+            <div class="password-row">
+              <input type="password" name="newPassword" required />
+              <button type="button" class="icon-btn" data-toggle="password" aria-label="Show password">👁</button>
+            </div>
           </label>
           <div class="action-row">
             <button class="primary-btn" type="submit">Update Password</button>
