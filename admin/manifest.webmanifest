@@ -1,7 +1,7 @@
 {
   "name": "SDO Marinduque Admin",
   "short_name": "SDO Admin",
-  "description": "SDO Marinduque Attendance Admin Portal",
+  "description": "SDO Marinduque WFH ATTENDANCE RECORDING SYSTEM Admin Portal",
   "start_url": "/admin/",
   "scope": "/admin/",
   "display": "standalone",

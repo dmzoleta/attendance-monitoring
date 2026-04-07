@@ -1,7 +1,7 @@
 {
   "name": "SDO Marinduque Attendance",
   "short_name": "SDO Attendance",
-  "description": "SDO Marinduque Attendance Monitoring System",
+  "description": "SDO Marinduque WFH ATTENDANCE RECORDING SYSTEM",
   "start_url": "/employee/",
   "scope": "/employee/",
   "display": "standalone",
