@@ -847,7 +847,7 @@ function buildCoordinateLocationLabel(lat, lng) {
   const latNum = Number(lat);
   const lngNum = Number(lng);
   if (!Number.isFinite(latNum) || !Number.isFinite(lngNum)) return LOCATION_UNKNOWN_TEXT;
-  return `${latNum.toFixed(5)}, ${lngNum.toFixed(5)}`;
+  return `${latNum.toFixed(6)}, ${lngNum.toFixed(6)}`;
 }
 
 function buildPlaceLabel(lat, lng, address = '') {
@@ -1078,8 +1078,8 @@ async function applyLocationUpdate(pos) {
   const { latitude, longitude, accuracy } = pos.coords;
   const forceRefresh = forceAddressRefresh;
   forceAddressRefresh = false;
-  const latValue = latitude.toFixed(5);
-  const lngValue = longitude.toFixed(5);
+  const latValue = latitude.toFixed(6);
+  const lngValue = longitude.toFixed(6);
   locationLat.textContent = latValue;
   locationLng.textContent = lngValue;
   if (locationAccuracy) locationAccuracy.textContent = `${Math.round(accuracy)} m`;

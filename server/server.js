@@ -1013,6 +1013,77 @@ function formatBigDataCloud(data) {
   return { address, score: scoreAddressParts(parts) };
 }
 
+function getDistanceCalibrationScore(distance) {
+  if (!Number.isFinite(distance)) return 0;
+  if (distance <= 8) return 4;
+  if (distance <= 15) return 3.5;
+  if (distance <= 30) return 3;
+  if (distance <= 60) return 2;
+  if (distance <= 120) return 1;
+  if (distance <= 250) return 0.2;
+  if (distance <= 500) return -1.5;
+  return -3;
+}
+
+function normalizeAddressKey(value) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ');
+}
+
+function createAddressCandidate({
+  source,
+  address,
+  baseScore = 0,
+  providerBoost = 0,
+  queryLat,
+  queryLng,
+  resultLat,
+  resultLng
+}) {
+  const cleanAddress = String(address || '').trim();
+  if (!cleanAddress) return null;
+  const distance = distanceMeters(
+    { lat: queryLat, lng: queryLng },
+    { lat: Number(resultLat), lng: Number(resultLng) }
+  );
+  return {
+    source: String(source || 'unknown'),
+    address: cleanAddress,
+    distanceMeters: Number.isFinite(distance) ? distance : null,
+    score: Number(baseScore || 0) + Number(providerBoost || 0) + getDistanceCalibrationScore(distance)
+  };
+}
+
+function pickBestAddressCandidate(candidates) {
+  if (!Array.isArray(candidates) || !candidates.length) return null;
+  const deduped = new Map();
+  candidates.forEach((candidate) => {
+    if (!candidate || !candidate.address) return;
+    const key = normalizeAddressKey(candidate.address);
+    if (!key) return;
+    const existing = deduped.get(key);
+    if (!existing) {
+      deduped.set(key, candidate);
+      return;
+    }
+    const existingDistance = Number.isFinite(existing.distanceMeters) ? existing.distanceMeters : Number.POSITIVE_INFINITY;
+    const candidateDistance = Number.isFinite(candidate.distanceMeters) ? candidate.distanceMeters : Number.POSITIVE_INFINITY;
+    if (candidate.score > existing.score || (candidate.score === existing.score && candidateDistance < existingDistance)) {
+      deduped.set(key, candidate);
+    }
+  });
+  const list = [...deduped.values()];
+  list.sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score;
+    const aDistance = Number.isFinite(a.distanceMeters) ? a.distanceMeters : Number.POSITIVE_INFINITY;
+    const bDistance = Number.isFinite(b.distanceMeters) ? b.distanceMeters : Number.POSITIVE_INFINITY;
+    return aDistance - bDistance;
+  });
+  return list[0] || null;
+}
+
 function canSeed() {
   return String(process.env.ALLOW_SEED || '').toLowerCase() === 'true';
 }
@@ -2300,15 +2371,24 @@ async function handleApi(req, res, pathname) {
     }
     const apiKey = getGoogleMapsKey();
     try {
-      let best = { address: '', score: 0 };
+      const candidates = [];
       const osmUrl = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=19&addressdetails=1&namedetails=1`;
       const osmRes = await fetch(osmUrl, { headers: { 'Accept-Language': 'en,fil;q=0.9' } });
       if (osmRes.ok) {
         const osmData = await osmRes.json();
         const formatted = formatOsmAddress(osmData);
         if (formatted.address) {
-          // Prefer OSM reverse result for exact coordinate lookups to avoid provider mismatch.
-          return sendJson(res, 200, { ok: true, address: formatted.address });
+          const candidate = createAddressCandidate({
+            source: 'osm',
+            address: formatted.address,
+            baseScore: formatted.score,
+            providerBoost: 1.4,
+            queryLat: lat,
+            queryLng: lng,
+            resultLat: Number(osmData?.lat),
+            resultLng: Number(osmData?.lon)
+          });
+          if (candidate) candidates.push(candidate);
         }
       }
 
@@ -2321,13 +2401,41 @@ async function handleApi(req, res, pathname) {
             const picked = pickGoogleResult(gData.results, lat, lng);
             if (picked) {
               const formatted = formatGoogleAddress(picked);
-              if (formatted.address) {
-                return sendJson(res, 200, { ok: true, address: formatted.address });
-              }
-              if (picked.formatted_address) {
-                return sendJson(res, 200, { ok: true, address: picked.formatted_address });
-              }
+              const candidate = createAddressCandidate({
+                source: 'google',
+                address: formatted.address || picked.formatted_address || '',
+                baseScore:
+                  (formatted.address ? formatted.score : 2) +
+                  getGoogleTypeScore(picked.types) +
+                  getGoogleLocationTypeScore(picked?.geometry?.location_type),
+                providerBoost: 3.2,
+                queryLat: lat,
+                queryLng: lng,
+                resultLat: Number(picked?.geometry?.location?.lat),
+                resultLng: Number(picked?.geometry?.location?.lng)
+              });
+              if (candidate) candidates.push(candidate);
             }
+
+            gData.results.slice(0, 4).forEach((result, index) => {
+              if (!result || result === picked) return;
+              const formatted = formatGoogleAddress(result);
+              const candidate = createAddressCandidate({
+                source: 'google',
+                address: formatted.address || result.formatted_address || '',
+                baseScore:
+                  (formatted.address ? formatted.score : 1.2) +
+                  getGoogleTypeScore(result.types) +
+                  getGoogleLocationTypeScore(result?.geometry?.location_type) -
+                  index * 0.15,
+                providerBoost: 2.1,
+                queryLat: lat,
+                queryLng: lng,
+                resultLat: Number(result?.geometry?.location?.lat),
+                resultLng: Number(result?.geometry?.location?.lng)
+              });
+              if (candidate) candidates.push(candidate);
+            });
           }
         }
       }
@@ -2337,11 +2445,20 @@ async function handleApi(req, res, pathname) {
       if (photonRes.ok) {
         const photonData = await photonRes.json();
         const features = Array.isArray(photonData.features) ? photonData.features : [];
-        features.forEach((feature) => {
+        features.forEach((feature, index) => {
           const formatted = formatPhotonFeature(feature);
-          if (formatted.address && formatted.score > best.score) {
-            best = formatted;
-          }
+          const coords = Array.isArray(feature?.geometry?.coordinates) ? feature.geometry.coordinates : [];
+          const candidate = createAddressCandidate({
+            source: 'photon',
+            address: formatted.address,
+            baseScore: formatted.score - index * 0.12,
+            providerBoost: 0.9,
+            queryLat: lat,
+            queryLng: lng,
+            resultLat: Number(coords[1]),
+            resultLng: Number(coords[0])
+          });
+          if (candidate) candidates.push(candidate);
         });
       }
 
@@ -2350,13 +2467,36 @@ async function handleApi(req, res, pathname) {
       if (bdcRes.ok) {
         const bdcData = await bdcRes.json();
         const formatted = formatBigDataCloud(bdcData);
-        if (formatted.address && formatted.score > best.score) {
-          best = formatted;
-        }
+        const candidate = createAddressCandidate({
+          source: 'bigdatacloud',
+          address: formatted.address,
+          baseScore: formatted.score,
+          providerBoost: 0.6,
+          queryLat: lat,
+          queryLng: lng,
+          resultLat: Number(bdcData?.latitude || lat),
+          resultLng: Number(bdcData?.longitude || lng)
+        });
+        if (candidate) candidates.push(candidate);
       }
 
-      if (best.address) {
-        return sendJson(res, 200, { ok: true, address: best.address });
+      const best = pickBestAddressCandidate(candidates);
+      if (best && best.address) {
+        return sendJson(res, 200, {
+          ok: true,
+          address: best.address,
+          source: best.source,
+          distanceMeters: Number.isFinite(best.distanceMeters) ? Math.round(best.distanceMeters) : null
+        });
+      }
+
+      // Fallback: ensure we still return a deterministic coordinate-based place label.
+      if (Number.isFinite(lat) && Number.isFinite(lng)) {
+        return sendJson(res, 200, {
+          ok: false,
+          address: `${lat.toFixed(5)}, ${lng.toFixed(5)}`,
+          message: 'Address unavailable. Showing coordinate label.'
+        });
       }
 
       return sendJson(res, 200, { ok: false, address: '', message: 'Address unavailable.' });
