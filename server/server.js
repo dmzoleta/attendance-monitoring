@@ -63,6 +63,10 @@ const HOME_DB_MIRROR_FALLBACK =
 const DB_MIRROR_PATH = resolveDataPath(ENV_DB_MIRROR_PATH, HOSTINGER_DB_MIRROR_FALLBACK || HOME_DB_MIRROR_FALLBACK);
 const DB_MIRROR_BACKUP_PATH = DB_MIRROR_PATH ? `${DB_MIRROR_PATH}.bak` : '';
 const DB_MIRROR_DIR = DB_MIRROR_PATH ? path.dirname(DB_MIRROR_PATH) : '';
+const DB_BACKUP_MIN_INTERVAL_MS = Math.max(0, Number(process.env.DB_BACKUP_MIN_INTERVAL_MS || 60000));
+
+const REVERSE_GEOCODE_CACHE_TTL_MS = Math.max(0, Number(process.env.REVERSE_GEOCODE_CACHE_TTL_MS || 5 * 60 * 1000));
+const REVERSE_GEOCODE_CACHE_LIMIT = Math.max(50, Number(process.env.REVERSE_GEOCODE_CACHE_LIMIT || 2000));
 
 const DEFAULT_DB = {
   admins: [
@@ -339,6 +343,10 @@ let lastDbWriteWarning = '';
 let lastDbWriteAttemptAt = 0;
 let lastDbWriteOkAt = 0;
 let lastDbLoadSource = '';
+const dbBackupLastAt = new Map();
+
+const reverseGeocodeCache = new Map();
+const reverseGeocodeInflight = new Map();
 
 function normalizeDb(db) {
   const safe = db && typeof db === 'object' ? db : {};
@@ -388,17 +396,32 @@ function ensureDirExists(dirPath) {
   if (!fs.existsSync(dirPath)) fs.mkdirSync(dirPath, { recursive: true });
 }
 
+function shouldWriteBackup(backupPath) {
+  if (!backupPath) return false;
+  if (!fs.existsSync(backupPath)) {
+    dbBackupLastAt.set(backupPath, Date.now());
+    return true;
+  }
+  const lastAt = Number(dbBackupLastAt.get(backupPath) || 0);
+  const now = Date.now();
+  if (now - lastAt >= DB_BACKUP_MIN_INTERVAL_MS) {
+    dbBackupLastAt.set(backupPath, now);
+    return true;
+  }
+  return false;
+}
+
 function writeDbFileWithBackup(filePath, backupPath, db) {
   const dirPath = path.dirname(filePath);
   ensureDirExists(dirPath);
-  if (fs.existsSync(filePath)) {
+  fs.writeFileSync(filePath, JSON.stringify(db), 'utf8');
+  if (shouldWriteBackup(backupPath)) {
     try {
       fs.copyFileSync(filePath, backupPath);
     } catch (err) {
       // Ignore backup copy failures; main write still proceeds.
     }
   }
-  fs.writeFileSync(filePath, JSON.stringify(db, null, 2), 'utf8');
 }
 
 function readDb() {
@@ -1296,6 +1319,178 @@ function buildBoundaryAddress(boundary, fallbackAddress = '') {
   add(boundary.country || 'Philippines');
   if (parts.length) return parts.join(', ');
   return String(fallbackAddress || '').trim();
+}
+
+function roundCoordinate(value, precision = 4) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return '';
+  return numeric.toFixed(precision);
+}
+
+function getReverseGeocodeCacheKey(lat, lng, precision = 4) {
+  const latKey = roundCoordinate(lat, precision);
+  const lngKey = roundCoordinate(lng, precision);
+  if (!latKey || !lngKey) return '';
+  return `${latKey},${lngKey}`;
+}
+
+function pruneReverseGeocodeCache() {
+  if (reverseGeocodeCache.size <= REVERSE_GEOCODE_CACHE_LIMIT) return;
+  const entries = [...reverseGeocodeCache.entries()];
+  entries.sort((a, b) => Number(a[1]?.expiresAt || 0) - Number(b[1]?.expiresAt || 0));
+  const overflow = reverseGeocodeCache.size - REVERSE_GEOCODE_CACHE_LIMIT;
+  for (let i = 0; i < overflow; i += 1) {
+    reverseGeocodeCache.delete(entries[i][0]);
+  }
+}
+
+function getCachedReverseGeocode(lat, lng) {
+  const key = getReverseGeocodeCacheKey(lat, lng, 4);
+  if (!key) return null;
+  const item = reverseGeocodeCache.get(key);
+  if (!item) return null;
+  if (Number(item.expiresAt || 0) <= Date.now()) {
+    reverseGeocodeCache.delete(key);
+    return null;
+  }
+  return item.payload || null;
+}
+
+function setCachedReverseGeocode(lat, lng, payload) {
+  const key = getReverseGeocodeCacheKey(lat, lng, 4);
+  if (!key || !payload) return;
+  reverseGeocodeCache.set(key, {
+    payload,
+    expiresAt: Date.now() + REVERSE_GEOCODE_CACHE_TTL_MS
+  });
+  pruneReverseGeocodeCache();
+}
+
+async function fetchJsonWithTimeout(resourceUrl, options = {}, timeoutMs = 3500) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(resourceUrl, { ...options, signal: controller.signal });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch (err) {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function resolveReverseGeocodeAddress(lat, lng) {
+  const candidates = [];
+  const apiKey = getGoogleMapsKey();
+
+  const immediateLocal = findNearestMarinduqueBarangayCandidate(lat, lng, null);
+  if (immediateLocal && Number.isFinite(immediateLocal.distanceMeters) && immediateLocal.distanceMeters <= 220) {
+    const payload = {
+      ok: true,
+      address: immediateLocal.address,
+      source: immediateLocal.source,
+      distanceMeters: Math.round(immediateLocal.distanceMeters),
+      boundaryBarangay: immediateLocal.barangay || ''
+    };
+    setCachedReverseGeocode(lat, lng, payload);
+    return payload;
+  }
+
+  const boundaryContext = await fetchOverpassBoundaryContext(lat, lng);
+  const localBarangayCandidate = findNearestMarinduqueBarangayCandidate(lat, lng, boundaryContext);
+  if (localBarangayCandidate) candidates.push(localBarangayCandidate);
+
+  const osmUrl = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=19&addressdetails=1&namedetails=1`;
+  const osmData = await fetchJsonWithTimeout(
+    osmUrl,
+    { headers: { 'Accept-Language': 'en,fil;q=0.9' } },
+    3200
+  );
+  if (osmData) {
+    const formatted = formatOsmAddress(osmData);
+    if (formatted.address) {
+      const candidate = createAddressCandidate({
+        source: 'osm',
+        address: formatted.address,
+        baseScore: formatted.score,
+        providerBoost: 1.6,
+        queryLat: lat,
+        queryLng: lng,
+        resultLat: Number(osmData?.lat),
+        resultLng: Number(osmData?.lon)
+      });
+      if (candidate) candidates.push(candidate);
+    }
+  }
+
+  if (apiKey && candidates.length < 2) {
+    const gUrl = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${apiKey}&language=en&region=PH`;
+    const gData = await fetchJsonWithTimeout(gUrl, {}, 3200);
+    if (gData && Array.isArray(gData.results) && gData.results.length) {
+      const picked = pickGoogleResult(gData.results, lat, lng);
+      if (picked) {
+        const formatted = formatGoogleAddress(picked);
+        const candidate = createAddressCandidate({
+          source: 'google',
+          address: formatted.address || picked.formatted_address || '',
+          baseScore:
+            (formatted.address ? formatted.score : 2) +
+            getGoogleTypeScore(picked.types) +
+            getGoogleLocationTypeScore(picked?.geometry?.location_type),
+          providerBoost: 2.8,
+          queryLat: lat,
+          queryLng: lng,
+          resultLat: Number(picked?.geometry?.location?.lat),
+          resultLng: Number(picked?.geometry?.location?.lng)
+        });
+        if (candidate) candidates.push(candidate);
+      }
+    }
+  }
+
+  if (boundaryContext) {
+    candidates.forEach((candidate) => {
+      candidate.score += getBoundaryBoost(candidate.address, boundaryContext);
+    });
+  }
+
+  const best = pickBestAddressCandidate(candidates);
+  if (best && best.address) {
+    const effectiveBoundary = {
+      barangay: best.barangay || (boundaryContext && boundaryContext.barangay) || '',
+      municipality: best.municipality || (boundaryContext && boundaryContext.municipality) || '',
+      province: best.province || (boundaryContext && boundaryContext.province) || 'Marinduque',
+      country: (boundaryContext && boundaryContext.country) || 'Philippines'
+    };
+    const bestAddressKey = normalizeAddressKey(best.address);
+    const barangayKey = normalizeAddressKey(effectiveBoundary.barangay || '');
+    const shouldForceBoundary =
+      !!barangayKey &&
+      !bestAddressKey.includes(barangayKey) &&
+      Number.isFinite(best.distanceMeters) &&
+      best.distanceMeters <= 120;
+    const finalAddress = shouldForceBoundary
+      ? buildBoundaryAddress(effectiveBoundary, best.address)
+      : best.address;
+    const payload = {
+      ok: true,
+      address: finalAddress,
+      source: best.source,
+      distanceMeters: Number.isFinite(best.distanceMeters) ? Math.round(best.distanceMeters) : null,
+      boundaryBarangay: effectiveBoundary.barangay || ''
+    };
+    setCachedReverseGeocode(lat, lng, payload);
+    return payload;
+  }
+
+  const fallbackPayload = {
+    ok: false,
+    address: `${lat.toFixed(5)}, ${lng.toFixed(5)}`,
+    message: 'Address unavailable. Showing coordinate label.'
+  };
+  setCachedReverseGeocode(lat, lng, fallbackPayload);
+  return fallbackPayload;
 }
 
 function getPlaceTypeScore(placeTag) {
@@ -2670,168 +2865,26 @@ async function handleApi(req, res, pathname) {
     if (Number.isNaN(lat) || Number.isNaN(lng)) {
       return sendJson(res, 400, { ok: false, message: 'Latitude and longitude are required.' });
     }
-    const apiKey = getGoogleMapsKey();
+    const cached = getCachedReverseGeocode(lat, lng);
+    if (cached) return sendJson(res, 200, cached);
+
+    const inflightKey = getReverseGeocodeCacheKey(lat, lng, 4);
+    if (!inflightKey) {
+      return sendJson(res, 400, { ok: false, message: 'Invalid coordinates.' });
+    }
+
     try {
-      const candidates = [];
-      const boundaryContext = await fetchOverpassBoundaryContext(lat, lng);
-      const localBarangayCandidate = findNearestMarinduqueBarangayCandidate(lat, lng, boundaryContext);
-      if (localBarangayCandidate) candidates.push(localBarangayCandidate);
-      const nearbyPlaceCandidate = await fetchOverpassNearbyPlaceCandidate(lat, lng, boundaryContext);
-      if (nearbyPlaceCandidate) candidates.push(nearbyPlaceCandidate);
-      const osmUrl = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=19&addressdetails=1&namedetails=1`;
-      const osmRes = await fetch(osmUrl, { headers: { 'Accept-Language': 'en,fil;q=0.9' } });
-      if (osmRes.ok) {
-        const osmData = await osmRes.json();
-        const formatted = formatOsmAddress(osmData);
-        if (formatted.address) {
-          const candidate = createAddressCandidate({
-            source: 'osm',
-            address: formatted.address,
-            baseScore: formatted.score,
-            providerBoost: 1.4,
-            queryLat: lat,
-            queryLng: lng,
-            resultLat: Number(osmData?.lat),
-            resultLng: Number(osmData?.lon)
-          });
-          if (candidate) candidates.push(candidate);
-        }
+      let inflight = reverseGeocodeInflight.get(inflightKey);
+      if (!inflight) {
+        inflight = resolveReverseGeocodeAddress(lat, lng);
+        reverseGeocodeInflight.set(inflightKey, inflight);
       }
-
-      if (apiKey) {
-        const gUrl = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${apiKey}&language=en&region=PH`;
-        const gRes = await fetch(gUrl);
-        if (gRes.ok) {
-          const gData = await gRes.json();
-          if (Array.isArray(gData.results) && gData.results.length) {
-            const picked = pickGoogleResult(gData.results, lat, lng);
-            if (picked) {
-              const formatted = formatGoogleAddress(picked);
-              const candidate = createAddressCandidate({
-                source: 'google',
-                address: formatted.address || picked.formatted_address || '',
-                baseScore:
-                  (formatted.address ? formatted.score : 2) +
-                  getGoogleTypeScore(picked.types) +
-                  getGoogleLocationTypeScore(picked?.geometry?.location_type),
-                providerBoost: 3.2,
-                queryLat: lat,
-                queryLng: lng,
-                resultLat: Number(picked?.geometry?.location?.lat),
-                resultLng: Number(picked?.geometry?.location?.lng)
-              });
-              if (candidate) candidates.push(candidate);
-            }
-
-            gData.results.slice(0, 4).forEach((result, index) => {
-              if (!result || result === picked) return;
-              const formatted = formatGoogleAddress(result);
-              const candidate = createAddressCandidate({
-                source: 'google',
-                address: formatted.address || result.formatted_address || '',
-                baseScore:
-                  (formatted.address ? formatted.score : 1.2) +
-                  getGoogleTypeScore(result.types) +
-                  getGoogleLocationTypeScore(result?.geometry?.location_type) -
-                  index * 0.15,
-                providerBoost: 2.1,
-                queryLat: lat,
-                queryLng: lng,
-                resultLat: Number(result?.geometry?.location?.lat),
-                resultLng: Number(result?.geometry?.location?.lng)
-              });
-              if (candidate) candidates.push(candidate);
-            });
-          }
-        }
-      }
-
-      const photonUrl = `https://photon.komoot.io/reverse?lat=${lat}&lon=${lng}&lang=en&limit=5`;
-      const photonRes = await fetch(photonUrl);
-      if (photonRes.ok) {
-        const photonData = await photonRes.json();
-        const features = Array.isArray(photonData.features) ? photonData.features : [];
-        features.forEach((feature, index) => {
-          const formatted = formatPhotonFeature(feature);
-          const coords = Array.isArray(feature?.geometry?.coordinates) ? feature.geometry.coordinates : [];
-          const candidate = createAddressCandidate({
-            source: 'photon',
-            address: formatted.address,
-            baseScore: formatted.score - index * 0.12,
-            providerBoost: 0.9,
-            queryLat: lat,
-            queryLng: lng,
-            resultLat: Number(coords[1]),
-            resultLng: Number(coords[0])
-          });
-          if (candidate) candidates.push(candidate);
-        });
-      }
-
-      const bdcUrl = `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lng}&localityLanguage=en`;
-      const bdcRes = await fetch(bdcUrl);
-      if (bdcRes.ok) {
-        const bdcData = await bdcRes.json();
-        const formatted = formatBigDataCloud(bdcData);
-        const candidate = createAddressCandidate({
-          source: 'bigdatacloud',
-          address: formatted.address,
-          baseScore: formatted.score,
-          providerBoost: 0.6,
-          queryLat: lat,
-          queryLng: lng,
-          resultLat: Number(bdcData?.latitude || lat),
-          resultLng: Number(bdcData?.longitude || lng)
-        });
-        if (candidate) candidates.push(candidate);
-      }
-
-      if (boundaryContext) {
-        candidates.forEach((candidate) => {
-          candidate.score += getBoundaryBoost(candidate.address, boundaryContext);
-        });
-      }
-
-      const best = pickBestAddressCandidate(candidates);
-      if (best && best.address) {
-        const effectiveBoundary = {
-          barangay: best.barangay || (boundaryContext && boundaryContext.barangay) || '',
-          municipality: best.municipality || (boundaryContext && boundaryContext.municipality) || '',
-          province: best.province || (boundaryContext && boundaryContext.province) || 'Marinduque',
-          country: (boundaryContext && boundaryContext.country) || 'Philippines'
-        };
-        const bestAddressKey = normalizeAddressKey(best.address);
-        const barangayKey = normalizeAddressKey(effectiveBoundary.barangay || '');
-        const shouldForceBoundary =
-          !!effectiveBoundary &&
-          !!barangayKey &&
-          !bestAddressKey.includes(barangayKey) &&
-          Number.isFinite(best.distanceMeters) &&
-          best.distanceMeters <= 120;
-        const finalAddress = shouldForceBoundary
-          ? buildBoundaryAddress(effectiveBoundary, best.address)
-          : best.address;
-        return sendJson(res, 200, {
-          ok: true,
-          address: finalAddress,
-          source: best.source,
-          distanceMeters: Number.isFinite(best.distanceMeters) ? Math.round(best.distanceMeters) : null,
-          boundaryBarangay: effectiveBoundary.barangay || ''
-        });
-      }
-
-      // Fallback: ensure we still return a deterministic coordinate-based place label.
-      if (Number.isFinite(lat) && Number.isFinite(lng)) {
-        return sendJson(res, 200, {
-          ok: false,
-          address: `${lat.toFixed(5)}, ${lng.toFixed(5)}`,
-          message: 'Address unavailable. Showing coordinate label.'
-        });
-      }
-
-      return sendJson(res, 200, { ok: false, address: '', message: 'Address unavailable.' });
+      const payload = await inflight;
+      return sendJson(res, 200, payload);
     } catch (err) {
       return sendJson(res, 500, { ok: false, message: 'Unable to fetch address.' });
+    } finally {
+      reverseGeocodeInflight.delete(inflightKey);
     }
   }
 

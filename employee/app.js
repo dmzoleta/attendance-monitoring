@@ -97,6 +97,9 @@ let autoRestoreAttempted = false;
 let lastAddress = '';
 let lastAddressCoords = null;
 let locationDeniedByUserChoice = false;
+const reverseGeocodeClientCache = new Map();
+const reverseGeocodeClientInflight = new Map();
+const REVERSE_GEOCODE_CLIENT_CACHE_TTL_MS = 3 * 60 * 1000;
 let attendanceAudioContext = null;
 let attendanceAudioPrimed = false;
 let attendanceRequestInFlight = false;
@@ -770,53 +773,48 @@ function renderSlotPhoto(photo, altText) {
 }
 
 async function reverseGeocode(lat, lng) {
-  try {
-    const res = await fetch(`${apiBase}/api/reverse-geocode?lat=${lat}&lng=${lng}`);
-    if (res.ok) {
-      const data = await res.json();
-      if (data && data.address) return data.address;
-    }
-  } catch (err) {
-    // ignore server reverse-geocode errors
+  const key = `${Number(lat).toFixed(5)},${Number(lng).toFixed(5)}`;
+  const now = Date.now();
+  const cached = reverseGeocodeClientCache.get(key);
+  if (cached && Number(cached.expiresAt || 0) > now) {
+    return cached.address || '';
   }
 
-  try {
-    const osmUrl = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=19&addressdetails=1&namedetails=1`;
-    const osmRes = await fetch(osmUrl, { headers: { 'Accept-Language': 'en,fil;q=0.9' } });
-    if (osmRes.ok) {
-      const osmData = await osmRes.json();
-      if (osmData) {
-        const addr = osmData.address || {};
-        const roadLine = [addr.house_number, addr.road].filter(Boolean).join(' ');
-        const place =
-          addr.barangay ||
-          addr.neighbourhood ||
-          addr.suburb ||
-          addr.village ||
-          addr.hamlet ||
-          addr.quarter ||
-          addr.city_district ||
-          addr.subdistrict ||
-          addr.municipality ||
-          addr.town ||
-          addr.city;
-        const municipality = addr.city || addr.town || addr.municipality || addr.county;
-        const province = addr.state || addr.region || addr.province;
-        const parts = [];
-        if (roadLine) parts.push(roadLine);
-        if (place && !parts.includes(place)) parts.push(place);
-        if (municipality && !parts.includes(municipality)) parts.push(municipality);
-        if (province && !parts.includes(province)) parts.push(province);
-        if (addr.postcode) parts.push(addr.postcode);
-        if (addr.country) parts.push(addr.country);
-        if (parts.length) return parts.join(', ');
-        if (osmData.display_name) return osmData.display_name;
+  if (reverseGeocodeClientInflight.has(key)) {
+    return reverseGeocodeClientInflight.get(key);
+  }
+
+  const request = (async () => {
+    let address = '';
+    try {
+      const res = await fetch(`${apiBase}/api/reverse-geocode?lat=${lat}&lng=${lng}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.address) address = data.address;
+      }
+    } catch (err) {
+      address = '';
+    }
+
+    if (address) {
+      reverseGeocodeClientCache.set(key, {
+        address,
+        expiresAt: now + REVERSE_GEOCODE_CLIENT_CACHE_TTL_MS
+      });
+      if (reverseGeocodeClientCache.size > 300) {
+        const firstKey = reverseGeocodeClientCache.keys().next().value;
+        if (firstKey) reverseGeocodeClientCache.delete(firstKey);
       }
     }
-  } catch (err) {
-    // ignore fallback errors
+    return address;
+  })();
+
+  reverseGeocodeClientInflight.set(key, request);
+  try {
+    return await request;
+  } finally {
+    reverseGeocodeClientInflight.delete(key);
   }
-  return '';
 }
 
 function updateMapPreview(lat, lng) {
