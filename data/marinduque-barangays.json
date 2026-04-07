@@ -1,0 +1,1770 @@
+{
+  "generatedAt": "2026-04-07T05:33:18.596Z",
+  "sourceNotes": [
+    "Official barangay list from skyvstigreo/philippines-province-city-barangay-database",
+    "Coordinates matched from OSM place data first, then Nominatim search fallback."
+  ],
+  "province": "Marinduque",
+  "municipalities": [
+    "Boac",
+    "Buenavista",
+    "Gasan",
+    "Mogpog",
+    "Santa Cruz",
+    "Torrijos"
+  ],
+  "counts": {
+    "total": 218,
+    "osmPlace": 151,
+    "nominatim": 4,
+    "manualOverride": 1,
+    "municipalityCentroid": 62,
+    "unresolved": 0
+  },
+  "barangays": [
+    {
+      "barangay": "Agot",
+      "municipality": "Boac",
+      "province": "Marinduque",
+      "lat": 13.448151,
+      "lng": 121.860454,
+      "source": "nominatim-search"
+    },
+    {
+      "barangay": "Agumaymayan",
+      "municipality": "Boac",
+      "province": "Marinduque",
+      "lat": 13.439512,
+      "lng": 121.887978,
+      "source": "nominatim-search"
+    },
+    {
+      "barangay": "Amoingon",
+      "municipality": "Boac",
+      "province": "Marinduque",
+      "lat": 13.397711,
+      "lng": 121.826642,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Apitong",
+      "municipality": "Boac",
+      "province": "Marinduque",
+      "lat": 13.419383,
+      "lng": 121.837109,
+      "source": "municipality-centroid"
+    },
+    {
+      "barangay": "Balagasan",
+      "municipality": "Boac",
+      "province": "Marinduque",
+      "lat": 13.421444,
+      "lng": 121.883867,
+      "source": "nominatim-search"
+    },
+    {
+      "barangay": "Balaring",
+      "municipality": "Boac",
+      "province": "Marinduque",
+      "lat": 13.41376,
+      "lng": 121.822954,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Balimbing",
+      "municipality": "Boac",
+      "province": "Marinduque",
+      "lat": 13.433829,
+      "lng": 121.880583,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Balogo",
+      "municipality": "Boac",
+      "province": "Marinduque",
+      "lat": 13.500711,
+      "lng": 122.04577,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Bamban",
+      "municipality": "Boac",
+      "province": "Marinduque",
+      "lat": 13.43274,
+      "lng": 121.869304,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Bangbangalon",
+      "municipality": "Boac",
+      "province": "Marinduque",
+      "lat": 13.439536,
+      "lng": 121.828986,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Bantad",
+      "municipality": "Boac",
+      "province": "Marinduque",
+      "lat": 13.419383,
+      "lng": 121.837109,
+      "source": "municipality-centroid"
+    },
+    {
+      "barangay": "Bantay",
+      "municipality": "Boac",
+      "province": "Marinduque",
+      "lat": 13.426052,
+      "lng": 121.899782,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Bayuti",
+      "municipality": "Boac",
+      "province": "Marinduque",
+      "lat": 13.419383,
+      "lng": 121.837109,
+      "source": "municipality-centroid"
+    },
+    {
+      "barangay": "Binunga",
+      "municipality": "Boac",
+      "province": "Marinduque",
+      "lat": 13.216815,
+      "lng": 121.976843,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Boi",
+      "municipality": "Boac",
+      "province": "Marinduque",
+      "lat": 13.364669,
+      "lng": 121.936238,
+      "source": "nominatim-search"
+    },
+    {
+      "barangay": "Boton",
+      "municipality": "Boac",
+      "province": "Marinduque",
+      "lat": 13.419383,
+      "lng": 121.837109,
+      "source": "municipality-centroid"
+    },
+    {
+      "barangay": "Buliasnin",
+      "municipality": "Boac",
+      "province": "Marinduque",
+      "lat": 13.461433,
+      "lng": 121.837301,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Bunganay",
+      "municipality": "Boac",
+      "province": "Marinduque",
+      "lat": 13.39097,
+      "lng": 121.826994,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Caganhao",
+      "municipality": "Boac",
+      "province": "Marinduque",
+      "lat": 13.402762,
+      "lng": 121.826108,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Canat",
+      "municipality": "Boac",
+      "province": "Marinduque",
+      "lat": 13.379429,
+      "lng": 121.930202,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Catubugan",
+      "municipality": "Boac",
+      "province": "Marinduque",
+      "lat": 13.423844,
+      "lng": 121.876674,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Cawit",
+      "municipality": "Boac",
+      "province": "Marinduque",
+      "lat": 13.38209,
+      "lng": 121.825162,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Daig",
+      "municipality": "Boac",
+      "province": "Marinduque",
+      "lat": 13.419383,
+      "lng": 121.837109,
+      "source": "municipality-centroid"
+    },
+    {
+      "barangay": "Daypay",
+      "municipality": "Boac",
+      "province": "Marinduque",
+      "lat": 13.419383,
+      "lng": 121.837109,
+      "source": "municipality-centroid"
+    },
+    {
+      "barangay": "Duyay",
+      "municipality": "Boac",
+      "province": "Marinduque",
+      "lat": 13.373427,
+      "lng": 121.875088,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Hinapulan",
+      "municipality": "Boac",
+      "province": "Marinduque",
+      "lat": 13.412557,
+      "lng": 121.948497,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Ihatub",
+      "municipality": "Boac",
+      "province": "Marinduque",
+      "lat": 13.425479,
+      "lng": 121.821996,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Isok I (Pob.)",
+      "municipality": "Boac",
+      "province": "Marinduque",
+      "lat": 13.419383,
+      "lng": 121.837109,
+      "source": "municipality-centroid"
+    },
+    {
+      "barangay": "Isok II Pob.",
+      "municipality": "Boac",
+      "province": "Marinduque",
+      "lat": 13.323363,
+      "lng": 121.847139,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Laylay",
+      "municipality": "Boac",
+      "province": "Marinduque",
+      "lat": 13.439713,
+      "lng": 121.819646,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Lupac",
+      "municipality": "Boac",
+      "province": "Marinduque",
+      "lat": 13.456942,
+      "lng": 121.814761,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Mahinhin",
+      "municipality": "Boac",
+      "province": "Marinduque",
+      "lat": 13.442351,
+      "lng": 121.94493,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Mainit",
+      "municipality": "Boac",
+      "province": "Marinduque",
+      "lat": 13.413716,
+      "lng": 121.897462,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Malbog",
+      "municipality": "Boac",
+      "province": "Marinduque",
+      "lat": 13.266998,
+      "lng": 121.950203,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Maligaya",
+      "municipality": "Boac",
+      "province": "Marinduque",
+      "lat": 13.477824,
+      "lng": 121.840514,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Malusak (Pob.)",
+      "municipality": "Boac",
+      "province": "Marinduque",
+      "lat": 13.419383,
+      "lng": 121.837109,
+      "source": "municipality-centroid"
+    },
+    {
+      "barangay": "Mansiwat",
+      "municipality": "Boac",
+      "province": "Marinduque",
+      "lat": 13.419383,
+      "lng": 121.837109,
+      "source": "municipality-centroid"
+    },
+    {
+      "barangay": "Mataas Na Bayan (Pob.)",
+      "municipality": "Boac",
+      "province": "Marinduque",
+      "lat": 13.470181,
+      "lng": 121.863484,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Maybo",
+      "municipality": "Boac",
+      "province": "Marinduque",
+      "lat": 13.421163,
+      "lng": 121.854633,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Mercado (Pob.)",
+      "municipality": "Boac",
+      "province": "Marinduque",
+      "lat": 13.419383,
+      "lng": 121.837109,
+      "source": "municipality-centroid"
+    },
+    {
+      "barangay": "Murallon (Pob.)",
+      "municipality": "Boac",
+      "province": "Marinduque",
+      "lat": 13.44608,
+      "lng": 121.84034,
+      "source": "manual-override"
+    },
+    {
+      "barangay": "Ogbac",
+      "municipality": "Boac",
+      "province": "Marinduque",
+      "lat": 13.419383,
+      "lng": 121.837109,
+      "source": "municipality-centroid"
+    },
+    {
+      "barangay": "Pawa",
+      "municipality": "Boac",
+      "province": "Marinduque",
+      "lat": 13.419383,
+      "lng": 121.837109,
+      "source": "municipality-centroid"
+    },
+    {
+      "barangay": "Pili",
+      "municipality": "Boac",
+      "province": "Marinduque",
+      "lat": 13.46437,
+      "lng": 121.822429,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Poctoy",
+      "municipality": "Boac",
+      "province": "Marinduque",
+      "lat": 13.33026,
+      "lng": 122.100232,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Poras",
+      "municipality": "Boac",
+      "province": "Marinduque",
+      "lat": 13.459479,
+      "lng": 121.829651,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Puting Buhangin",
+      "municipality": "Boac",
+      "province": "Marinduque",
+      "lat": 13.445791,
+      "lng": 121.959138,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Puyog",
+      "municipality": "Boac",
+      "province": "Marinduque",
+      "lat": 13.43562,
+      "lng": 121.898844,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Sabong",
+      "municipality": "Boac",
+      "province": "Marinduque",
+      "lat": 13.419383,
+      "lng": 121.837109,
+      "source": "municipality-centroid"
+    },
+    {
+      "barangay": "San Miguel (Pob.)",
+      "municipality": "Boac",
+      "province": "Marinduque",
+      "lat": 13.419383,
+      "lng": 121.837109,
+      "source": "municipality-centroid"
+    },
+    {
+      "barangay": "Santol",
+      "municipality": "Boac",
+      "province": "Marinduque",
+      "lat": 13.328229,
+      "lng": 122.051929,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Sawi",
+      "municipality": "Boac",
+      "province": "Marinduque",
+      "lat": 13.443479,
+      "lng": 121.856922,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Tabi",
+      "municipality": "Boac",
+      "province": "Marinduque",
+      "lat": 13.455355,
+      "lng": 121.836925,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Tabigue",
+      "municipality": "Boac",
+      "province": "Marinduque",
+      "lat": 13.456299,
+      "lng": 121.825027,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Tagwak",
+      "municipality": "Boac",
+      "province": "Marinduque",
+      "lat": 13.419383,
+      "lng": 121.837109,
+      "source": "municipality-centroid"
+    },
+    {
+      "barangay": "Tambunan",
+      "municipality": "Boac",
+      "province": "Marinduque",
+      "lat": 13.419383,
+      "lng": 121.837109,
+      "source": "municipality-centroid"
+    },
+    {
+      "barangay": "Tampus (Pob.)",
+      "municipality": "Boac",
+      "province": "Marinduque",
+      "lat": 13.419383,
+      "lng": 121.837109,
+      "source": "municipality-centroid"
+    },
+    {
+      "barangay": "Tanza",
+      "municipality": "Boac",
+      "province": "Marinduque",
+      "lat": 13.456437,
+      "lng": 121.842961,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Tugos",
+      "municipality": "Boac",
+      "province": "Marinduque",
+      "lat": 13.381625,
+      "lng": 121.8605,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Tumagabok",
+      "municipality": "Boac",
+      "province": "Marinduque",
+      "lat": 13.359196,
+      "lng": 121.998261,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Tumapon",
+      "municipality": "Boac",
+      "province": "Marinduque",
+      "lat": 13.419383,
+      "lng": 121.837109,
+      "source": "municipality-centroid"
+    },
+    {
+      "barangay": "Bagacay",
+      "municipality": "Buenavista",
+      "province": "Marinduque",
+      "lat": 13.4,
+      "lng": 121.916667,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Bagtingon",
+      "municipality": "Buenavista",
+      "province": "Marinduque",
+      "lat": 13.289885,
+      "lng": 121.938608,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Barangay I (Pob.)",
+      "municipality": "Buenavista",
+      "province": "Marinduque",
+      "lat": 13.468239,
+      "lng": 122.034092,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Barangay II (Pob.)",
+      "municipality": "Buenavista",
+      "province": "Marinduque",
+      "lat": 13.323363,
+      "lng": 121.847139,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Barangay III (Pob.)",
+      "municipality": "Buenavista",
+      "province": "Marinduque",
+      "lat": 13.323363,
+      "lng": 121.847139,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Barangay IV (Pob.)",
+      "municipality": "Buenavista",
+      "province": "Marinduque",
+      "lat": 13.196389,
+      "lng": 122.01965,
+      "source": "municipality-centroid"
+    },
+    {
+      "barangay": "Bicas-bicas",
+      "municipality": "Buenavista",
+      "province": "Marinduque",
+      "lat": 13.239063,
+      "lng": 121.982086,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Caigangan",
+      "municipality": "Buenavista",
+      "province": "Marinduque",
+      "lat": 13.25849,
+      "lng": 121.932372,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Daykitin",
+      "municipality": "Buenavista",
+      "province": "Marinduque",
+      "lat": 13.271029,
+      "lng": 121.910713,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Libas",
+      "municipality": "Buenavista",
+      "province": "Marinduque",
+      "lat": 13.242379,
+      "lng": 121.955192,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Malbog",
+      "municipality": "Buenavista",
+      "province": "Marinduque",
+      "lat": 13.266998,
+      "lng": 121.950203,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Sihi",
+      "municipality": "Buenavista",
+      "province": "Marinduque",
+      "lat": 13.263762,
+      "lng": 121.996545,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Timbo",
+      "municipality": "Buenavista",
+      "province": "Marinduque",
+      "lat": 13.266526,
+      "lng": 121.974032,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Tungib-Lipata",
+      "municipality": "Buenavista",
+      "province": "Marinduque",
+      "lat": 13.203944,
+      "lng": 122.000011,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Yook",
+      "municipality": "Buenavista",
+      "province": "Marinduque",
+      "lat": 13.220321,
+      "lng": 121.969485,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Antipolo",
+      "municipality": "Gasan",
+      "province": "Marinduque",
+      "lat": 13.501658,
+      "lng": 122.088584,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Bachao Ibaba",
+      "municipality": "Gasan",
+      "province": "Marinduque",
+      "lat": 13.300814,
+      "lng": 121.863624,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Bachao Ilaya",
+      "municipality": "Gasan",
+      "province": "Marinduque",
+      "lat": 13.309062,
+      "lng": 121.872733,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Bacongbacong",
+      "municipality": "Gasan",
+      "province": "Marinduque",
+      "lat": 13.289308,
+      "lng": 121.8646,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Bahi",
+      "municipality": "Gasan",
+      "province": "Marinduque",
+      "lat": 13.370954,
+      "lng": 121.835835,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Bangbang",
+      "municipality": "Gasan",
+      "province": "Marinduque",
+      "lat": 13.342877,
+      "lng": 121.834645,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Banot",
+      "municipality": "Gasan",
+      "province": "Marinduque",
+      "lat": 13.238417,
+      "lng": 121.812599,
+      "source": "municipality-centroid"
+    },
+    {
+      "barangay": "Banuyo",
+      "municipality": "Gasan",
+      "province": "Marinduque",
+      "lat": 13.238417,
+      "lng": 121.812599,
+      "source": "municipality-centroid"
+    },
+    {
+      "barangay": "Barangay I (Pob.)",
+      "municipality": "Gasan",
+      "province": "Marinduque",
+      "lat": 13.468239,
+      "lng": 122.034092,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Barangay II (Pob.)",
+      "municipality": "Gasan",
+      "province": "Marinduque",
+      "lat": 13.323363,
+      "lng": 121.847139,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Barangay III (Pob.)",
+      "municipality": "Gasan",
+      "province": "Marinduque",
+      "lat": 13.323363,
+      "lng": 121.847139,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Bognuyan",
+      "municipality": "Gasan",
+      "province": "Marinduque",
+      "lat": 13.293325,
+      "lng": 121.862135,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Cabugao",
+      "municipality": "Gasan",
+      "province": "Marinduque",
+      "lat": 13.353838,
+      "lng": 121.842686,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Dawis",
+      "municipality": "Gasan",
+      "province": "Marinduque",
+      "lat": 13.238417,
+      "lng": 121.812599,
+      "source": "municipality-centroid"
+    },
+    {
+      "barangay": "Dili",
+      "municipality": "Gasan",
+      "province": "Marinduque",
+      "lat": 13.238417,
+      "lng": 121.812599,
+      "source": "municipality-centroid"
+    },
+    {
+      "barangay": "Libtangin",
+      "municipality": "Gasan",
+      "province": "Marinduque",
+      "lat": 13.238417,
+      "lng": 121.812599,
+      "source": "municipality-centroid"
+    },
+    {
+      "barangay": "Mahunig",
+      "municipality": "Gasan",
+      "province": "Marinduque",
+      "lat": 13.238417,
+      "lng": 121.812599,
+      "source": "municipality-centroid"
+    },
+    {
+      "barangay": "Mangiliol",
+      "municipality": "Gasan",
+      "province": "Marinduque",
+      "lat": 13.238417,
+      "lng": 121.812599,
+      "source": "municipality-centroid"
+    },
+    {
+      "barangay": "Masiga",
+      "municipality": "Gasan",
+      "province": "Marinduque",
+      "lat": 13.238417,
+      "lng": 121.812599,
+      "source": "municipality-centroid"
+    },
+    {
+      "barangay": "Matandang Gasan",
+      "municipality": "Gasan",
+      "province": "Marinduque",
+      "lat": 13.323136,
+      "lng": 121.85885,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Pangi",
+      "municipality": "Gasan",
+      "province": "Marinduque",
+      "lat": 13.238417,
+      "lng": 121.812599,
+      "source": "municipality-centroid"
+    },
+    {
+      "barangay": "Pingan",
+      "municipality": "Gasan",
+      "province": "Marinduque",
+      "lat": 13.238417,
+      "lng": 121.812599,
+      "source": "municipality-centroid"
+    },
+    {
+      "barangay": "Tabionan",
+      "municipality": "Gasan",
+      "province": "Marinduque",
+      "lat": 13.320291,
+      "lng": 121.899678,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Tapuyan",
+      "municipality": "Gasan",
+      "province": "Marinduque",
+      "lat": 13.238417,
+      "lng": 121.812599,
+      "source": "municipality-centroid"
+    },
+    {
+      "barangay": "Tiguion",
+      "municipality": "Gasan",
+      "province": "Marinduque",
+      "lat": 13.335309,
+      "lng": 121.861215,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Anapog-Sibucao",
+      "municipality": "Mogpog",
+      "province": "Marinduque",
+      "lat": 13.57473,
+      "lng": 121.830963,
+      "source": "municipality-centroid"
+    },
+    {
+      "barangay": "Argao",
+      "municipality": "Mogpog",
+      "province": "Marinduque",
+      "lat": 13.55203,
+      "lng": 121.867293,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Balanacan",
+      "municipality": "Mogpog",
+      "province": "Marinduque",
+      "lat": 13.528394,
+      "lng": 121.868098,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Banto",
+      "municipality": "Mogpog",
+      "province": "Marinduque",
+      "lat": 13.478298,
+      "lng": 121.906964,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Bintakay",
+      "municipality": "Mogpog",
+      "province": "Marinduque",
+      "lat": 13.57473,
+      "lng": 121.830963,
+      "source": "municipality-centroid"
+    },
+    {
+      "barangay": "Bocboc",
+      "municipality": "Mogpog",
+      "province": "Marinduque",
+      "lat": 13.471658,
+      "lng": 121.933412,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Butansapa",
+      "municipality": "Mogpog",
+      "province": "Marinduque",
+      "lat": 13.478411,
+      "lng": 121.913779,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Candahon",
+      "municipality": "Mogpog",
+      "province": "Marinduque",
+      "lat": 13.481843,
+      "lng": 121.867229,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Capayang",
+      "municipality": "Mogpog",
+      "province": "Marinduque",
+      "lat": 13.500865,
+      "lng": 121.856819,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Danao",
+      "municipality": "Mogpog",
+      "province": "Marinduque",
+      "lat": 13.464413,
+      "lng": 121.866179,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Dulong Bayan (Pob.)",
+      "municipality": "Mogpog",
+      "province": "Marinduque",
+      "lat": 13.474657,
+      "lng": 121.863919,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Gitnang Bayan (Pob.)",
+      "municipality": "Mogpog",
+      "province": "Marinduque",
+      "lat": 13.47435,
+      "lng": 121.861902,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Guisian",
+      "municipality": "Mogpog",
+      "province": "Marinduque",
+      "lat": 13.57473,
+      "lng": 121.830963,
+      "source": "municipality-centroid"
+    },
+    {
+      "barangay": "Hinadharan",
+      "municipality": "Mogpog",
+      "province": "Marinduque",
+      "lat": 13.515346,
+      "lng": 121.927059,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Hinanggayon",
+      "municipality": "Mogpog",
+      "province": "Marinduque",
+      "lat": 13.556532,
+      "lng": 121.859537,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Ino",
+      "municipality": "Mogpog",
+      "province": "Marinduque",
+      "lat": 13.57473,
+      "lng": 121.830963,
+      "source": "municipality-centroid"
+    },
+    {
+      "barangay": "Janagdong",
+      "municipality": "Mogpog",
+      "province": "Marinduque",
+      "lat": 13.57473,
+      "lng": 121.830963,
+      "source": "municipality-centroid"
+    },
+    {
+      "barangay": "Lamesa",
+      "municipality": "Mogpog",
+      "province": "Marinduque",
+      "lat": 13.525,
+      "lng": 121.964444,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Laon",
+      "municipality": "Mogpog",
+      "province": "Marinduque",
+      "lat": 13.57473,
+      "lng": 121.830963,
+      "source": "municipality-centroid"
+    },
+    {
+      "barangay": "Magapua",
+      "municipality": "Mogpog",
+      "province": "Marinduque",
+      "lat": 13.474011,
+      "lng": 121.887062,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Malayak",
+      "municipality": "Mogpog",
+      "province": "Marinduque",
+      "lat": 13.57473,
+      "lng": 121.830963,
+      "source": "municipality-centroid"
+    },
+    {
+      "barangay": "Malusak",
+      "municipality": "Mogpog",
+      "province": "Marinduque",
+      "lat": 13.57473,
+      "lng": 121.830963,
+      "source": "municipality-centroid"
+    },
+    {
+      "barangay": "Mampaitan",
+      "municipality": "Mogpog",
+      "province": "Marinduque",
+      "lat": 13.456477,
+      "lng": 121.886947,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Mangyan-Mababad",
+      "municipality": "Mogpog",
+      "province": "Marinduque",
+      "lat": 13.483333,
+      "lng": 121.883333,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Market Site (Pob.)",
+      "municipality": "Mogpog",
+      "province": "Marinduque",
+      "lat": 13.47412,
+      "lng": 121.859499,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Mataas Na Bayan",
+      "municipality": "Mogpog",
+      "province": "Marinduque",
+      "lat": 13.470181,
+      "lng": 121.863484,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Mendez",
+      "municipality": "Mogpog",
+      "province": "Marinduque",
+      "lat": 13.506141,
+      "lng": 121.906822,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Nangka I",
+      "municipality": "Mogpog",
+      "province": "Marinduque",
+      "lat": 13.477923,
+      "lng": 121.857251,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Nangka II",
+      "municipality": "Mogpog",
+      "province": "Marinduque",
+      "lat": 13.479879,
+      "lng": 121.85005,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Paye",
+      "municipality": "Mogpog",
+      "province": "Marinduque",
+      "lat": 13.53305,
+      "lng": 121.897543,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Pili",
+      "municipality": "Mogpog",
+      "province": "Marinduque",
+      "lat": 13.46437,
+      "lng": 121.822429,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Puting Buhangin",
+      "municipality": "Mogpog",
+      "province": "Marinduque",
+      "lat": 13.445791,
+      "lng": 121.959138,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Sayao",
+      "municipality": "Mogpog",
+      "province": "Marinduque",
+      "lat": 13.522086,
+      "lng": 121.917971,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Silangan",
+      "municipality": "Mogpog",
+      "province": "Marinduque",
+      "lat": 13.563415,
+      "lng": 121.856857,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Sumangga",
+      "municipality": "Mogpog",
+      "province": "Marinduque",
+      "lat": 13.57473,
+      "lng": 121.830963,
+      "source": "municipality-centroid"
+    },
+    {
+      "barangay": "Tarug",
+      "municipality": "Mogpog",
+      "province": "Marinduque",
+      "lat": 13.57473,
+      "lng": 121.830963,
+      "source": "municipality-centroid"
+    },
+    {
+      "barangay": "Villa Mendez (Pob.)",
+      "municipality": "Mogpog",
+      "province": "Marinduque",
+      "lat": 13.506141,
+      "lng": 121.906822,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Alobo",
+      "municipality": "Santa Cruz",
+      "province": "Marinduque",
+      "lat": 13.473773,
+      "lng": 122.09602,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Angas",
+      "municipality": "Santa Cruz",
+      "province": "Marinduque",
+      "lat": 13.436825,
+      "lng": 122.107661,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Aturan",
+      "municipality": "Santa Cruz",
+      "province": "Marinduque",
+      "lat": 13.490676,
+      "lng": 121.992835,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Bagong Silang Pob.",
+      "municipality": "Santa Cruz",
+      "province": "Marinduque",
+      "lat": 13.479097,
+      "lng": 122.028606,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Baguidbirin",
+      "municipality": "Santa Cruz",
+      "province": "Marinduque",
+      "lat": 13.525835,
+      "lng": 122.104124,
+      "source": "municipality-centroid"
+    },
+    {
+      "barangay": "Baliis",
+      "municipality": "Santa Cruz",
+      "province": "Marinduque",
+      "lat": 13.49894,
+      "lng": 122.012218,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Balogo",
+      "municipality": "Santa Cruz",
+      "province": "Marinduque",
+      "lat": 13.500711,
+      "lng": 122.04577,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Banahaw Pob.",
+      "municipality": "Santa Cruz",
+      "province": "Marinduque",
+      "lat": 13.476426,
+      "lng": 122.025452,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Bangcuangan",
+      "municipality": "Santa Cruz",
+      "province": "Marinduque",
+      "lat": 13.525835,
+      "lng": 122.104124,
+      "source": "municipality-centroid"
+    },
+    {
+      "barangay": "Banogbog",
+      "municipality": "Santa Cruz",
+      "province": "Marinduque",
+      "lat": 13.43936,
+      "lng": 122.041403,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Biga",
+      "municipality": "Santa Cruz",
+      "province": "Marinduque",
+      "lat": 13.477728,
+      "lng": 122.079349,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Botilao",
+      "municipality": "Santa Cruz",
+      "province": "Marinduque",
+      "lat": 13.533422,
+      "lng": 121.939198,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Buyabod",
+      "municipality": "Santa Cruz",
+      "province": "Marinduque",
+      "lat": 13.467631,
+      "lng": 122.052123,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Dating Bayan",
+      "municipality": "Santa Cruz",
+      "province": "Marinduque",
+      "lat": 13.507441,
+      "lng": 121.960691,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Devilla",
+      "municipality": "Santa Cruz",
+      "province": "Marinduque",
+      "lat": 13.412776,
+      "lng": 122.031496,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Dolores",
+      "municipality": "Santa Cruz",
+      "province": "Marinduque",
+      "lat": 13.491812,
+      "lng": 121.97445,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Haguimit",
+      "municipality": "Santa Cruz",
+      "province": "Marinduque",
+      "lat": 13.3992,
+      "lng": 122.067953,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Hupi",
+      "municipality": "Santa Cruz",
+      "province": "Marinduque",
+      "lat": 13.501373,
+      "lng": 122.028189,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Ipil",
+      "municipality": "Santa Cruz",
+      "province": "Marinduque",
+      "lat": 13.510037,
+      "lng": 121.988854,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Jolo",
+      "municipality": "Santa Cruz",
+      "province": "Marinduque",
+      "lat": 13.525835,
+      "lng": 122.104124,
+      "source": "municipality-centroid"
+    },
+    {
+      "barangay": "Kaganhao",
+      "municipality": "Santa Cruz",
+      "province": "Marinduque",
+      "lat": 13.445374,
+      "lng": 122.024691,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Kalangkang",
+      "municipality": "Santa Cruz",
+      "province": "Marinduque",
+      "lat": 13.533611,
+      "lng": 122.020833,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Kamandugan",
+      "municipality": "Santa Cruz",
+      "province": "Marinduque",
+      "lat": 13.525835,
+      "lng": 122.104124,
+      "source": "municipality-centroid"
+    },
+    {
+      "barangay": "Kasily",
+      "municipality": "Santa Cruz",
+      "province": "Marinduque",
+      "lat": 13.516356,
+      "lng": 122.01791,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Kilo-kilo",
+      "municipality": "Santa Cruz",
+      "province": "Marinduque",
+      "lat": 13.437347,
+      "lng": 121.990492,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Kiñaman",
+      "municipality": "Santa Cruz",
+      "province": "Marinduque",
+      "lat": 13.461128,
+      "lng": 122.025322,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Labo",
+      "municipality": "Santa Cruz",
+      "province": "Marinduque",
+      "lat": 13.43641,
+      "lng": 121.970445,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Lamesa",
+      "municipality": "Santa Cruz",
+      "province": "Marinduque",
+      "lat": 13.525,
+      "lng": 121.964444,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Landy",
+      "municipality": "Santa Cruz",
+      "province": "Marinduque",
+      "lat": 13.490509,
+      "lng": 122.005922,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Lapu-lapu Pob.",
+      "municipality": "Santa Cruz",
+      "province": "Marinduque",
+      "lat": 13.525835,
+      "lng": 122.104124,
+      "source": "municipality-centroid"
+    },
+    {
+      "barangay": "Libjo",
+      "municipality": "Santa Cruz",
+      "province": "Marinduque",
+      "lat": 13.525835,
+      "lng": 122.104124,
+      "source": "municipality-centroid"
+    },
+    {
+      "barangay": "Lipa",
+      "municipality": "Santa Cruz",
+      "province": "Marinduque",
+      "lat": 13.484475,
+      "lng": 122.019181,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Lusok",
+      "municipality": "Santa Cruz",
+      "province": "Marinduque",
+      "lat": 13.499216,
+      "lng": 121.99992,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Maharlika Pob.",
+      "municipality": "Santa Cruz",
+      "province": "Marinduque",
+      "lat": 13.476714,
+      "lng": 122.029178,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Makulapnit",
+      "municipality": "Santa Cruz",
+      "province": "Marinduque",
+      "lat": 13.406984,
+      "lng": 122.000406,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Maniwaya",
+      "municipality": "Santa Cruz",
+      "province": "Marinduque",
+      "lat": 13.527448,
+      "lng": 122.118651,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Manlibunan",
+      "municipality": "Santa Cruz",
+      "province": "Marinduque",
+      "lat": 13.468239,
+      "lng": 122.034092,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Masaguisi",
+      "municipality": "Santa Cruz",
+      "province": "Marinduque",
+      "lat": 13.409252,
+      "lng": 122.094791,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Masalukot",
+      "municipality": "Santa Cruz",
+      "province": "Marinduque",
+      "lat": 13.525835,
+      "lng": 122.104124,
+      "source": "municipality-centroid"
+    },
+    {
+      "barangay": "Matalaba",
+      "municipality": "Santa Cruz",
+      "province": "Marinduque",
+      "lat": 13.460119,
+      "lng": 122.060412,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Mongpong",
+      "municipality": "Santa Cruz",
+      "province": "Marinduque",
+      "lat": 13.518794,
+      "lng": 122.170211,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Morales",
+      "municipality": "Santa Cruz",
+      "province": "Marinduque",
+      "lat": 13.459073,
+      "lng": 122.102485,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Napo",
+      "municipality": "Santa Cruz",
+      "province": "Marinduque",
+      "lat": 13.525835,
+      "lng": 122.104124,
+      "source": "municipality-centroid"
+    },
+    {
+      "barangay": "Pag-Asa Pob.",
+      "municipality": "Santa Cruz",
+      "province": "Marinduque",
+      "lat": 13.269658,
+      "lng": 121.938446,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Pantayin",
+      "municipality": "Santa Cruz",
+      "province": "Marinduque",
+      "lat": 13.525835,
+      "lng": 122.104124,
+      "source": "municipality-centroid"
+    },
+    {
+      "barangay": "Polo",
+      "municipality": "Santa Cruz",
+      "province": "Marinduque",
+      "lat": 13.501658,
+      "lng": 122.088584,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Pulong-Parang",
+      "municipality": "Santa Cruz",
+      "province": "Marinduque",
+      "lat": 13.525835,
+      "lng": 122.104124,
+      "source": "municipality-centroid"
+    },
+    {
+      "barangay": "Punong",
+      "municipality": "Santa Cruz",
+      "province": "Marinduque",
+      "lat": 13.525835,
+      "lng": 122.104124,
+      "source": "municipality-centroid"
+    },
+    {
+      "barangay": "San Antonio",
+      "municipality": "Santa Cruz",
+      "province": "Marinduque",
+      "lat": 13.447983,
+      "lng": 121.981314,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "San Isidro",
+      "municipality": "Santa Cruz",
+      "province": "Marinduque",
+      "lat": 13.525835,
+      "lng": 122.104124,
+      "source": "municipality-centroid"
+    },
+    {
+      "barangay": "Tagum",
+      "municipality": "Santa Cruz",
+      "province": "Marinduque",
+      "lat": 13.449663,
+      "lng": 122.102831,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Tamayo",
+      "municipality": "Santa Cruz",
+      "province": "Marinduque",
+      "lat": 13.44965,
+      "lng": 122.091239,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Tambangan",
+      "municipality": "Santa Cruz",
+      "province": "Marinduque",
+      "lat": 13.525835,
+      "lng": 122.104124,
+      "source": "municipality-centroid"
+    },
+    {
+      "barangay": "Tawiran",
+      "municipality": "Santa Cruz",
+      "province": "Marinduque",
+      "lat": 13.525835,
+      "lng": 122.104124,
+      "source": "municipality-centroid"
+    },
+    {
+      "barangay": "Taytay",
+      "municipality": "Santa Cruz",
+      "province": "Marinduque",
+      "lat": 13.415713,
+      "lng": 122.079974,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Bangwayin",
+      "municipality": "Torrijos",
+      "province": "Marinduque",
+      "lat": 13.274091,
+      "lng": 122.129765,
+      "source": "municipality-centroid"
+    },
+    {
+      "barangay": "Bayakbakin",
+      "municipality": "Torrijos",
+      "province": "Marinduque",
+      "lat": 13.327992,
+      "lng": 122.055704,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Bolo",
+      "municipality": "Torrijos",
+      "province": "Marinduque",
+      "lat": 13.382295,
+      "lng": 122.094634,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Bonliw",
+      "municipality": "Torrijos",
+      "province": "Marinduque",
+      "lat": 13.373732,
+      "lng": 122.11507,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Buangan",
+      "municipality": "Torrijos",
+      "province": "Marinduque",
+      "lat": 13.31333,
+      "lng": 122.068855,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Cabuyo",
+      "municipality": "Torrijos",
+      "province": "Marinduque",
+      "lat": 13.274091,
+      "lng": 122.129765,
+      "source": "municipality-centroid"
+    },
+    {
+      "barangay": "Cagpo",
+      "municipality": "Torrijos",
+      "province": "Marinduque",
+      "lat": 13.340044,
+      "lng": 122.112245,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Dampulan",
+      "municipality": "Torrijos",
+      "province": "Marinduque",
+      "lat": 13.274091,
+      "lng": 122.129765,
+      "source": "municipality-centroid"
+    },
+    {
+      "barangay": "Kay Duke",
+      "municipality": "Torrijos",
+      "province": "Marinduque",
+      "lat": 13.374944,
+      "lng": 122.131115,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Mabuhay",
+      "municipality": "Torrijos",
+      "province": "Marinduque",
+      "lat": 13.274091,
+      "lng": 122.129765,
+      "source": "municipality-centroid"
+    },
+    {
+      "barangay": "Makawayan",
+      "municipality": "Torrijos",
+      "province": "Marinduque",
+      "lat": 13.274091,
+      "lng": 122.129765,
+      "source": "municipality-centroid"
+    },
+    {
+      "barangay": "Malibago",
+      "municipality": "Torrijos",
+      "province": "Marinduque",
+      "lat": 13.274091,
+      "lng": 122.129765,
+      "source": "municipality-centroid"
+    },
+    {
+      "barangay": "Malinao",
+      "municipality": "Torrijos",
+      "province": "Marinduque",
+      "lat": 13.38338,
+      "lng": 122.112627,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Maranlig",
+      "municipality": "Torrijos",
+      "province": "Marinduque",
+      "lat": 13.346411,
+      "lng": 122.063027,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Marlangga",
+      "municipality": "Torrijos",
+      "province": "Marinduque",
+      "lat": 13.365001,
+      "lng": 122.070497,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Matuyatuya",
+      "municipality": "Torrijos",
+      "province": "Marinduque",
+      "lat": 13.394436,
+      "lng": 122.105913,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Nangka",
+      "municipality": "Torrijos",
+      "province": "Marinduque",
+      "lat": 13.477923,
+      "lng": 121.857251,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Pakaskasan",
+      "municipality": "Torrijos",
+      "province": "Marinduque",
+      "lat": 13.274091,
+      "lng": 122.129765,
+      "source": "municipality-centroid"
+    },
+    {
+      "barangay": "Payanas",
+      "municipality": "Torrijos",
+      "province": "Marinduque",
+      "lat": 13.321295,
+      "lng": 122.039397,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Poblacion",
+      "municipality": "Torrijos",
+      "province": "Marinduque",
+      "lat": 13.474846,
+      "lng": 121.859953,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Poctoy",
+      "municipality": "Torrijos",
+      "province": "Marinduque",
+      "lat": 13.33026,
+      "lng": 122.100232,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Sibuyao",
+      "municipality": "Torrijos",
+      "province": "Marinduque",
+      "lat": 13.340097,
+      "lng": 122.009198,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Suha",
+      "municipality": "Torrijos",
+      "province": "Marinduque",
+      "lat": 13.3975,
+      "lng": 122.115906,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Talawan",
+      "municipality": "Torrijos",
+      "province": "Marinduque",
+      "lat": 13.307642,
+      "lng": 122.00394,
+      "source": "osm-place"
+    },
+    {
+      "barangay": "Tigwi",
+      "municipality": "Torrijos",
+      "province": "Marinduque",
+      "lat": 13.274091,
+      "lng": 122.129765,
+      "source": "municipality-centroid"
+    }
+  ]
+}

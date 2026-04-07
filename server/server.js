@@ -14,6 +14,7 @@ const DEFAULT_ROOT = path.join(__dirname, '..');
 const ROOT = fs.existsSync(path.join(DEFAULT_ROOT, 'admin')) ? DEFAULT_ROOT : process.cwd();
 const EMPLOYEE_INDEX_PATH = path.join(ROOT, 'employee', 'index.html');
 const EMPLOYEE_APP_PATH = path.join(ROOT, 'employee', 'app.js');
+const MARINDUQUE_BARANGAY_DATA_PATH = path.join(ROOT, 'data', 'marinduque-barangays.json');
 
 function computeEmployeeBuildStamp() {
   const candidates = [EMPLOYEE_INDEX_PATH, EMPLOYEE_APP_PATH];
@@ -1030,6 +1031,138 @@ function normalizeAddressKey(value) {
     .trim()
     .toLowerCase()
     .replace(/\s+/g, ' ');
+}
+
+function normalizeBarangayName(value) {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/\(.*?\)/g, '')
+    .replace(/\bbrgy\.?\b/g, '')
+    .replace(/\bbarangay\b/g, '')
+    .replace(/[.,]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function loadMarinduqueBarangayDataset() {
+  if (!fs.existsSync(MARINDUQUE_BARANGAY_DATA_PATH)) return [];
+  try {
+    const raw = fs.readFileSync(MARINDUQUE_BARANGAY_DATA_PATH, 'utf8');
+    const parsed = parseJsonSafe(raw);
+    if (!parsed.ok) return [];
+    const rows = Array.isArray(parsed.value?.barangays) ? parsed.value.barangays : [];
+    return rows
+      .map((item) => {
+        const barangay = String(item?.barangay || '').trim();
+        const municipality = String(item?.municipality || '').trim();
+        const province = String(item?.province || 'Marinduque').trim() || 'Marinduque';
+        const source = String(item?.source || '').trim().toLowerCase();
+        const lat = Number(item?.lat);
+        const lng = Number(item?.lng);
+        if (!barangay || !municipality || !Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+        return {
+          barangay,
+          municipality,
+          province,
+          source,
+          lat,
+          lng,
+          key: `${normalizeAddressKey(municipality)}|${normalizeBarangayName(barangay)}`,
+          isHighQuality: source !== 'municipality-centroid' && source !== 'unresolved'
+        };
+      })
+      .filter(Boolean);
+  } catch (err) {
+    return [];
+  }
+}
+
+const MARINDUQUE_BARANGAY_DATA = loadMarinduqueBarangayDataset();
+
+function getBarangaySourceBoost(source) {
+  const kind = String(source || '').toLowerCase();
+  if (kind === 'manual-override') return 2.6;
+  if (kind === 'osm-place') return 1.9;
+  if (kind === 'nominatim-search') return 1.2;
+  if (kind === 'municipality-centroid') return -7;
+  return 0;
+}
+
+function getBarangayDistanceScore(distance) {
+  if (!Number.isFinite(distance)) return -100;
+  if (distance <= 15) return 12;
+  if (distance <= 30) return 11;
+  if (distance <= 50) return 10;
+  if (distance <= 80) return 9;
+  if (distance <= 120) return 8;
+  if (distance <= 200) return 7;
+  if (distance <= 300) return 6;
+  if (distance <= 450) return 5;
+  if (distance <= 700) return 4;
+  if (distance <= 1000) return 3;
+  if (distance <= 1500) return 2;
+  if (distance <= 2200) return 1;
+  if (distance <= 3000) return -0.5;
+  if (distance <= 5000) return -2;
+  return -4;
+}
+
+function createBarangayAddress(entry) {
+  return `${entry.barangay}, ${entry.municipality}, ${entry.province || 'Marinduque'}, Philippines`;
+}
+
+function findNearestMarinduqueBarangayCandidate(lat, lng, boundaryContext = null) {
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  if (!Array.isArray(MARINDUQUE_BARANGAY_DATA) || !MARINDUQUE_BARANGAY_DATA.length) return null;
+
+  const queryPoint = { lat, lng };
+  const boundaryMunicipalityKey = normalizeAddressKey(boundaryContext?.municipality || '');
+  let best = null;
+
+  MARINDUQUE_BARANGAY_DATA.forEach((entry) => {
+    if (!entry.isHighQuality) return;
+    const distance = distanceMeters(queryPoint, { lat: entry.lat, lng: entry.lng });
+    if (!Number.isFinite(distance)) return;
+
+    let score = getBarangayDistanceScore(distance) + getBarangaySourceBoost(entry.source);
+    if (boundaryMunicipalityKey) {
+      const sameMunicipality = normalizeAddressKey(entry.municipality) === boundaryMunicipalityKey;
+      score += sameMunicipality ? 0.9 : -0.35;
+    }
+
+    if (
+      !best ||
+      score > best.score ||
+      (score === best.score &&
+        (distance < best.distanceMeters ||
+          (distance === best.distanceMeters && entry.barangay.localeCompare(best.barangay) < 0)))
+    ) {
+      best = {
+        ...entry,
+        distanceMeters: distance,
+        score
+      };
+    }
+  });
+
+  if (!best) return null;
+  if (!Number.isFinite(best.distanceMeters) || best.distanceMeters > 5000) return null;
+
+  const candidate = createAddressCandidate({
+    source: 'marinduque-barangay-db',
+    address: createBarangayAddress(best),
+    baseScore: best.score + 6,
+    providerBoost: 4.5,
+    queryLat: lat,
+    queryLng: lng,
+    resultLat: best.lat,
+    resultLng: best.lng
+  });
+  if (!candidate) return null;
+  candidate.barangay = best.barangay;
+  candidate.municipality = best.municipality;
+  candidate.province = best.province || 'Marinduque';
+  return candidate;
 }
 
 function createAddressCandidate({
@@ -2541,6 +2674,8 @@ async function handleApi(req, res, pathname) {
     try {
       const candidates = [];
       const boundaryContext = await fetchOverpassBoundaryContext(lat, lng);
+      const localBarangayCandidate = findNearestMarinduqueBarangayCandidate(lat, lng, boundaryContext);
+      if (localBarangayCandidate) candidates.push(localBarangayCandidate);
       const nearbyPlaceCandidate = await fetchOverpassNearbyPlaceCandidate(lat, lng, boundaryContext);
       if (nearbyPlaceCandidate) candidates.push(nearbyPlaceCandidate);
       const osmUrl = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=19&addressdetails=1&namedetails=1`;
@@ -2659,23 +2794,29 @@ async function handleApi(req, res, pathname) {
 
       const best = pickBestAddressCandidate(candidates);
       if (best && best.address) {
+        const effectiveBoundary = {
+          barangay: best.barangay || (boundaryContext && boundaryContext.barangay) || '',
+          municipality: best.municipality || (boundaryContext && boundaryContext.municipality) || '',
+          province: best.province || (boundaryContext && boundaryContext.province) || 'Marinduque',
+          country: (boundaryContext && boundaryContext.country) || 'Philippines'
+        };
         const bestAddressKey = normalizeAddressKey(best.address);
-        const barangayKey = normalizeAddressKey(boundaryContext && boundaryContext.barangay ? boundaryContext.barangay : '');
+        const barangayKey = normalizeAddressKey(effectiveBoundary.barangay || '');
         const shouldForceBoundary =
-          !!boundaryContext &&
+          !!effectiveBoundary &&
           !!barangayKey &&
           !bestAddressKey.includes(barangayKey) &&
           Number.isFinite(best.distanceMeters) &&
           best.distanceMeters <= 120;
         const finalAddress = shouldForceBoundary
-          ? buildBoundaryAddress(boundaryContext, best.address)
+          ? buildBoundaryAddress(effectiveBoundary, best.address)
           : best.address;
         return sendJson(res, 200, {
           ok: true,
           address: finalAddress,
           source: best.source,
           distanceMeters: Number.isFinite(best.distanceMeters) ? Math.round(best.distanceMeters) : null,
-          boundaryBarangay: boundaryContext && boundaryContext.barangay ? boundaryContext.barangay : ''
+          boundaryBarangay: effectiveBoundary.barangay || ''
         });
       }
 
