@@ -70,6 +70,7 @@ let notificationsCache = [];
 let messagesCache = [];
 let reportsCache = [];
 let reportMap = new Map();
+let reportAttestedDrafts = new Map();
 let refreshTimer = null;
 const STAT_CACHE_TTL = 45000;
 const statCache = {
@@ -484,6 +485,19 @@ function closeStatModal() {
 
 function buildReportKey(employeeId, date) {
   return `${employeeId || ''}|${date || ''}`;
+}
+
+function buildReportDraftKey(report) {
+  const reportId = String(report && report.id ? report.id : '').trim();
+  if (reportId) return `id:${reportId}`;
+  const employeeId = String(report && report.employeeId ? report.employeeId : '').trim();
+  const reportDate = String(report && report.reportDate ? report.reportDate : '').trim();
+  return `emp:${employeeId}|date:${reportDate}`;
+}
+
+function isEditingReportAttestedInput() {
+  const active = document.activeElement;
+  return Boolean(active && active.classList && active.classList.contains('report-attested-input'));
 }
 
 function buildRangeQuery(from, to) {
@@ -939,8 +953,14 @@ async function loadMessages() {
 function renderReportsTable(list) {
   reportsTable.innerHTML = '';
   list.forEach((report) => {
-    const attestedBy = String(report.attestedBy || '');
-    const attestedPosition = String(report.attestedPosition || '');
+    const draftKey = buildReportDraftKey(report);
+    const draft = reportAttestedDrafts.get(draftKey) || {};
+    const attestedBy = Object.prototype.hasOwnProperty.call(draft, 'attestedBy')
+      ? String(draft.attestedBy || '')
+      : String(report.attestedBy || '');
+    const attestedPosition = Object.prototype.hasOwnProperty.call(draft, 'attestedPosition')
+      ? String(draft.attestedPosition || '')
+      : String(report.attestedPosition || '');
     const row = document.createElement('tr');
     row.innerHTML = `
       <td>${report.reportDate || '--'}</td>
@@ -951,6 +971,7 @@ function renderReportsTable(list) {
         <input
           class="report-attested-input"
           type="text"
+          data-report-key="${escapeHtml(draftKey)}"
           data-attested-by="${report.id}"
           placeholder="Attested by name"
           value="${escapeHtml(attestedBy)}"
@@ -960,6 +981,7 @@ function renderReportsTable(list) {
         <input
           class="report-attested-input"
           type="text"
+          data-report-key="${escapeHtml(draftKey)}"
           data-attested-position="${report.id}"
           placeholder="Attested by position"
           value="${escapeHtml(attestedPosition)}"
@@ -1005,6 +1027,7 @@ async function handleReportAttestedSave(button) {
   const row = button.closest('tr');
   const attestedByInput = row ? row.querySelector('input[data-attested-by]') : null;
   const attestedPositionInput = row ? row.querySelector('input[data-attested-position]') : null;
+  const draftKey = row ? String((row.querySelector('input[data-report-key]') || {}).dataset?.reportKey || '') : '';
   const attestedBy = String(attestedByInput ? attestedByInput.value : '').trim();
   const attestedPosition = String(attestedPositionInput ? attestedPositionInput.value : '').trim();
 
@@ -1024,6 +1047,7 @@ async function handleReportAttestedSave(button) {
     });
     const updated = data && data.report ? data.report : null;
     syncUpdatedReportInCache(updated);
+    if (draftKey) reportAttestedDrafts.delete(draftKey);
     if (updated) {
       if (attestedByInput) attestedByInput.value = updated.attestedBy || '';
       if (attestedPositionInput) attestedPositionInput.value = updated.attestedPosition || '';
@@ -1483,9 +1507,24 @@ function startAutoRefresh() {
       const to = (reportsTo && reportsTo.value) || range.to;
       if (reportsFrom && !reportsFrom.value) reportsFrom.value = from;
       if (reportsTo && !reportsTo.value) reportsTo.value = to;
+      if (isEditingReportAttestedInput()) return;
       loadReportsTable(from, to).catch(() => {});
     }
   }, 10000);
+}
+
+function handleReportsInputDraft(event) {
+  const input = event.target.closest('input.report-attested-input[data-report-key]');
+  if (!input) return;
+  const key = String(input.dataset.reportKey || '').trim();
+  if (!key) return;
+  const draft = reportAttestedDrafts.get(key) || {};
+  if (input.hasAttribute('data-attested-by')) {
+    draft.attestedBy = input.value;
+  } else if (input.hasAttribute('data-attested-position')) {
+    draft.attestedPosition = input.value;
+  }
+  reportAttestedDrafts.set(key, draft);
 }
 
 loginForm.addEventListener('submit', async (event) => {
@@ -1588,6 +1627,7 @@ document.getElementById('refresh-employees').addEventListener('click', loadEmplo
 attendanceTable.addEventListener('click', handleReportPrintClick);
 attendanceHistory.addEventListener('click', handleReportPrintClick);
 reportsTable.addEventListener('click', handleReportPrintClick);
+reportsTable.addEventListener('input', handleReportsInputDraft);
 
 document.getElementById('filter-attendance').addEventListener('click', () => {
   const from = document.getElementById('attendance-from').value;
