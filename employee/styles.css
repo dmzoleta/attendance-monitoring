@@ -643,6 +643,10 @@ body::before {
   gap: 4px;
 }
 
+.report-signatures .report-sign-block:only-child {
+  grid-column: 1 / -1;
+}
+
 .report-card .report-attachment input[type="file"] {
   display: none;
 }
