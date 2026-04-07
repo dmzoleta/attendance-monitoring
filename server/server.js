@@ -1084,6 +1084,87 @@ function pickBestAddressCandidate(candidates) {
   return list[0] || null;
 }
 
+function parseOverpassBoundaryContext(elements) {
+  if (!Array.isArray(elements) || !elements.length) return null;
+  const byLevel = new Map();
+  elements.forEach((element) => {
+    const tags = element && element.tags ? element.tags : null;
+    const name = String(tags && tags.name ? tags.name : '').trim();
+    const adminLevelRaw = String(tags && tags.admin_level ? tags.admin_level : '').trim();
+    const adminLevel = Number(adminLevelRaw);
+    if (!name || !Number.isFinite(adminLevel)) return;
+    if (!byLevel.has(adminLevel)) byLevel.set(adminLevel, []);
+    const bucket = byLevel.get(adminLevel);
+    if (!bucket.includes(name)) bucket.push(name);
+  });
+
+  const first = (level) => {
+    const list = byLevel.get(level);
+    return Array.isArray(list) && list.length ? list[0] : '';
+  };
+
+  const barangay = first(10) || first(9) || first(11);
+  const municipality = first(8) || first(7);
+  const province = first(6) || first(5) || first(4);
+  const country = first(2) || 'Philippines';
+  if (!barangay && !municipality && !province) return null;
+  return { barangay, municipality, province, country };
+}
+
+async function fetchOverpassBoundaryContext(lat, lng) {
+  const endpoint = 'https://overpass-api.de/api/interpreter';
+  const query = `[out:json][timeout:8];
+is_in(${lat},${lng})->.areas;
+relation(pivot.areas)["boundary"="administrative"]["name"]["admin_level"];
+out tags;`;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 4500);
+  try {
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+      body: `data=${encodeURIComponent(query)}`,
+      signal: controller.signal
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return parseOverpassBoundaryContext(Array.isArray(data && data.elements) ? data.elements : []);
+  } catch (err) {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function getBoundaryBoost(address, boundary) {
+  if (!address || !boundary) return 0;
+  const text = normalizeAddressKey(address);
+  let boost = 0;
+  const has = (value) => {
+    const key = normalizeAddressKey(value);
+    return !!key && text.includes(key);
+  };
+  if (boundary.barangay) boost += has(boundary.barangay) ? 2.8 : -1.4;
+  if (boundary.municipality) boost += has(boundary.municipality) ? 0.8 : -0.3;
+  if (boundary.province) boost += has(boundary.province) ? 0.6 : 0;
+  return boost;
+}
+
+function buildBoundaryAddress(boundary, fallbackAddress = '') {
+  if (!boundary) return String(fallbackAddress || '').trim();
+  const parts = [];
+  const add = (value) => {
+    const clean = String(value || '').trim();
+    if (clean && !parts.includes(clean)) parts.push(clean);
+  };
+  add(boundary.barangay);
+  add(boundary.municipality);
+  add(boundary.province);
+  add(boundary.country || 'Philippines');
+  if (parts.length) return parts.join(', ');
+  return String(fallbackAddress || '').trim();
+}
+
 function canSeed() {
   return String(process.env.ALLOW_SEED || '').toLowerCase() === 'true';
 }
@@ -2372,6 +2453,7 @@ async function handleApi(req, res, pathname) {
     const apiKey = getGoogleMapsKey();
     try {
       const candidates = [];
+      const boundaryContext = await fetchOverpassBoundaryContext(lat, lng);
       const osmUrl = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=19&addressdetails=1&namedetails=1`;
       const osmRes = await fetch(osmUrl, { headers: { 'Accept-Language': 'en,fil;q=0.9' } });
       if (osmRes.ok) {
@@ -2480,13 +2562,31 @@ async function handleApi(req, res, pathname) {
         if (candidate) candidates.push(candidate);
       }
 
+      if (boundaryContext) {
+        candidates.forEach((candidate) => {
+          candidate.score += getBoundaryBoost(candidate.address, boundaryContext);
+        });
+      }
+
       const best = pickBestAddressCandidate(candidates);
       if (best && best.address) {
+        const bestAddressKey = normalizeAddressKey(best.address);
+        const barangayKey = normalizeAddressKey(boundaryContext && boundaryContext.barangay ? boundaryContext.barangay : '');
+        const shouldForceBoundary =
+          !!boundaryContext &&
+          !!barangayKey &&
+          !bestAddressKey.includes(barangayKey) &&
+          Number.isFinite(best.distanceMeters) &&
+          best.distanceMeters <= 120;
+        const finalAddress = shouldForceBoundary
+          ? buildBoundaryAddress(boundaryContext, best.address)
+          : best.address;
         return sendJson(res, 200, {
           ok: true,
-          address: best.address,
+          address: finalAddress,
           source: best.source,
-          distanceMeters: Number.isFinite(best.distanceMeters) ? Math.round(best.distanceMeters) : null
+          distanceMeters: Number.isFinite(best.distanceMeters) ? Math.round(best.distanceMeters) : null,
+          boundaryBarangay: boundaryContext && boundaryContext.barangay ? boundaryContext.barangay : ''
         });
       }
 
