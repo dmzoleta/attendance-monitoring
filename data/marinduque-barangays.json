@@ -17,8 +17,8 @@
     "total": 218,
     "osmPlace": 150,
     "nominatim": 4,
-    "manualOverride": 3,
-    "municipalityCentroid": 61,
+    "manualOverride": 4,
+    "municipalityCentroid": 60,
     "unresolved": 0
   },
   "barangays": [
@@ -306,9 +306,9 @@
       "barangay": "Malusak (Pob.)",
       "municipality": "Boac",
       "province": "Marinduque",
-      "lat": 13.419383,
-      "lng": 121.837109,
-      "source": "municipality-centroid"
+      "lat": 13.44608,
+      "lng": 121.84034,
+      "source": "manual-override"
     },
     {
       "barangay": "Mansiwat",

@@ -1347,28 +1347,32 @@ function parseOverpassBoundaryContext(elements) {
 }
 
 async function fetchOverpassBoundaryContext(lat, lng) {
-  const endpoint = 'https://overpass-api.de/api/interpreter';
   const query = `[out:json][timeout:8];
 is_in(${lat},${lng})->.areas;
 relation(pivot.areas)["boundary"="administrative"]["name"]["admin_level"];
 out tags;`;
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 4500);
-  try {
-    const res = await fetch(endpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
-      body: `data=${encodeURIComponent(query)}`,
-      signal: controller.signal
-    });
-    if (!res.ok) return null;
-    const data = await res.json();
-    return parseOverpassBoundaryContext(Array.isArray(data && data.elements) ? data.elements : []);
-  } catch (err) {
-    return null;
-  } finally {
-    clearTimeout(timer);
+  const endpoints = ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter'];
+  for (const endpoint of endpoints) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 5200);
+    try {
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+        body: `data=${encodeURIComponent(query)}`,
+        signal: controller.signal
+      });
+      if (!res.ok) continue;
+      const data = await res.json();
+      const parsed = parseOverpassBoundaryContext(Array.isArray(data && data.elements) ? data.elements : []);
+      if (parsed) return parsed;
+    } catch (err) {
+      // try next endpoint
+    } finally {
+      clearTimeout(timer);
+    }
   }
+  return null;
 }
 
 function getBoundaryBoost(address, boundary) {
@@ -1408,7 +1412,7 @@ function buildBoundaryCalibratedAddress(address, boundary) {
   const municipality = String(boundary.municipality || '').trim();
   const province = String(boundary.province || 'Marinduque').trim() || 'Marinduque';
   const country = String(boundary.country || 'Philippines').trim() || 'Philippines';
-  if (!barangay && !municipality && !province) return raw;
+  if (!barangay && !municipality) return raw;
 
   const rawParts = raw
     .split(',')
@@ -1526,8 +1530,34 @@ async function resolveReverseGeocodeAddress(lat, lng) {
   if (immediateLocal) candidates.push(immediateLocal);
 
   const boundaryContext = await fetchOverpassBoundaryContext(lat, lng);
+  const hasBoundaryBarangay = !!normalizeAddressKey(boundaryContext?.barangay || '');
+  const hasBoundaryMunicipality = !!normalizeAddressKey(boundaryContext?.municipality || '');
+  const boundaryForCalibration = hasBoundaryBarangay || hasBoundaryMunicipality ? boundaryContext : null;
+  if (boundaryForCalibration) {
+    const boundaryAddress = buildBoundaryAddress(boundaryForCalibration, '');
+    const boundaryCandidate = createAddressCandidate({
+      source: 'overpass-boundary',
+      address: boundaryAddress,
+      baseScore: 17,
+      providerBoost: 3.5,
+      queryLat: lat,
+      queryLng: lng,
+      resultLat: lat,
+      resultLng: lng
+    });
+    if (boundaryCandidate) {
+      boundaryCandidate.barangay = boundaryForCalibration.barangay || '';
+      boundaryCandidate.municipality = boundaryForCalibration.municipality || '';
+      boundaryCandidate.province = boundaryForCalibration.province || 'Marinduque';
+      candidates.push(boundaryCandidate);
+    }
+  }
   const localBarangayCandidate = findNearestMarinduqueBarangayCandidate(lat, lng, boundaryContext);
-  if (localBarangayCandidate) candidates.push(localBarangayCandidate);
+  if (localBarangayCandidate) {
+    const localDistance = Number(localBarangayCandidate.distanceMeters);
+    const localReliable = hasBoundaryBarangay || (Number.isFinite(localDistance) && localDistance <= 120);
+    if (localReliable) candidates.push(localBarangayCandidate);
+  }
 
   const osmUrl = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=19&addressdetails=1&namedetails=1`;
   const osmData = await fetchJsonWithTimeout(
@@ -1585,6 +1615,30 @@ async function resolveReverseGeocodeAddress(lat, lng) {
 
   const best = pickBestAddressCandidate(candidates);
   if (best && best.address) {
+    const isLowConfidenceLocalGuess =
+      best.source === 'marinduque-barangay-db' &&
+      !hasBoundaryBarangay &&
+      !hasBoundaryMunicipality &&
+      (!Number.isFinite(best.distanceMeters) || best.distanceMeters > 120);
+    if (isLowConfidenceLocalGuess) {
+      const coarseAddress = [
+        best.municipality || '',
+        best.province || 'Marinduque',
+        'Philippines'
+      ]
+        .filter(Boolean)
+        .join(', ');
+      const payload = {
+        ok: true,
+        address: coarseAddress || `${lat.toFixed(5)}, ${lng.toFixed(5)}`,
+        source: 'coarse-locality',
+        distanceMeters: Number.isFinite(best.distanceMeters) ? Math.round(best.distanceMeters) : null,
+        boundaryBarangay: ''
+      };
+      setCachedReverseGeocode(lat, lng, payload);
+      return payload;
+    }
+
     const effectiveBoundary = {
       barangay: (boundaryContext && boundaryContext.barangay) || best.barangay || '',
       municipality: (boundaryContext && boundaryContext.municipality) || best.municipality || '',
@@ -1592,21 +1646,21 @@ async function resolveReverseGeocodeAddress(lat, lng) {
       country: (boundaryContext && boundaryContext.country) || 'Philippines'
     };
     const bestAddressKey = normalizeAddressKey(best.address);
-    const barangayKey = normalizeAddressKey(effectiveBoundary.barangay || '');
+    const barangayKey = normalizeAddressKey(boundaryForCalibration?.barangay || '');
     const shouldForceBoundary =
+      !!boundaryForCalibration &&
       !!barangayKey &&
-      !bestAddressKey.includes(barangayKey) &&
-      Number.isFinite(best.distanceMeters) &&
-      best.distanceMeters <= 120;
-    const rawFinalAddress = shouldForceBoundary ? buildBoundaryAddress(effectiveBoundary, best.address) : best.address;
-    const finalAddress =
-      buildBoundaryCalibratedAddress(rawFinalAddress, effectiveBoundary) || rawFinalAddress || best.address;
+      !bestAddressKey.includes(barangayKey);
+    const rawFinalAddress = shouldForceBoundary ? buildBoundaryAddress(boundaryForCalibration, best.address) : best.address;
+    const finalAddress = boundaryForCalibration
+      ? buildBoundaryCalibratedAddress(rawFinalAddress, boundaryForCalibration) || rawFinalAddress || best.address
+      : rawFinalAddress;
     const payload = {
       ok: true,
       address: finalAddress,
       source: best.source,
       distanceMeters: Number.isFinite(best.distanceMeters) ? Math.round(best.distanceMeters) : null,
-      boundaryBarangay: effectiveBoundary.barangay || ''
+      boundaryBarangay: (boundaryForCalibration && boundaryForCalibration.barangay) || effectiveBoundary.barangay || ''
     };
     setCachedReverseGeocode(lat, lng, payload);
     return payload;
