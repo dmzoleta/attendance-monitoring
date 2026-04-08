@@ -112,6 +112,7 @@ const attendanceHtmlAudio = { timein: null, timeout: null, error: null };
 const LOCATION_UNKNOWN_TEXT = 'Location unavailable';
 const LOCATION_DENIED_TEXT = 'Location permission denied';
 const PHOTO_PLACEHOLDER_SRC = 'assets/photo-placeholder.svg';
+const WAIT_EXACT_LOCATION_TEXT = 'plsss wait Still determining the exact location.';
 let gpsConsentChoice = 'pending';
 
 function getAttendanceAudioContext() {
@@ -510,18 +511,16 @@ function openGpsConsentModal() {
 
 async function requestExactLocation({ source = 'manual' } = {}) {
   if (locationRequestInFlight) {
-    setGpsStatus('Please wait... kinukuha pa ang exact location...');
+    setGpsStatus(WAIT_EXACT_LOCATION_TEXT);
     if (gpsConsentChoice === 'allow') {
-      setAttendanceNotice('Please wait... kinukuha pa ang exact location.', 'loading');
+      setAttendanceNotice(WAIT_EXACT_LOCATION_TEXT, 'loading');
     }
     return hasActiveGpsFix();
   }
 
   locationRequestInFlight = true;
-  const waitMessage = source === 'photo'
-    ? 'Please wait... kinukuha pa ang exact location bago mag-take photo.'
-    : 'Please wait... kinukuha pa ang exact location.';
-  setGpsStatus('Please wait... kinukuha pa ang exact location...');
+  const waitMessage = WAIT_EXACT_LOCATION_TEXT;
+  setGpsStatus(WAIT_EXACT_LOCATION_TEXT);
   if (gpsConsentChoice === 'allow') {
     setAttendanceNotice(waitMessage, 'loading');
   }
@@ -533,7 +532,7 @@ async function requestExactLocation({ source = 'manual' } = {}) {
       if (gotFix) {
         setAttendanceNotice('Exact location captured. You can now take photo.', 'success');
       } else {
-        setAttendanceNotice('Please wait... kinukuha pa ang exact location.', 'loading');
+        setAttendanceNotice(WAIT_EXACT_LOCATION_TEXT, 'loading');
       }
     }
     return gotFix;
@@ -560,7 +559,7 @@ async function handleGpsConsentAllow() {
       openPhotoCapture(true);
     } else {
       pendingPhotoCaptureAfterConsent = true;
-      setAttendanceNotice('Please wait... kinukuha pa ang exact location bago mag-take photo.', 'loading');
+      setAttendanceNotice(WAIT_EXACT_LOCATION_TEXT, 'loading');
     }
   }
 }
@@ -614,7 +613,7 @@ function openPhotoCapture(force = false) {
 
   if (!force && gpsConsentChoice === 'allow' && !hasActiveGpsFix()) {
     pendingPhotoCaptureAfterConsent = true;
-    setAttendanceNotice('Please wait... kinukuha pa ang exact location bago mag-take photo.', 'loading');
+    setAttendanceNotice(WAIT_EXACT_LOCATION_TEXT, 'loading');
     if (!locationRequestInFlight) {
       void requestExactLocation({ source: 'photo' });
     }
@@ -1644,7 +1643,7 @@ async function updateLocation() {
       return false;
     }
     try {
-      setGpsStatus('Please wait... kinukuha pa ang exact location...');
+      setGpsStatus(WAIT_EXACT_LOCATION_TEXT);
       void startGpsWatch();
       let pos = null;
       try {
@@ -1665,7 +1664,7 @@ async function updateLocation() {
       }
       if (pos) {
         await applyLocationUpdate(pos);
-        setGpsStatus(`Please wait... kinukuha pa ang mas exact location · ±${Math.round(pos.coords.accuracy)}m`);
+        setGpsStatus(`${WAIT_EXACT_LOCATION_TEXT} ±${Math.round(pos.coords.accuracy)}m`);
       }
       void collectBestNativePosition().then((best) => {
         if (best) applyLocationUpdate(best);
@@ -1707,7 +1706,7 @@ async function updateLocation() {
     } catch (firstErr) {
       const denied = await isWebPermissionExplicitlyDenied(firstErr);
       if (denied) throw firstErr;
-      setGpsStatus('Please wait... kinukuha pa ang exact location...');
+      setGpsStatus(WAIT_EXACT_LOCATION_TEXT);
       pos = await getCurrentWebPosition({
         enableHighAccuracy: true,
         timeout: PRECISE_LOCATION_TIMEOUT_MS,
@@ -1716,7 +1715,7 @@ async function updateLocation() {
     }
     if (pos) {
       await applyLocationUpdate(pos);
-      setGpsStatus(`Please wait... kinukuha pa ang mas exact location · ±${Math.round(pos.coords.accuracy)}m`);
+      setGpsStatus(`${WAIT_EXACT_LOCATION_TEXT} ±${Math.round(pos.coords.accuracy)}m`);
     }
     void startGpsWatch();
     void collectBestWebPosition().then((best) => {
