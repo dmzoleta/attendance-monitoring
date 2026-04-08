@@ -1102,11 +1102,81 @@ function loadMarinduqueBarangayDataset() {
 
 const MARINDUQUE_BARANGAY_DATA = loadMarinduqueBarangayDataset();
 
+function normalizeMunicipalityName(value) {
+  return normalizeAddressKey(value)
+    .replace(/\bsta\.?\b/g, 'santa')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+const KNOWN_MARINDUQUE_MUNICIPALITY_KEYS = new Set(
+  ['Boac', 'Buenavista', 'Gasan', 'Mogpog', 'Santa Cruz', 'Torrijos', 'Sta Cruz'].map((item) =>
+    normalizeMunicipalityName(item)
+  )
+);
+
+function isKnownMarinduqueMunicipality(value) {
+  const key = normalizeMunicipalityName(value);
+  return !!key && KNOWN_MARINDUQUE_MUNICIPALITY_KEYS.has(key);
+}
+
+const MARINDUQUE_BARANGAY_LOOKUP = (() => {
+  const map = new Map();
+  MARINDUQUE_BARANGAY_DATA.forEach((entry) => {
+    const municipalityKey = normalizeMunicipalityName(entry.municipality);
+    const barangayKey = normalizeBarangayName(entry.barangay);
+    if (!municipalityKey || !barangayKey) return;
+    if (!map.has(municipalityKey)) map.set(municipalityKey, new Set());
+    map.get(municipalityKey).add(barangayKey);
+  });
+  return map;
+})();
+
+function chooseBoundaryBarangayName(candidates, municipality) {
+  const list = Array.isArray(candidates)
+    ? [...new Set(candidates.map((item) => String(item || '').trim()).filter(Boolean))]
+    : [];
+  if (!list.length) return '';
+
+  const municipalityKey = normalizeMunicipalityName(municipality);
+  const knownBarangays = MARINDUQUE_BARANGAY_LOOKUP.get(municipalityKey);
+  if (!knownBarangays || !knownBarangays.size) return list[0];
+
+  let picked = list[0];
+  let bestScore = Number.NEGATIVE_INFINITY;
+  list.forEach((name, index) => {
+    const normalized = normalizeBarangayName(name);
+    let score = -index * 0.01;
+
+    if (knownBarangays.has(normalized)) {
+      score += 8;
+    } else {
+      for (const known of knownBarangays) {
+        if (!known) continue;
+        if (known.includes(normalized) || normalized.includes(known)) {
+          score += 3;
+          break;
+        }
+      }
+    }
+
+    if (/\bpob\b|\bpoblacion\b/.test(normalized)) score += 0.15;
+    if (score > bestScore) {
+      bestScore = score;
+      picked = name;
+    }
+  });
+
+  return picked;
+}
+
 function getBarangaySourceBoost(source) {
   const kind = String(source || '').toLowerCase();
-  if (kind === 'manual-override') return 2.6;
-  if (kind === 'osm-place') return 1.9;
-  if (kind === 'nominatim-search') return 1.2;
+  // Keep source quality as a light tie-breaker only.
+  // Distance must stay the dominant factor for nearby barangays.
+  if (kind === 'manual-override') return 0.7;
+  if (kind === 'osm-place') return 0.6;
+  if (kind === 'nominatim-search') return 0.4;
   if (kind === 'municipality-centroid') return -7;
   return 0;
 }
@@ -1174,8 +1244,8 @@ function findNearestMarinduqueBarangayCandidate(lat, lng, boundaryContext = null
   const candidate = createAddressCandidate({
     source: 'marinduque-barangay-db',
     address: createBarangayAddress(best),
-    baseScore: best.score + 6,
-    providerBoost: 4.5,
+    baseScore: best.score + 1.5,
+    providerBoost: 1.2,
     queryLat: lat,
     queryLng: lng,
     resultLat: best.lat,
@@ -1259,8 +1329,17 @@ function parseOverpassBoundaryContext(elements) {
     return Array.isArray(list) && list.length ? list[0] : '';
   };
 
-  const barangay = first(10) || first(9) || first(11);
-  const municipality = first(8) || first(7);
+  const barangayCandidates = [
+    ...(byLevel.get(10) || []),
+    ...(byLevel.get(9) || []),
+    ...(byLevel.get(11) || [])
+  ];
+  const municipalityCandidates = [...(byLevel.get(8) || []), ...(byLevel.get(7) || [])];
+  const municipality =
+    municipalityCandidates.find((name) => isKnownMarinduqueMunicipality(name)) ||
+    municipalityCandidates[0] ||
+    '';
+  const barangay = chooseBoundaryBarangayName(barangayCandidates, municipality);
   const province = first(6) || first(5) || first(4);
   const country = first(2) || 'Philippines';
   if (!barangay && !municipality && !province) return null;
@@ -1321,13 +1400,72 @@ function buildBoundaryAddress(boundary, fallbackAddress = '') {
   return String(fallbackAddress || '').trim();
 }
 
+function buildBoundaryCalibratedAddress(address, boundary) {
+  const raw = String(address || '').trim();
+  if (!boundary) return raw;
+
+  const barangay = String(boundary.barangay || '').trim();
+  const municipality = String(boundary.municipality || '').trim();
+  const province = String(boundary.province || 'Marinduque').trim() || 'Marinduque';
+  const country = String(boundary.country || 'Philippines').trim() || 'Philippines';
+  if (!barangay && !municipality && !province) return raw;
+
+  const rawParts = raw
+    .split(',')
+    .map((part) => part.trim())
+    .filter(Boolean);
+  const boundaryAddressKeys = new Set(
+    [barangay, municipality, province, country]
+      .map((part) => normalizeAddressKey(part))
+      .filter(Boolean)
+  );
+  const boundaryBarangayKeys = new Set(
+    [barangay, municipality]
+      .map((part) => normalizeBarangayName(part))
+      .filter(Boolean)
+  );
+
+  const looksLikePostal = (value) => /\b\d{4}\b/.test(String(value || ''));
+  const streetPart = rawParts.find((part) => {
+    const addrKey = normalizeAddressKey(part);
+    const brgyKey = normalizeBarangayName(part);
+    if (!addrKey) return false;
+    if (looksLikePostal(part)) return false;
+    if (boundaryAddressKeys.has(addrKey)) return false;
+    if (boundaryBarangayKeys.has(brgyKey)) return false;
+    if (addrKey === 'philippines') return false;
+    return true;
+  });
+
+  const finalParts = [];
+  const dedupe = new Set();
+  const addPart = (value, mode = 'addr') => {
+    const clean = String(value || '').trim();
+    if (!clean) return;
+    const keyBase = mode === 'barangay' ? normalizeBarangayName(clean) : normalizeAddressKey(clean);
+    if (!keyBase) return;
+    const key = `${mode}:${keyBase}`;
+    if (dedupe.has(key)) return;
+    dedupe.add(key);
+    finalParts.push(clean);
+  };
+
+  addPart(streetPart, 'addr');
+  addPart(barangay, 'barangay');
+  addPart(municipality, 'addr');
+  addPart(province, 'addr');
+  addPart(country, 'addr');
+
+  return finalParts.length ? finalParts.join(', ') : raw;
+}
+
 function roundCoordinate(value, precision = 4) {
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) return '';
   return numeric.toFixed(precision);
 }
 
-function getReverseGeocodeCacheKey(lat, lng, precision = 4) {
+function getReverseGeocodeCacheKey(lat, lng, precision = 5) {
   const latKey = roundCoordinate(lat, precision);
   const lngKey = roundCoordinate(lng, precision);
   if (!latKey || !lngKey) return '';
@@ -1345,7 +1483,7 @@ function pruneReverseGeocodeCache() {
 }
 
 function getCachedReverseGeocode(lat, lng) {
-  const key = getReverseGeocodeCacheKey(lat, lng, 4);
+  const key = getReverseGeocodeCacheKey(lat, lng, 5);
   if (!key) return null;
   const item = reverseGeocodeCache.get(key);
   if (!item) return null;
@@ -1357,7 +1495,7 @@ function getCachedReverseGeocode(lat, lng) {
 }
 
 function setCachedReverseGeocode(lat, lng, payload) {
-  const key = getReverseGeocodeCacheKey(lat, lng, 4);
+  const key = getReverseGeocodeCacheKey(lat, lng, 5);
   if (!key || !payload) return;
   reverseGeocodeCache.set(key, {
     payload,
@@ -1385,17 +1523,7 @@ async function resolveReverseGeocodeAddress(lat, lng) {
   const apiKey = getGoogleMapsKey();
 
   const immediateLocal = findNearestMarinduqueBarangayCandidate(lat, lng, null);
-  if (immediateLocal && Number.isFinite(immediateLocal.distanceMeters) && immediateLocal.distanceMeters <= 220) {
-    const payload = {
-      ok: true,
-      address: immediateLocal.address,
-      source: immediateLocal.source,
-      distanceMeters: Math.round(immediateLocal.distanceMeters),
-      boundaryBarangay: immediateLocal.barangay || ''
-    };
-    setCachedReverseGeocode(lat, lng, payload);
-    return payload;
-  }
+  if (immediateLocal) candidates.push(immediateLocal);
 
   const boundaryContext = await fetchOverpassBoundaryContext(lat, lng);
   const localBarangayCandidate = findNearestMarinduqueBarangayCandidate(lat, lng, boundaryContext);
@@ -1458,9 +1586,9 @@ async function resolveReverseGeocodeAddress(lat, lng) {
   const best = pickBestAddressCandidate(candidates);
   if (best && best.address) {
     const effectiveBoundary = {
-      barangay: best.barangay || (boundaryContext && boundaryContext.barangay) || '',
-      municipality: best.municipality || (boundaryContext && boundaryContext.municipality) || '',
-      province: best.province || (boundaryContext && boundaryContext.province) || 'Marinduque',
+      barangay: (boundaryContext && boundaryContext.barangay) || best.barangay || '',
+      municipality: (boundaryContext && boundaryContext.municipality) || best.municipality || '',
+      province: (boundaryContext && boundaryContext.province) || best.province || 'Marinduque',
       country: (boundaryContext && boundaryContext.country) || 'Philippines'
     };
     const bestAddressKey = normalizeAddressKey(best.address);
@@ -1470,9 +1598,9 @@ async function resolveReverseGeocodeAddress(lat, lng) {
       !bestAddressKey.includes(barangayKey) &&
       Number.isFinite(best.distanceMeters) &&
       best.distanceMeters <= 120;
-    const finalAddress = shouldForceBoundary
-      ? buildBoundaryAddress(effectiveBoundary, best.address)
-      : best.address;
+    const rawFinalAddress = shouldForceBoundary ? buildBoundaryAddress(effectiveBoundary, best.address) : best.address;
+    const finalAddress =
+      buildBoundaryCalibratedAddress(rawFinalAddress, effectiveBoundary) || rawFinalAddress || best.address;
     const payload = {
       ok: true,
       address: finalAddress,
@@ -2868,7 +2996,7 @@ async function handleApi(req, res, pathname) {
     const cached = getCachedReverseGeocode(lat, lng);
     if (cached) return sendJson(res, 200, cached);
 
-    const inflightKey = getReverseGeocodeCacheKey(lat, lng, 4);
+    const inflightKey = getReverseGeocodeCacheKey(lat, lng, 5);
     if (!inflightKey) {
       return sendJson(res, 400, { ok: false, message: 'Invalid coordinates.' });
     }

@@ -15,10 +15,10 @@
   ],
   "counts": {
     "total": 218,
-    "osmPlace": 151,
+    "osmPlace": 150,
     "nominatim": 4,
-    "manualOverride": 1,
-    "municipalityCentroid": 62,
+    "manualOverride": 3,
+    "municipalityCentroid": 61,
     "unresolved": 0
   },
   "barangays": [
@@ -242,17 +242,17 @@
       "barangay": "Isok I (Pob.)",
       "municipality": "Boac",
       "province": "Marinduque",
-      "lat": 13.419383,
-      "lng": 121.837109,
-      "source": "municipality-centroid"
+      "lat": 13.4454,
+      "lng": 121.8423,
+      "source": "manual-override"
     },
     {
       "barangay": "Isok II Pob.",
       "municipality": "Boac",
       "province": "Marinduque",
-      "lat": 13.323363,
-      "lng": 121.847139,
-      "source": "osm-place"
+      "lat": 13.4417,
+      "lng": 121.8388,
+      "source": "manual-override"
     },
     {
       "barangay": "Laylay",
@@ -346,8 +346,8 @@
       "barangay": "Murallon (Pob.)",
       "municipality": "Boac",
       "province": "Marinduque",
-      "lat": 13.44608,
-      "lng": 121.84034,
+      "lat": 13.4491,
+      "lng": 121.8378,
       "source": "manual-override"
     },
     {
