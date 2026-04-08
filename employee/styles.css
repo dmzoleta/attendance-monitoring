@@ -532,6 +532,40 @@ body::before {
   padding: 12px;
 }
 
+.action-row button[disabled] {
+  opacity: 0.75;
+  cursor: not-allowed;
+  transform: none;
+  filter: none;
+}
+
+.attendance-notice {
+  margin-top: 10px;
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  border: 1px solid transparent;
+}
+
+.attendance-notice.loading {
+  background: #eef5ff;
+  color: #244a88;
+  border-color: #c9dbff;
+}
+
+.attendance-notice.success {
+  background: #ecfbf1;
+  color: #1f6f37;
+  border-color: #b8e9c9;
+}
+
+.attendance-notice.error {
+  background: #fff0f0;
+  color: #a62a2a;
+  border-color: #f4c3c3;
+}
+
 .full-width {
   width: 100%;
   margin-top: 12px;

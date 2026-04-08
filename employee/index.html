@@ -16,7 +16,7 @@
   <link id="employee-apple-touch-icon" rel="apple-touch-icon" href="assets/apple-touch-icon.png" />
   <link id="employee-stylesheet" rel="stylesheet" href="styles.css" />
   <script>
-    window.APP_BUILD = '20260408-photo-gps-consent-gate-1';
+    window.APP_BUILD = '20260408-attendance-submit-notice-1';
     (function applyEmployeeAssetStamp() {
       var build = window.APP_BUILD || 'dev';
       var stamp = build + '-' + Date.now().toString(36);
@@ -391,6 +391,7 @@
               <button class="primary-btn" id="time-in" type="button">MARK TIME IN</button>
               <button class="ghost-btn" id="time-out" type="button">MARK TIME OUT</button>
             </div>
+            <div id="attendance-notice" class="attendance-notice hidden" aria-live="polite"></div>
             <button class="ghost-btn full-width" id="gps-refresh" type="button">GET ACCURATE LOCATION (GPS)</button>
           </div>
         </section>

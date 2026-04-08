@@ -42,6 +42,7 @@ const refreshLocationBtn = document.getElementById('refresh-location');
 const timeInBtn = document.getElementById('time-in');
 const timeOutBtn = document.getElementById('time-out');
 const gpsRefreshBtn = document.getElementById('gps-refresh');
+const attendanceNotice = document.getElementById('attendance-notice');
 
 const recordsTable = document.getElementById('records-table').querySelector('tbody');
 const recordsMonth = document.getElementById('records-month');
@@ -1666,13 +1667,45 @@ function requirePhoto() {
   return false;
 }
 
-function setAttendanceButtonsLocked(locked) {
-  if (timeInBtn) timeInBtn.disabled = locked;
-  if (timeOutBtn) timeOutBtn.disabled = locked;
+function setAttendanceNotice(message, tone = 'loading') {
+  if (!attendanceNotice) return;
+  const text = typeof message === 'string' ? message.trim() : '';
+  attendanceNotice.classList.remove('hidden', 'loading', 'success', 'error');
+  if (!text) {
+    attendanceNotice.textContent = '';
+    attendanceNotice.classList.add('hidden');
+    return;
+  }
+  const safeTone = ['loading', 'success', 'error'].includes(tone) ? tone : 'loading';
+  attendanceNotice.textContent = text;
+  attendanceNotice.classList.add(safeTone);
 }
 
-function delay(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+function setAttendanceButtonsLocked(locked, action = '') {
+  if (!timeInBtn || !timeOutBtn) return;
+
+  if (!timeInBtn.dataset.defaultLabel) timeInBtn.dataset.defaultLabel = timeInBtn.textContent;
+  if (!timeOutBtn.dataset.defaultLabel) timeOutBtn.dataset.defaultLabel = timeOutBtn.textContent;
+
+  timeInBtn.disabled = locked;
+  timeOutBtn.disabled = locked;
+
+  if (locked) {
+    if (action === 'timein') {
+      timeInBtn.textContent = 'PLEASE WAIT...';
+      timeOutBtn.textContent = timeOutBtn.dataset.defaultLabel;
+    } else if (action === 'timeout') {
+      timeOutBtn.textContent = 'PLEASE WAIT...';
+      timeInBtn.textContent = timeInBtn.dataset.defaultLabel;
+    } else {
+      timeInBtn.textContent = 'PLEASE WAIT...';
+      timeOutBtn.textContent = 'PLEASE WAIT...';
+    }
+    return;
+  }
+
+  timeInBtn.textContent = timeInBtn.dataset.defaultLabel;
+  timeOutBtn.textContent = timeOutBtn.dataset.defaultLabel;
 }
 
 function pickRecordedTime(result, action) {
@@ -1690,19 +1723,27 @@ function pickRecordedTime(result, action) {
 }
 
 async function markTimeIn() {
-  if (attendanceRequestInFlight) return;
-  await primeAttendanceAudio();
-  await playAttendanceSound('timein');
-  if (!requirePhoto()) return;
+  if (attendanceRequestInFlight) {
+    setAttendanceNotice('Please wait... your previous attendance request is still processing.', 'loading');
+    return;
+  }
+  setAttendanceNotice('Please wait... preparing Time In.', 'loading');
+  void primeAttendanceAudio();
+  void playAttendanceSound('timein');
+  if (!requirePhoto()) {
+    setAttendanceNotice('Please take a photo first before Time In.', 'error');
+    return;
+  }
   if (!currentUser || !currentUser.id) {
-    await playAttendanceSound('error');
-    await delay(120);
+    void playAttendanceSound('error');
+    setAttendanceNotice('Please log in first before Time In.', 'error');
     alert('Please log in first.');
     return;
   }
 
   attendanceRequestInFlight = true;
-  setAttendanceButtonsLocked(true);
+  setAttendanceButtonsLocked(true, 'timein');
+  setAttendanceNotice('Please wait... recording your Time In.', 'loading');
   const locationPayload = getAttendanceLocationPayload();
   const payload = {
     employeeId: currentUser.id,
@@ -1716,18 +1757,21 @@ async function markTimeIn() {
   };
   try {
     const result = await api('/api/attendance/timein', { method: 'POST', body: JSON.stringify(payload) });
+    setAttendanceNotice('Please wait... syncing your attendance data.', 'loading');
     await loadAttendance();
     clearPhotoSelection();
     computeStats();
     filterRecordsByMonth();
     const slotLabel = result.slot === 'PM' ? 'Afternoon' : 'Morning';
     const recordedAt = pickRecordedTime(result, 'timein');
-    await delay(150);
-    alert(`Time in recorded (${slotLabel}${recordedAt ? ` · ${recordedAt}` : ''}).`);
+    const successMessage = `Time in recorded (${slotLabel}${recordedAt ? ` · ${recordedAt}` : ''}).`;
+    setAttendanceNotice(successMessage, 'success');
+    alert(successMessage);
   } catch (err) {
-    await playAttendanceSound('error');
-    await delay(140);
-    alert(err.message || 'Time in failed.');
+    void playAttendanceSound('error');
+    const errorMessage = err.message || 'Time in failed.';
+    setAttendanceNotice(errorMessage, 'error');
+    alert(errorMessage);
   } finally {
     attendanceRequestInFlight = false;
     setAttendanceButtonsLocked(false);
@@ -1735,19 +1779,27 @@ async function markTimeIn() {
 }
 
 async function markTimeOut() {
-  if (attendanceRequestInFlight) return;
-  await primeAttendanceAudio();
-  await playAttendanceSound('timeout');
-  if (!requirePhoto()) return;
+  if (attendanceRequestInFlight) {
+    setAttendanceNotice('Please wait... your previous attendance request is still processing.', 'loading');
+    return;
+  }
+  setAttendanceNotice('Please wait... preparing Time Out.', 'loading');
+  void primeAttendanceAudio();
+  void playAttendanceSound('timeout');
+  if (!requirePhoto()) {
+    setAttendanceNotice('Please take a photo first before Time Out.', 'error');
+    return;
+  }
   if (!currentUser || !currentUser.id) {
-    await playAttendanceSound('error');
-    await delay(120);
+    void playAttendanceSound('error');
+    setAttendanceNotice('Please log in first before Time Out.', 'error');
     alert('Please log in first.');
     return;
   }
 
   attendanceRequestInFlight = true;
-  setAttendanceButtonsLocked(true);
+  setAttendanceButtonsLocked(true, 'timeout');
+  setAttendanceNotice('Please wait... recording your Time Out.', 'loading');
   const locationPayload = getAttendanceLocationPayload();
   const payload = {
     employeeId: currentUser.id,
@@ -1761,18 +1813,21 @@ async function markTimeOut() {
   };
   try {
     const result = await api('/api/attendance/timeout', { method: 'POST', body: JSON.stringify(payload) });
+    setAttendanceNotice('Please wait... syncing your attendance data.', 'loading');
     await loadAttendance();
     clearPhotoSelection();
     computeStats();
     filterRecordsByMonth();
     const slotLabel = result.slot === 'PM' ? 'Afternoon' : 'Morning';
     const recordedAt = pickRecordedTime(result, 'timeout');
-    await delay(150);
-    alert(`Time out recorded (${slotLabel}${recordedAt ? ` · ${recordedAt}` : ''}).`);
+    const successMessage = `Time out recorded (${slotLabel}${recordedAt ? ` · ${recordedAt}` : ''}).`;
+    setAttendanceNotice(successMessage, 'success');
+    alert(successMessage);
   } catch (err) {
-    await playAttendanceSound('error');
-    await delay(140);
-    alert(err.message || 'Time out failed.');
+    void playAttendanceSound('error');
+    const errorMessage = err.message || 'Time out failed.';
+    setAttendanceNotice(errorMessage, 'error');
+    alert(errorMessage);
   } finally {
     attendanceRequestInFlight = false;
     setAttendanceButtonsLocked(false);
@@ -1795,6 +1850,7 @@ async function startEmployeeSession(user) {
   computeStats();
   filterRecordsByMonth();
   updateReportContext();
+  setAttendanceNotice('');
   clearPhotoSelection();
   initializeLocationState();
   tickClock();
@@ -1805,6 +1861,7 @@ function logoutEmployee() {
   attendanceCache = [];
   gpsConsentChoice = 'pending';
   attendanceRequestInFlight = false;
+  setAttendanceNotice('');
   setAttendanceButtonsLocked(false);
   clearPhotoSelection();
   resetReportForm();
