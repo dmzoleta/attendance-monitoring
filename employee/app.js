@@ -99,6 +99,8 @@ let autoRestoreAttempted = false;
 let lastAddress = '';
 let lastAddressCoords = null;
 let locationDeniedByUserChoice = false;
+let locationRequestInFlight = false;
+let pendingPhotoCaptureAfterConsent = false;
 const reverseGeocodeClientCache = new Map();
 const reverseGeocodeClientInflight = new Map();
 const REVERSE_GEOCODE_CLIENT_CACHE_TTL_MS = 3 * 60 * 1000;
@@ -499,34 +501,90 @@ function closeGpsConsentModal() {
 
 function openGpsConsentModal() {
   if (!gpsConsentModal) {
-    updateLocation();
+    gpsConsentChoice = 'allow';
+    void requestExactLocation({ source: 'manual' });
     return;
   }
   gpsConsentModal.classList.remove('hidden');
+}
+
+async function requestExactLocation({ source = 'manual' } = {}) {
+  if (locationRequestInFlight) {
+    setGpsStatus('Please wait... kinukuha pa ang exact location...');
+    if (gpsConsentChoice === 'allow') {
+      setAttendanceNotice('Please wait... kinukuha pa ang exact location.', 'loading');
+    }
+    return hasActiveGpsFix();
+  }
+
+  locationRequestInFlight = true;
+  const waitMessage = source === 'photo'
+    ? 'Please wait... kinukuha pa ang exact location bago mag-take photo.'
+    : 'Please wait... kinukuha pa ang exact location.';
+  setGpsStatus('Please wait... kinukuha pa ang exact location...');
+  if (gpsConsentChoice === 'allow') {
+    setAttendanceNotice(waitMessage, 'loading');
+  }
+
+  try {
+    await updateLocation();
+    const gotFix = hasActiveGpsFix();
+    if (gpsConsentChoice === 'allow') {
+      if (gotFix) {
+        setAttendanceNotice('Exact location captured. You can now take photo.', 'success');
+      } else {
+        setAttendanceNotice('Please wait... kinukuha pa ang exact location.', 'loading');
+      }
+    }
+    return gotFix;
+  } finally {
+    locationRequestInFlight = false;
+  }
 }
 
 async function handleGpsConsentAllow() {
   closeGpsConsentModal();
   locationDeniedByUserChoice = false;
   gpsConsentChoice = 'allow';
+  const shouldCapturePhotoAfterLocation = pendingPhotoCaptureAfterConsent;
   if (String(locationName.textContent || '').trim() === LOCATION_DENIED_TEXT) {
     setLocationUnavailableState('Requesting location permission…');
   }
-  await updateLocation();
+  const gotFix = await requestExactLocation({
+    source: shouldCapturePhotoAfterLocation ? 'photo' : 'manual'
+  });
+
+  if (shouldCapturePhotoAfterLocation) {
+    if (gotFix || hasActiveGpsFix()) {
+      pendingPhotoCaptureAfterConsent = false;
+      openPhotoCapture(true);
+    } else {
+      pendingPhotoCaptureAfterConsent = true;
+      setAttendanceNotice('Please wait... kinukuha pa ang exact location bago mag-take photo.', 'loading');
+    }
+  }
 }
 
 function handleGpsConsentDeny() {
   closeGpsConsentModal();
   locationDeniedByUserChoice = true;
   gpsConsentChoice = 'deny';
+  const shouldCapturePhotoAfterDeny = pendingPhotoCaptureAfterConsent;
+  pendingPhotoCaptureAfterConsent = false;
   stopGpsWatch();
   setLocationDeniedState();
+  setAttendanceNotice('Location denied. Attendance still works without GPS.', 'error');
+  if (shouldCapturePhotoAfterDeny) {
+    openPhotoCapture(true);
+  }
 }
 
 function initializeLocationState() {
   setLocationLabel(LOCATION_UNKNOWN_TEXT);
   resetMapPreview();
   locationDeniedByUserChoice = false;
+  locationRequestInFlight = false;
+  pendingPhotoCaptureAfterConsent = false;
   gpsConsentChoice = 'pending';
   clearLocationCoordinates();
   setGpsStatus('Tap GET ACCURATE LOCATION (GPS) to request location permission.');
@@ -543,15 +601,27 @@ function clearPhotoSelection(resetInput = true) {
 }
 
 function remindGpsChoiceBeforePhoto() {
+  pendingPhotoCaptureAfterConsent = true;
   alert("Before taking a photo, tap GET ACCURATE LOCATION (GPS) and choose Allow or Don't Allow first.");
   openGpsConsentModal();
 }
 
-function openPhotoCapture() {
-  if (!hasGpsConsentChoice()) {
+function openPhotoCapture(force = false) {
+  if (!force && !hasGpsConsentChoice()) {
     remindGpsChoiceBeforePhoto();
     return false;
   }
+
+  if (!force && gpsConsentChoice === 'allow' && !hasActiveGpsFix()) {
+    pendingPhotoCaptureAfterConsent = true;
+    setAttendanceNotice('Please wait... kinukuha pa ang exact location bago mag-take photo.', 'loading');
+    if (!locationRequestInFlight) {
+      void requestExactLocation({ source: 'photo' });
+    }
+    return false;
+  }
+
+  pendingPhotoCaptureAfterConsent = false;
   clearPhotoSelection(false);
   if (photoInput) {
     photoInput.value = '';
@@ -872,8 +942,10 @@ let lastMapAt = 0;
 let lastAddressAt = 0;
 const ADDRESS_ACCURACY_THRESHOLD = 6;
 const ADDRESS_STABLE_HITS = 2;
-const BEST_SAMPLE_WINDOW_MS = 20000;
+const BEST_SAMPLE_WINDOW_MS = 8000;
 const ADDRESS_MOVE_THRESHOLD_METERS = 8;
+const QUICK_LOCATION_TIMEOUT_MS = 7000;
+const PRECISE_LOCATION_TIMEOUT_MS = 15000;
 let accuracyStreak = 0;
 let forceAddressRefresh = false;
 
@@ -1204,6 +1276,12 @@ async function applyLocationUpdate(pos) {
   }
 
   lastCoords = { lat: latitude, lng: longitude };
+
+  if (pendingPhotoCaptureAfterConsent && gpsConsentChoice === 'allow') {
+    pendingPhotoCaptureAfterConsent = false;
+    setAttendanceNotice('Exact location captured. Opening camera...', 'success');
+    openPhotoCapture(true);
+  }
 }
 
 async function startGpsWatch() {
@@ -1563,81 +1641,114 @@ async function updateLocation() {
       setLocationUnavailableState(
         'Location blocked by phone settings. Enable Location for this app, then tap GET ACCURATE LOCATION (GPS).'
       );
-      return;
+      return false;
     }
     try {
-      setGpsStatus('Improving GPS accuracy…');
-      const best = await collectBestNativePosition();
-      if (best) {
-        applyLocationUpdate(best);
-      } else {
-        const pos = await capGeo.getCurrentPosition({ enableHighAccuracy: true, timeout: 60000, maximumAge: 0 });
-        applyLocationUpdate(pos);
+      setGpsStatus('Please wait... kinukuha pa ang exact location...');
+      void startGpsWatch();
+      let pos = null;
+      try {
+        pos = await capGeo.getCurrentPosition({
+          enableHighAccuracy: false,
+          timeout: QUICK_LOCATION_TIMEOUT_MS,
+          maximumAge: 120000
+        });
+      } catch (quickErr) {
+        pos = null;
       }
-      startGpsWatch();
+      if (!pos) {
+        pos = await capGeo.getCurrentPosition({
+          enableHighAccuracy: true,
+          timeout: PRECISE_LOCATION_TIMEOUT_MS,
+          maximumAge: 0
+        });
+      }
+      if (pos) {
+        await applyLocationUpdate(pos);
+        setGpsStatus(`Please wait... kinukuha pa ang mas exact location · ±${Math.round(pos.coords.accuracy)}m`);
+      }
+      void collectBestNativePosition().then((best) => {
+        if (best) applyLocationUpdate(best);
+      }).catch(() => {});
+      return hasActiveGpsFix();
     } catch (err) {
       if (isPermissionDeniedError(err)) {
         if (hasActiveGpsFix()) {
           setGpsStatus('GPS live updates paused. Using your last accurate location.');
-          return;
+          return true;
         }
         stopGpsWatch();
         setLocationUnavailableState(
           'Location blocked by phone settings. Enable Location for this app, then tap GET ACCURATE LOCATION (GPS).'
         );
-        return;
+        return false;
       }
       setGpsStatus('Unable to get GPS right now. Tap GET ACCURATE LOCATION (GPS) to retry.');
+      return false;
     }
-    return;
+    return false;
   }
   if (!navigator.geolocation) {
     setLocationLabel(LOCATION_UNKNOWN_TEXT);
     clearLocationCoordinates();
     resetMapPreview();
     setGpsStatus('Geolocation not supported on this device.');
-    return;
+    return false;
   }
   setGpsStatus('Requesting location permission…');
   try {
     let pos;
     try {
-      pos = await getCurrentWebPosition({ enableHighAccuracy: true, timeout: 60000, maximumAge: 0 });
+      pos = await getCurrentWebPosition({
+        enableHighAccuracy: false,
+        timeout: QUICK_LOCATION_TIMEOUT_MS,
+        maximumAge: 120000
+      });
     } catch (firstErr) {
       const denied = await isWebPermissionExplicitlyDenied(firstErr);
       if (denied) throw firstErr;
-      setGpsStatus('Retrying location…');
-      pos = await getCurrentWebPosition({ enableHighAccuracy: false, timeout: 45000, maximumAge: 60000 });
+      setGpsStatus('Please wait... kinukuha pa ang exact location...');
+      pos = await getCurrentWebPosition({
+        enableHighAccuracy: true,
+        timeout: PRECISE_LOCATION_TIMEOUT_MS,
+        maximumAge: 0
+      });
     }
-    setGpsStatus('Improving GPS accuracy…');
-    const best = await collectBestWebPosition();
-    applyLocationUpdate(best || pos);
-    startGpsWatch();
+    if (pos) {
+      await applyLocationUpdate(pos);
+      setGpsStatus(`Please wait... kinukuha pa ang mas exact location · ±${Math.round(pos.coords.accuracy)}m`);
+    }
+    void startGpsWatch();
+    void collectBestWebPosition().then((best) => {
+      if (best) applyLocationUpdate(best);
+    }).catch(() => {});
+    return hasActiveGpsFix();
   } catch (err) {
     if (getGeoErrorCode(err) === 1) {
       if (hasActiveGpsFix()) {
         setGpsStatus('GPS permission changed, but last accurate location is still in use.');
-        return;
+        return true;
       }
       const denied = await isWebPermissionExplicitlyDenied(err);
       if (denied) {
         stopGpsWatch();
         if (locationDeniedByUserChoice) {
           setLocationDeniedState();
-          return;
+          return false;
         }
         setLocationUnavailableState(
           'Location blocked by browser/site settings. Enable Location, then tap GET ACCURATE LOCATION (GPS).'
         );
-        return;
+        return false;
       }
       setGpsStatus('Location temporarily unavailable. Tap GET ACCURATE LOCATION (GPS) to retry.');
-      return;
+      return false;
     }
     setGpsStatus('Location unavailable. Attendance still works without GPS.');
     setLocationLabel(LOCATION_UNKNOWN_TEXT);
     clearLocationCoordinates();
     resetMapPreview();
+    return false;
   }
 }
 
@@ -1860,6 +1971,8 @@ function logoutEmployee() {
   currentUser = null;
   attendanceCache = [];
   gpsConsentChoice = 'pending';
+  locationRequestInFlight = false;
+  pendingPhotoCaptureAfterConsent = false;
   attendanceRequestInFlight = false;
   setAttendanceNotice('');
   setAttendanceButtonsLocked(false);
