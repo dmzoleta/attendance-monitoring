@@ -487,6 +487,12 @@ body::before {
   display: none;
 }
 
+.photo-box .helper-text {
+  text-align: center;
+  margin-top: 0;
+  max-width: 260px;
+}
+
 .location-box {
   margin-top: 14px;
   background: #f7f9ff;

@@ -16,7 +16,7 @@
   <link id="employee-apple-touch-icon" rel="apple-touch-icon" href="assets/apple-touch-icon.png" />
   <link id="employee-stylesheet" rel="stylesheet" href="styles.css" />
   <script>
-    window.APP_BUILD = '20260407-location-calibration-1';
+    window.APP_BUILD = '20260408-photo-gps-consent-gate-1';
     (function applyEmployeeAssetStamp() {
       var build = window.APP_BUILD || 'dev';
       var stamp = build + '-' + Date.now().toString(36);
@@ -373,8 +373,9 @@
           <div class="card">
             <div class="photo-box">
             <img id="photo-preview" src="assets/photo-placeholder.svg" alt="Photo" />
-              <label class="ghost-btn" for="photo-input">Take Photo</label>
+              <label class="ghost-btn" id="take-photo-btn" for="photo-input">Take Photo</label>
               <input id="photo-input" type="file" accept="image/*" capture="user" />
+              <small class="helper-text">Tap GET ACCURATE LOCATION (GPS) first, then choose Allow or Don't Allow before taking photo.</small>
             </div>
             <div class="location-box">
               <div class="place-line">

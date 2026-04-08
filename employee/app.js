@@ -48,6 +48,7 @@ const recordsMonth = document.getElementById('records-month');
 
 const photoInput = document.getElementById('photo-input');
 const photoPreview = document.getElementById('photo-preview');
+const takePhotoBtn = document.getElementById('take-photo-btn');
 const serverModal = document.getElementById('server-modal');
 const serverUrlInput = document.getElementById('server-url');
 const websiteUrlInput = document.getElementById('website-url');
@@ -107,6 +108,8 @@ let attendanceHtmlAudioPrimed = false;
 const attendanceHtmlAudio = { timein: null, timeout: null, error: null };
 const LOCATION_UNKNOWN_TEXT = 'Location unavailable';
 const LOCATION_DENIED_TEXT = 'Location permission denied';
+const PHOTO_PLACEHOLDER_SRC = 'assets/photo-placeholder.svg';
+let gpsConsentChoice = 'pending';
 
 function getAttendanceAudioContext() {
   const AudioCtx = window.AudioContext || window.webkitAudioContext;
@@ -504,6 +507,7 @@ function openGpsConsentModal() {
 async function handleGpsConsentAllow() {
   closeGpsConsentModal();
   locationDeniedByUserChoice = false;
+  gpsConsentChoice = 'allow';
   if (String(locationName.textContent || '').trim() === LOCATION_DENIED_TEXT) {
     setLocationUnavailableState('Requesting location permission…');
   }
@@ -513,6 +517,7 @@ async function handleGpsConsentAllow() {
 function handleGpsConsentDeny() {
   closeGpsConsentModal();
   locationDeniedByUserChoice = true;
+  gpsConsentChoice = 'deny';
   stopGpsWatch();
   setLocationDeniedState();
 }
@@ -521,8 +526,38 @@ function initializeLocationState() {
   setLocationLabel(LOCATION_UNKNOWN_TEXT);
   resetMapPreview();
   locationDeniedByUserChoice = false;
+  gpsConsentChoice = 'pending';
   clearLocationCoordinates();
   setGpsStatus('Tap GET ACCURATE LOCATION (GPS) to request location permission.');
+}
+
+function hasGpsConsentChoice() {
+  return gpsConsentChoice === 'allow' || gpsConsentChoice === 'deny';
+}
+
+function clearPhotoSelection(resetInput = true) {
+  photoData = '';
+  if (photoPreview) photoPreview.src = PHOTO_PLACEHOLDER_SRC;
+  if (resetInput && photoInput) photoInput.value = '';
+}
+
+function remindGpsChoiceBeforePhoto() {
+  alert("Before taking a photo, tap GET ACCURATE LOCATION (GPS) and choose Allow or Don't Allow first.");
+  openGpsConsentModal();
+}
+
+function openPhotoCapture() {
+  if (!hasGpsConsentChoice()) {
+    remindGpsChoiceBeforePhoto();
+    return false;
+  }
+  clearPhotoSelection(false);
+  if (photoInput) {
+    photoInput.value = '';
+    photoInput.click();
+    return true;
+  }
+  return false;
 }
 
 function getAttendanceLocationPayload() {
@@ -1622,8 +1657,12 @@ function clearLegacyEmployeeCache() {
 
 function requirePhoto() {
   if (photoData) return true;
+  if (!hasGpsConsentChoice()) {
+    remindGpsChoiceBeforePhoto();
+    return false;
+  }
   alert('Please take a photo first.');
-  if (photoInput) photoInput.click();
+  openPhotoCapture();
   return false;
 }
 
@@ -1678,6 +1717,7 @@ async function markTimeIn() {
   try {
     const result = await api('/api/attendance/timein', { method: 'POST', body: JSON.stringify(payload) });
     await loadAttendance();
+    clearPhotoSelection();
     computeStats();
     filterRecordsByMonth();
     const slotLabel = result.slot === 'PM' ? 'Afternoon' : 'Morning';
@@ -1722,6 +1762,7 @@ async function markTimeOut() {
   try {
     const result = await api('/api/attendance/timeout', { method: 'POST', body: JSON.stringify(payload) });
     await loadAttendance();
+    clearPhotoSelection();
     computeStats();
     filterRecordsByMonth();
     const slotLabel = result.slot === 'PM' ? 'Afternoon' : 'Morning';
@@ -1754,13 +1795,7 @@ async function startEmployeeSession(user) {
   computeStats();
   filterRecordsByMonth();
   updateReportContext();
-  const latestWithPhoto = attendanceCache.slice().reverse().find((item) => pickPhoto(item));
-  if (latestWithPhoto) {
-    photoData = pickPhoto(latestWithPhoto);
-    if (photoPreview) photoPreview.src = photoData;
-  } else if (photoPreview) {
-    photoPreview.src = 'assets/photo-placeholder.svg';
-  }
+  clearPhotoSelection();
   initializeLocationState();
   tickClock();
 }
@@ -1768,10 +1803,10 @@ async function startEmployeeSession(user) {
 function logoutEmployee() {
   currentUser = null;
   attendanceCache = [];
-  photoData = '';
+  gpsConsentChoice = 'pending';
   attendanceRequestInFlight = false;
   setAttendanceButtonsLocked(false);
-  if (photoPreview) photoPreview.src = 'assets/photo-placeholder.svg';
+  clearPhotoSelection();
   resetReportForm();
   loginForm.reset();
   setView('emp-dashboard');
@@ -2193,16 +2228,25 @@ bindAttendanceAudioWarmup(timeOutBtn);
 timeInBtn.addEventListener('click', markTimeIn);
 timeOutBtn.addEventListener('click', markTimeOut);
 
-photoInput.addEventListener('change', (event) => {
-  const file = event.target.files[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = (e) => {
-    photoData = e.target.result;
-    photoPreview.src = photoData;
-  };
-  reader.readAsDataURL(file);
-});
+if (takePhotoBtn) {
+  takePhotoBtn.addEventListener('click', (event) => {
+    event.preventDefault();
+    openPhotoCapture();
+  });
+}
+
+if (photoInput) {
+  photoInput.addEventListener('change', (event) => {
+    const file = event.target.files && event.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      photoData = e.target.result;
+      if (photoPreview) photoPreview.src = photoData;
+    };
+    reader.readAsDataURL(file);
+  });
+}
 
 toggleButtons.forEach((btn) => {
   btn.addEventListener('click', () => {
