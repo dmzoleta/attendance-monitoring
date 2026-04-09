@@ -456,6 +456,19 @@ function writeDbFileWithBackup(filePath, backupPath, db) {
   }
 }
 
+async function writeDbFileWithBackupAsync(filePath, backupPath, serializedDb) {
+  const dirPath = path.dirname(filePath);
+  ensureDirExists(dirPath);
+  await fs.promises.writeFile(filePath, serializedDb, 'utf8');
+  if (shouldWriteBackup(backupPath)) {
+    try {
+      await fs.promises.copyFile(filePath, backupPath);
+    } catch (err) {
+      // Ignore backup copy failures; main write still proceeds.
+    }
+  }
+}
+
 function readDb() {
   if (memoryDb) return memoryDb;
 
@@ -498,24 +511,24 @@ function readDb() {
   return memoryDb;
 }
 
-function writeDb(db) {
-  memoryDb = normalizeDb(db);
-  lastDbWriteAttemptAt = Date.now();
-  lastDbWriteWarning = '';
+let dbWriteInFlight = false;
+let pendingDbSnapshot = null;
+let pendingDbTargets = null;
 
-  const targets = [
-    { name: 'primary', filePath: DATA_PATH, backupPath: BACKUP_PATH }
-  ];
-  if (DB_MIRROR_PATH && path.normalize(DB_MIRROR_PATH) !== path.normalize(DATA_PATH)) {
-    targets.push({ name: 'mirror', filePath: DB_MIRROR_PATH, backupPath: DB_MIRROR_BACKUP_PATH });
-  }
+async function flushDbWriteQueue() {
+  if (dbWriteInFlight || !pendingDbSnapshot || !pendingDbTargets) return;
+  dbWriteInFlight = true;
+  const serialized = pendingDbSnapshot;
+  const targets = pendingDbTargets;
+  pendingDbSnapshot = null;
+  pendingDbTargets = null;
 
   const warnings = [];
   let writesOk = 0;
   try {
     for (const target of targets) {
       try {
-        writeDbFileWithBackup(target.filePath, target.backupPath, memoryDb);
+        await writeDbFileWithBackupAsync(target.filePath, target.backupPath, serialized);
         writesOk += 1;
       } catch (err) {
         const message = err && err.message ? err.message : 'Unknown write error';
@@ -531,7 +544,34 @@ function writeDb(db) {
       lastDbWriteError = warnings.join(' | ') || 'Unknown DB write error';
     }
   } catch (err) {
-    // Track write failures so API can return an accurate error.
+    lastDbWriteError = err && err.message ? err.message : 'Unknown DB write error';
+  } finally {
+    dbWriteInFlight = false;
+    if (pendingDbSnapshot && pendingDbTargets) {
+      setImmediate(() => { void flushDbWriteQueue(); });
+    }
+  }
+}
+
+function writeDb(db) {
+  memoryDb = normalizeDb(db);
+  lastDbWriteAttemptAt = Date.now();
+  lastDbWriteWarning = '';
+
+  const targets = [
+    { name: 'primary', filePath: DATA_PATH, backupPath: BACKUP_PATH }
+  ];
+  if (DB_MIRROR_PATH && path.normalize(DB_MIRROR_PATH) !== path.normalize(DATA_PATH)) {
+    targets.push({ name: 'mirror', filePath: DB_MIRROR_PATH, backupPath: DB_MIRROR_BACKUP_PATH });
+  }
+
+  try {
+    pendingDbSnapshot = JSON.stringify(memoryDb);
+    pendingDbTargets = targets;
+    if (!dbWriteInFlight) {
+      setImmediate(() => { void flushDbWriteQueue(); });
+    }
+  } catch (err) {
     lastDbWriteError = err && err.message ? err.message : 'Unknown DB write error';
   }
 }
@@ -616,7 +656,6 @@ function sendFile(res, filePath) {
   }
   const ext = path.extname(filePath).toLowerCase();
   const contentType = MIME[ext] || 'application/octet-stream';
-  const data = fs.readFileSync(filePath);
   const headers = { 'Content-Type': contentType };
   if (['.html', '.css', '.js', '.json', '.webmanifest'].includes(ext)) {
     headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, proxy-revalidate';
@@ -624,7 +663,14 @@ function sendFile(res, filePath) {
     headers.Expires = '0';
   }
   res.writeHead(200, headers);
-  res.end(data);
+  const stream = fs.createReadStream(filePath);
+  stream.on('error', () => {
+    if (!res.headersSent) {
+      res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' });
+    }
+    res.end('Unable to read file.');
+  });
+  stream.pipe(res);
 }
 
 function collectBody(req) {
