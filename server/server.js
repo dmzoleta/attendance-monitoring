@@ -91,6 +91,14 @@ const MARINDUQUE_BOUNDARY_SEARCH_PADDING_METERS = Math.max(
   MARINDUQUE_BOUNDARY_SNAP_DISTANCE_METERS + 8,
   Number(process.env.MARINDUQUE_BOUNDARY_SEARCH_PADDING_METERS || 70)
 );
+const MARINDUQUE_BOUNDARY_AMBIGUOUS_EDGE_METERS = Math.max(
+  6,
+  Number(process.env.MARINDUQUE_BOUNDARY_AMBIGUOUS_EDGE_METERS || 90)
+);
+const LOCAL_BARANGAY_EDGE_OVERRIDE_DISTANCE_METERS = Math.max(
+  40,
+  Number(process.env.LOCAL_BARANGAY_EDGE_OVERRIDE_DISTANCE_METERS || 500)
+);
 
 const DEFAULT_DB = {
   admins: [
@@ -1385,10 +1393,12 @@ function findNearestMarinduqueBarangayBoundary(lat, lng, maxDistanceMeters = Num
 function resolveMarinduqueBarangayBoundaryContext(lat, lng) {
   const insideBoundary = findContainingMarinduqueBarangayBoundary(lat, lng);
   if (insideBoundary) {
+    const edgeDistance = distancePointToBoundaryMeters(lat, lng, insideBoundary);
     return {
       boundary: insideBoundary,
       matchType: 'inside',
-      edgeDistanceMeters: 0
+      edgeDistanceMeters: Number.isFinite(edgeDistance) ? edgeDistance : 0,
+      edgeDistanceSummaryMeters: Number.isFinite(edgeDistance) ? edgeDistance : 0
     };
   }
 
@@ -1397,7 +1407,8 @@ function resolveMarinduqueBarangayBoundaryContext(lat, lng) {
   return {
     boundary: nearest.boundary,
     matchType: 'snap',
-    edgeDistanceMeters: nearest.distanceMeters
+    edgeDistanceMeters: nearest.distanceMeters,
+    edgeDistanceSummaryMeters: nearest.distanceMeters
   };
 }
 
@@ -1900,6 +1911,37 @@ async function resolveReverseGeocodeAddress(lat, lng) {
         country: 'Philippines'
       }
     : null;
+  const boundaryEdgeDistance = Number.isFinite(boundaryResolution?.edgeDistanceSummaryMeters)
+    ? boundaryResolution.edgeDistanceSummaryMeters
+    : null;
+  const isBoundaryEdgeAmbiguous =
+    Number.isFinite(boundaryEdgeDistance) && boundaryEdgeDistance <= MARINDUQUE_BOUNDARY_AMBIGUOUS_EDGE_METERS;
+  const polygonBarangayKey = normalizeBarangayName(polygonBoundaryContext?.barangay || '');
+
+  if (polygonBoundaryContext && isBoundaryEdgeAmbiguous) {
+    const edgeLocal = findNearestMarinduqueBarangayCandidate(lat, lng, polygonBoundaryContext);
+    const edgeLocalKey = normalizeBarangayName(edgeLocal?.barangay || '');
+    const edgeLocalDistance = Number(edgeLocal?.distanceMeters);
+    if (
+      edgeLocal &&
+      edgeLocalKey &&
+      edgeLocalKey !== polygonBarangayKey &&
+      Number.isFinite(edgeLocalDistance) &&
+      edgeLocalDistance <= LOCAL_BARANGAY_EDGE_OVERRIDE_DISTANCE_METERS
+    ) {
+      const payload = {
+        ok: true,
+        address: edgeLocal.address,
+        source: 'marinduque-barangay-edge-override',
+        distanceMeters: Math.round(edgeLocalDistance),
+        boundaryBarangay: edgeLocal.barangay || '',
+        boundaryMatchType: 'edge-override',
+        boundaryEdgeDistanceMeters: Number.isFinite(boundaryEdgeDistance) ? Math.round(boundaryEdgeDistance) : null
+      };
+      setCachedReverseGeocode(lat, lng, payload);
+      return payload;
+    }
+  }
   if (polygonBoundaryContext) {
     const polygonAddress = buildBoundaryAddress(polygonBoundaryContext, '');
     const polygonCandidate = createAddressCandidate({
@@ -1920,12 +1962,15 @@ async function resolveReverseGeocodeAddress(lat, lng) {
       polygonCandidate.boundaryEdgeDistanceMeters = Number.isFinite(boundaryResolution.edgeDistanceMeters)
         ? boundaryResolution.edgeDistanceMeters
         : null;
+      if (isBoundaryEdgeAmbiguous) {
+        polygonCandidate.score -= 6.5;
+      }
       candidates.push(polygonCandidate);
     }
 
     // Fast path: if we already resolved a barangay boundary from local Marinduque polygons,
     // return immediately so the app shows a concrete place label instead of temporary pinned text.
-    if (normalizeAddressKey(polygonBoundaryContext.barangay || '')) {
+    if (normalizeAddressKey(polygonBoundaryContext.barangay || '') && !isBoundaryEdgeAmbiguous) {
       const fastAddress = buildBoundaryAddress(polygonBoundaryContext, '');
       if (fastAddress) {
         const payload = {
