@@ -1217,7 +1217,19 @@ async function applyLocationUpdate(pos) {
   if (accuracy > ADDRESS_ACCURACY_THRESHOLD || accuracyStreak < ADDRESS_STABLE_HITS) {
     const fallback = forceRefresh ? '' : getNearbyAddressFallback(latitude, longitude);
     setLocationLabel(buildPlaceLabel(latitude, longitude, fallback));
-    if (shouldTryAddress) lastAddressAt = now;
+    if (shouldTryAddress) {
+      try {
+        const address = await reverseGeocode(latitude, longitude);
+        if (address) {
+          setLocationLabel(buildPlaceLabel(latitude, longitude, address));
+          lastAddress = address;
+          lastAddressCoords = { lat: latitude, lng: longitude };
+        }
+      } catch (err) {
+        // Keep fallback label while accuracy improves.
+      }
+      lastAddressAt = now;
+    }
     setGpsStatus(`Improving GPS accuracy · ±${Math.round(accuracy)}m (move outdoors)`);
     lastCoords = { lat: latitude, lng: longitude };
     return;

@@ -1922,6 +1922,31 @@ async function resolveReverseGeocodeAddress(lat, lng) {
         : null;
       candidates.push(polygonCandidate);
     }
+
+    // Fast path: if we already resolved a barangay boundary from local Marinduque polygons,
+    // return immediately so the app shows a concrete place label instead of temporary pinned text.
+    if (normalizeAddressKey(polygonBoundaryContext.barangay || '')) {
+      const fastAddress = buildBoundaryAddress(polygonBoundaryContext, '');
+      if (fastAddress) {
+        const payload = {
+          ok: true,
+          address: fastAddress,
+          source: boundaryResolution.matchType === 'snap' ? 'marinduque-boundary-snap' : 'marinduque-boundary-polygon',
+          distanceMeters:
+            boundaryResolution.matchType === 'snap' && Number.isFinite(boundaryResolution.edgeDistanceMeters)
+              ? Math.round(boundaryResolution.edgeDistanceMeters)
+              : 0,
+          boundaryBarangay: polygonBoundaryContext.barangay || '',
+          boundaryMatchType: boundaryResolution.matchType,
+          boundaryEdgeDistanceMeters:
+            boundaryResolution.matchType === 'snap' && Number.isFinite(boundaryResolution.edgeDistanceMeters)
+              ? Math.round(boundaryResolution.edgeDistanceMeters)
+              : 0
+        };
+        setCachedReverseGeocode(lat, lng, payload);
+        return payload;
+      }
+    }
   }
 
   const immediateLocal = findNearestMarinduqueBarangayCandidate(lat, lng, null);
