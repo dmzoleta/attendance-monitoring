@@ -968,7 +968,7 @@ function buildPlaceLabel(lat, lng, address = '') {
   return `${cleanAddress} (${coordinateLabel})`;
 }
 
-function getNearbyAddressFallback(lat, lng, maxDistanceMeters = 15) {
+function getNearbyAddressFallback(lat, lng, maxDistanceMeters = 6) {
   if (!lastAddress || !lastAddressCoords) return '';
   const latNum = Number(lat);
   const lngNum = Number(lng);
@@ -1215,26 +1215,9 @@ async function applyLocationUpdate(pos) {
   const shouldTryAddress = forceRefresh || shouldUpdateAddress || needsAddressNow;
 
   if (accuracy > ADDRESS_ACCURACY_THRESHOLD || accuracyStreak < ADDRESS_STABLE_HITS) {
-    if (shouldTryAddress) {
-      try {
-        const address = await reverseGeocode(latitude, longitude);
-        if (address) {
-          setLocationLabel(buildPlaceLabel(latitude, longitude, address));
-          lastAddress = address;
-          lastAddressCoords = { lat: latitude, lng: longitude };
-        } else {
-          const fallback = forceRefresh ? '' : getNearbyAddressFallback(latitude, longitude);
-          setLocationLabel(buildPlaceLabel(latitude, longitude, fallback));
-        }
-      } catch (err) {
-        const fallback = forceRefresh ? '' : getNearbyAddressFallback(latitude, longitude);
-        setLocationLabel(buildPlaceLabel(latitude, longitude, fallback));
-      }
-      lastAddressAt = now;
-    } else {
-      const fallback = getNearbyAddressFallback(latitude, longitude);
-      setLocationLabel(buildPlaceLabel(latitude, longitude, fallback));
-    }
+    const fallback = forceRefresh ? '' : getNearbyAddressFallback(latitude, longitude);
+    setLocationLabel(buildPlaceLabel(latitude, longitude, fallback));
+    if (shouldTryAddress) lastAddressAt = now;
     setGpsStatus(`Improving GPS accuracy · ±${Math.round(accuracy)}m (move outdoors)`);
     lastCoords = { lat: latitude, lng: longitude };
     return;

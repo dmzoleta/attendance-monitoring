@@ -83,6 +83,14 @@ const LOCAL_BARANGAY_OVERRIDE_DISTANCE_METERS = Math.max(
     Number(process.env.LOCAL_BARANGAY_OVERRIDE_DISTANCE_METERS || 650)
   )
 );
+const MARINDUQUE_BOUNDARY_SNAP_DISTANCE_METERS = Math.max(
+  12,
+  Number(process.env.MARINDUQUE_BOUNDARY_SNAP_DISTANCE_METERS || 45)
+);
+const MARINDUQUE_BOUNDARY_SEARCH_PADDING_METERS = Math.max(
+  MARINDUQUE_BOUNDARY_SNAP_DISTANCE_METERS + 8,
+  Number(process.env.MARINDUQUE_BOUNDARY_SEARCH_PADDING_METERS || 70)
+);
 
 const DEFAULT_DB = {
   admins: [
@@ -848,6 +856,57 @@ function distanceMeters(a, b) {
   return 2 * R * Math.asin(Math.sqrt(aVal));
 }
 
+function metersToLatitudeDegrees(meters) {
+  const value = Number(meters);
+  if (!Number.isFinite(value)) return 0;
+  return value / 111320;
+}
+
+function metersToLongitudeDegrees(meters, latitude) {
+  const value = Number(meters);
+  const lat = Number(latitude);
+  if (!Number.isFinite(value) || !Number.isFinite(lat)) return 0;
+  const scale = Math.cos(toRadians(lat)) * 111320;
+  if (!Number.isFinite(scale) || Math.abs(scale) < 1e-6) return 0;
+  return value / scale;
+}
+
+function estimateDistanceToBBoxMeters(lat, lng, bbox) {
+  if (!bbox || !Number.isFinite(lat) || !Number.isFinite(lng)) return Number.POSITIVE_INFINITY;
+
+  const clampedLat = Math.max(bbox.minLat, Math.min(bbox.maxLat, lat));
+  const clampedLng = Math.max(bbox.minLng, Math.min(bbox.maxLng, lng));
+  return distanceMeters({ lat, lng }, { lat: clampedLat, lng: clampedLng });
+}
+
+function distanceToSegmentMeters(pointLat, pointLng, aLat, aLng, bLat, bLng) {
+  const refLat = (Number(pointLat) + Number(aLat) + Number(bLat)) / 3;
+  const latScale = 111320;
+  const lngScale = Math.max(1e-6, Math.cos(toRadians(refLat)) * 111320);
+
+  const px = Number(pointLng) * lngScale;
+  const py = Number(pointLat) * latScale;
+  const ax = Number(aLng) * lngScale;
+  const ay = Number(aLat) * latScale;
+  const bx = Number(bLng) * lngScale;
+  const by = Number(bLat) * latScale;
+  if (![px, py, ax, ay, bx, by].every(Number.isFinite)) return Number.POSITIVE_INFINITY;
+
+  const dx = bx - ax;
+  const dy = by - ay;
+  const denom = dx * dx + dy * dy;
+  let t = 0;
+  if (denom > 0) {
+    t = ((px - ax) * dx + (py - ay) * dy) / denom;
+    t = Math.max(0, Math.min(1, t));
+  }
+  const closestX = ax + t * dx;
+  const closestY = ay + t * dy;
+  const distX = px - closestX;
+  const distY = py - closestY;
+  return Math.sqrt(distX * distX + distY * distY);
+}
+
 function getGoogleTypeScore(types) {
   if (!Array.isArray(types)) return 0;
   const scoreMap = {
@@ -1257,6 +1316,89 @@ function findContainingMarinduqueBarangayBoundary(lat, lng) {
   });
 
   return best;
+}
+
+function expandBoundaryBBoxByMeters(bbox, meters) {
+  if (!bbox) return null;
+  const padLat = metersToLatitudeDegrees(meters);
+  const midLat = (Number(bbox.minLat) + Number(bbox.maxLat)) / 2;
+  const padLng = metersToLongitudeDegrees(meters, midLat);
+  return {
+    minLat: bbox.minLat - padLat,
+    minLng: bbox.minLng - padLng,
+    maxLat: bbox.maxLat + padLat,
+    maxLng: bbox.maxLng + padLng
+  };
+}
+
+function distancePointToBoundaryMeters(lat, lng, boundary) {
+  if (!boundary || !Array.isArray(boundary.rings) || !boundary.rings.length) return Number.POSITIVE_INFINITY;
+  let minDistance = Number.POSITIVE_INFINITY;
+  boundary.rings.forEach((ring) => {
+    if (!Array.isArray(ring) || ring.length < 2) return;
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i, i += 1) {
+      const a = ring[i];
+      const b = ring[j];
+      if (!Array.isArray(a) || !Array.isArray(b)) continue;
+      const segDistance = distanceToSegmentMeters(lat, lng, Number(a[1]), Number(a[0]), Number(b[1]), Number(b[0]));
+      if (Number.isFinite(segDistance) && segDistance < minDistance) {
+        minDistance = segDistance;
+      }
+    }
+  });
+  return minDistance;
+}
+
+function findNearestMarinduqueBarangayBoundary(lat, lng, maxDistanceMeters = Number.POSITIVE_INFINITY) {
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  if (!Array.isArray(MARINDUQUE_BARANGAY_BOUNDARY_DATA) || !MARINDUQUE_BARANGAY_BOUNDARY_DATA.length) return null;
+
+  const maxDistance = Number.isFinite(maxDistanceMeters) ? Math.max(0, maxDistanceMeters) : Number.POSITIVE_INFINITY;
+  let best = null;
+
+  MARINDUQUE_BARANGAY_BOUNDARY_DATA.forEach((boundary) => {
+    const paddedBBox = expandBoundaryBBoxByMeters(boundary.bbox, MARINDUQUE_BOUNDARY_SEARCH_PADDING_METERS);
+    if (!isPointInsideBBox(lat, lng, paddedBBox)) return;
+
+    const bboxDistance = estimateDistanceToBBoxMeters(lat, lng, boundary.bbox);
+    if (Number.isFinite(maxDistance) && bboxDistance > maxDistance + MARINDUQUE_BOUNDARY_SEARCH_PADDING_METERS) return;
+
+    const boundaryDistance = distancePointToBoundaryMeters(lat, lng, boundary);
+    if (!Number.isFinite(boundaryDistance)) return;
+    if (Number.isFinite(maxDistance) && boundaryDistance > maxDistance) return;
+
+    if (
+      !best ||
+      boundaryDistance < best.distanceMeters ||
+      (boundaryDistance === best.distanceMeters &&
+        (boundary.bboxArea < best.boundary.bboxArea ||
+          (boundary.bboxArea === best.boundary.bboxArea &&
+            boundary.barangay.localeCompare(best.boundary.barangay) < 0)))
+    ) {
+      best = { boundary, distanceMeters: boundaryDistance };
+    }
+  });
+
+  return best;
+}
+
+function resolveMarinduqueBarangayBoundaryContext(lat, lng) {
+  const insideBoundary = findContainingMarinduqueBarangayBoundary(lat, lng);
+  if (insideBoundary) {
+    return {
+      boundary: insideBoundary,
+      matchType: 'inside',
+      edgeDistanceMeters: 0
+    };
+  }
+
+  const nearest = findNearestMarinduqueBarangayBoundary(lat, lng, MARINDUQUE_BOUNDARY_SNAP_DISTANCE_METERS);
+  if (!nearest) return null;
+  return {
+    boundary: nearest.boundary,
+    matchType: 'snap',
+    edgeDistanceMeters: nearest.distanceMeters
+  };
 }
 
 function normalizeMunicipalityName(value) {
@@ -1749,21 +1891,21 @@ async function resolveReverseGeocodeAddress(lat, lng) {
     candidates.push(candidate);
   };
 
-  const polygonBoundaryMatch = findContainingMarinduqueBarangayBoundary(lat, lng);
-  const polygonBoundaryContext = polygonBoundaryMatch
+  const boundaryResolution = resolveMarinduqueBarangayBoundaryContext(lat, lng);
+  const polygonBoundaryContext = boundaryResolution && boundaryResolution.boundary
     ? {
-        barangay: polygonBoundaryMatch.barangay || '',
-        municipality: polygonBoundaryMatch.municipality || '',
-        province: polygonBoundaryMatch.province || 'Marinduque',
+        barangay: boundaryResolution.boundary.barangay || '',
+        municipality: boundaryResolution.boundary.municipality || '',
+        province: boundaryResolution.boundary.province || 'Marinduque',
         country: 'Philippines'
       }
     : null;
   if (polygonBoundaryContext) {
     const polygonAddress = buildBoundaryAddress(polygonBoundaryContext, '');
     const polygonCandidate = createAddressCandidate({
-      source: 'marinduque-boundary-polygon',
+      source: boundaryResolution.matchType === 'snap' ? 'marinduque-boundary-snap' : 'marinduque-boundary-polygon',
       address: polygonAddress,
-      baseScore: 36,
+      baseScore: boundaryResolution.matchType === 'snap' ? 34 : 36,
       providerBoost: 5.2,
       queryLat: lat,
       queryLng: lng,
@@ -1774,6 +1916,10 @@ async function resolveReverseGeocodeAddress(lat, lng) {
       polygonCandidate.barangay = polygonBoundaryContext.barangay;
       polygonCandidate.municipality = polygonBoundaryContext.municipality;
       polygonCandidate.province = polygonBoundaryContext.province;
+      polygonCandidate.boundaryMatchType = boundaryResolution.matchType;
+      polygonCandidate.boundaryEdgeDistanceMeters = Number.isFinite(boundaryResolution.edgeDistanceMeters)
+        ? boundaryResolution.edgeDistanceMeters
+        : null;
       candidates.push(polygonCandidate);
     }
   }
@@ -1805,7 +1951,11 @@ async function resolveReverseGeocodeAddress(lat, lng) {
   if (boundaryForCalibration) {
     const boundaryAddress = buildBoundaryAddress(boundaryForCalibration, '');
     const boundaryCandidate = createAddressCandidate({
-      source: polygonBoundaryContext ? 'marinduque-boundary' : 'overpass-boundary',
+      source: polygonBoundaryContext
+        ? boundaryResolution.matchType === 'snap'
+          ? 'marinduque-boundary-snap'
+          : 'marinduque-boundary'
+        : 'overpass-boundary',
       address: boundaryAddress,
       baseScore: 17,
       providerBoost: 3.5,
@@ -1950,15 +2100,22 @@ async function resolveReverseGeocodeAddress(lat, lng) {
       !!barangayKey &&
       !bestAddressKey.includes(barangayKey);
     const rawFinalAddress = shouldForceBoundary ? buildBoundaryAddress(boundaryForCalibration, best.address) : best.address;
-    const finalAddress = boundaryForCalibration
-      ? buildBoundaryCalibratedAddress(rawFinalAddress, boundaryForCalibration) || rawFinalAddress || best.address
-      : rawFinalAddress;
+    const hasStrictBoundaryBarangay = !!normalizeAddressKey(boundaryForCalibration?.barangay || '');
+    const finalAddress = hasStrictBoundaryBarangay
+      ? buildBoundaryAddress(boundaryForCalibration, rawFinalAddress) || rawFinalAddress || best.address
+      : boundaryForCalibration
+        ? buildBoundaryCalibratedAddress(rawFinalAddress, boundaryForCalibration) || rawFinalAddress || best.address
+        : rawFinalAddress;
     const payload = {
       ok: true,
       address: finalAddress,
       source: best.source,
       distanceMeters: Number.isFinite(best.distanceMeters) ? Math.round(best.distanceMeters) : null,
-      boundaryBarangay: (boundaryForCalibration && boundaryForCalibration.barangay) || effectiveBoundary.barangay || ''
+      boundaryBarangay: (boundaryForCalibration && boundaryForCalibration.barangay) || effectiveBoundary.barangay || '',
+      boundaryMatchType: boundaryResolution ? boundaryResolution.matchType : '',
+      boundaryEdgeDistanceMeters: boundaryResolution && Number.isFinite(boundaryResolution.edgeDistanceMeters)
+        ? Math.round(boundaryResolution.edgeDistanceMeters)
+        : null
     };
     setCachedReverseGeocode(lat, lng, payload);
     return payload;
