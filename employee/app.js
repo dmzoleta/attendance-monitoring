@@ -2273,6 +2273,7 @@ async function handleConcern(event) {
   const formData = new FormData(concernForm);
   const payload = Object.fromEntries(formData.entries());
   try {
+    setAttendanceNotice('Please hold on, your concern is being submitted.', 'loading');
     await api('/api/messages', {
       method: 'POST',
       body: JSON.stringify({
@@ -2284,6 +2285,7 @@ async function handleConcern(event) {
       })
     });
     alert('Concern sent to admin.');
+    setAttendanceNotice('Concern submitted.', 'success');
     closeConcernModal();
   } catch (err) {
     if (err.name === 'TypeError') {
@@ -2291,6 +2293,7 @@ async function handleConcern(event) {
     } else {
       alert(err.message || 'Unable to send concern.');
     }
+    setAttendanceNotice('Unable to send concern.', 'error');
   }
 }
 
@@ -2325,6 +2328,7 @@ async function handleDailyReport(event) {
         timeOutPM: ''
       };
   try {
+    setAttendanceNotice('Please wait, your report is being submitted.', 'loading');
     const result = await api('/api/reports', {
       method: 'POST',
       body: JSON.stringify({
@@ -2338,8 +2342,10 @@ async function handleDailyReport(event) {
     });
     if (result && result.report) {
       alert('Report submitted to admin.');
+      setAttendanceNotice('Report submitted.', 'success');
     } else {
       alert('Report submitted.');
+      setAttendanceNotice('Report submitted.', 'success');
     }
     resetReportForm();
   } catch (err) {
@@ -2348,6 +2354,7 @@ async function handleDailyReport(event) {
     } else {
       alert(err.message || 'Unable to submit report.');
     }
+    setAttendanceNotice('Unable to submit report.', 'error');
   }
 }
 
