@@ -88,6 +88,10 @@ const reportLogDate = document.getElementById('report-log-date');
 const reportLogTimes = document.getElementById('report-log-times');
 const reportSubmittedName = document.getElementById('report-submitted-name');
 const reportSubmittedPosition = document.getElementById('report-submitted-position');
+const concernNotice = document.getElementById('concern-notice');
+const reportNotice = document.getElementById('report-notice');
+const concernSubmitBtn = concernForm ? concernForm.querySelector('button[type="submit"]') : null;
+const reportSubmitBtn = reportForm ? reportForm.querySelector('button[type="submit"]') : null;
 const loginStatus = document.getElementById('login-status');
 const rememberLogin = document.getElementById('remember-login');
 
@@ -932,6 +936,19 @@ function updateMapPreview(lat, lng) {
 
 function setGpsStatus(message) {
   if (gpsStatus) gpsStatus.textContent = message;
+}
+
+function setInlineNotice(el, message, tone = 'loading') {
+  if (!el) return;
+  const text = typeof message === 'string' ? message.trim() : '';
+  el.classList.remove('hidden', 'loading', 'success', 'error');
+  if (!text) {
+    el.classList.add('hidden');
+    el.textContent = '';
+    return;
+  }
+  el.textContent = text;
+  el.classList.add(tone);
 }
 
 let gpsWatchId = null;
@@ -2257,11 +2274,13 @@ async function handleOtpResend() {
 
 function openConcernModal() {
   concernModal.classList.remove('hidden');
+  setInlineNotice(concernNotice, '');
 }
 
 function closeConcernModal() {
   concernModal.classList.add('hidden');
   concernForm.reset();
+  setInlineNotice(concernNotice, '');
 }
 
 async function handleConcern(event) {
@@ -2273,7 +2292,12 @@ async function handleConcern(event) {
   const formData = new FormData(concernForm);
   const payload = Object.fromEntries(formData.entries());
   try {
-    setAttendanceNotice('Please hold on, your concern is being submitted.', 'loading');
+    setInlineNotice(concernNotice, 'Please hold on, your concern is being submitted.', 'loading');
+    if (concernSubmitBtn) {
+      concernSubmitBtn.disabled = true;
+      concernSubmitBtn.dataset.originalText = concernSubmitBtn.textContent;
+      concernSubmitBtn.textContent = 'Sending...';
+    }
     await api('/api/messages', {
       method: 'POST',
       body: JSON.stringify({
@@ -2285,7 +2309,7 @@ async function handleConcern(event) {
       })
     });
     alert('Concern sent to admin.');
-    setAttendanceNotice('Concern submitted.', 'success');
+    setInlineNotice(concernNotice, 'Concern submitted.', 'success');
     closeConcernModal();
   } catch (err) {
     if (err.name === 'TypeError') {
@@ -2293,7 +2317,13 @@ async function handleConcern(event) {
     } else {
       alert(err.message || 'Unable to send concern.');
     }
-    setAttendanceNotice('Unable to send concern.', 'error');
+    setInlineNotice(concernNotice, 'Unable to send concern.', 'error');
+  } finally {
+    if (concernSubmitBtn) {
+      concernSubmitBtn.disabled = false;
+      concernSubmitBtn.textContent = concernSubmitBtn.dataset.originalText || 'Send';
+      delete concernSubmitBtn.dataset.originalText;
+    }
   }
 }
 
@@ -2328,7 +2358,12 @@ async function handleDailyReport(event) {
         timeOutPM: ''
       };
   try {
-    setAttendanceNotice('Please wait, your report is being submitted.', 'loading');
+    setInlineNotice(reportNotice, 'Please wait, your report is being submitted.', 'loading');
+    if (reportSubmitBtn) {
+      reportSubmitBtn.disabled = true;
+      reportSubmitBtn.dataset.originalText = reportSubmitBtn.textContent;
+      reportSubmitBtn.textContent = 'Submitting...';
+    }
     const result = await api('/api/reports', {
       method: 'POST',
       body: JSON.stringify({
@@ -2342,10 +2377,10 @@ async function handleDailyReport(event) {
     });
     if (result && result.report) {
       alert('Report submitted to admin.');
-      setAttendanceNotice('Report submitted.', 'success');
+      setInlineNotice(reportNotice, 'Report submitted.', 'success');
     } else {
       alert('Report submitted.');
-      setAttendanceNotice('Report submitted.', 'success');
+      setInlineNotice(reportNotice, 'Report submitted.', 'success');
     }
     resetReportForm();
   } catch (err) {
@@ -2354,7 +2389,13 @@ async function handleDailyReport(event) {
     } else {
       alert(err.message || 'Unable to submit report.');
     }
-    setAttendanceNotice('Unable to submit report.', 'error');
+    setInlineNotice(reportNotice, 'Unable to submit report.', 'error');
+  } finally {
+    if (reportSubmitBtn) {
+      reportSubmitBtn.disabled = false;
+      reportSubmitBtn.textContent = reportSubmitBtn.dataset.originalText || 'Submit Report';
+      delete reportSubmitBtn.dataset.originalText;
+    }
   }
 }
 
