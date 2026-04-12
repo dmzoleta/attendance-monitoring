@@ -1879,11 +1879,16 @@ async function markTimeIn() {
   };
   try {
     const result = await api('/api/attendance/timein', { method: 'POST', body: JSON.stringify(payload) });
-    setAttendanceNotice('Please wait... syncing your attendance data.', 'loading');
-    await loadAttendance();
     clearPhotoSelection();
-    computeStats();
-    filterRecordsByMonth();
+    setAttendanceNotice('Time in recorded. Updating records...', 'loading');
+    loadAttendance()
+      .then(() => {
+        computeStats();
+        filterRecordsByMonth();
+      })
+      .catch(() => {
+        // background refresh failed; keep success notice
+      });
     const slotLabel = result.slot === 'PM' ? 'Afternoon' : 'Morning';
     const recordedAt = pickRecordedTime(result, 'timein');
     const successMessage = `Time in recorded (${slotLabel}${recordedAt ? ` · ${recordedAt}` : ''}).`;
@@ -1935,11 +1940,16 @@ async function markTimeOut() {
   };
   try {
     const result = await api('/api/attendance/timeout', { method: 'POST', body: JSON.stringify(payload) });
-    setAttendanceNotice('Please wait... syncing your attendance data.', 'loading');
-    await loadAttendance();
     clearPhotoSelection();
-    computeStats();
-    filterRecordsByMonth();
+    setAttendanceNotice('Time out recorded. Updating records...', 'loading');
+    loadAttendance()
+      .then(() => {
+        computeStats();
+        filterRecordsByMonth();
+      })
+      .catch(() => {
+        // background refresh failed; keep success notice
+      });
     const slotLabel = result.slot === 'PM' ? 'Afternoon' : 'Morning';
     const recordedAt = pickRecordedTime(result, 'timeout');
     const successMessage = `Time out recorded (${slotLabel}${recordedAt ? ` · ${recordedAt}` : ''}).`;
